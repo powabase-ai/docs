@@ -1,0 +1,199 @@
+---
+title: "Multi-Agent Orchestration"
+description: "Combine multiple agents into an orchestration. A coordinator routes messages to the right agent based on the conversation context."
+icon: "book-open"
+---
+
+Orchestrations let you combine specialized agents into a team. A coordinator agent decides which entity agent should handle each part of a user's request, enabling complex multi-domain conversations.
+
+<Note>
+**Prerequisites:**
+
+- Two or more agents created (see Build an Agent guide)
+</Note>
+
+<Steps>
+
+<Step title="Create the orchestration">
+
+Define an orchestration with a name and strategy. The supervisor strategy creates a coordinator that delegates to entity agents.
+
+**Endpoint:** `POST /api/orchestrations`
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/orchestrations",
+    headers=headers,
+    json={
+        "name": "Customer Support Team",
+        "strategy": "supervisor",
+        "orchestrator_config": {
+            "additional_instructions": "Route billing questions to the Billing agent and technical questions to the Tech Support agent.",
+        },
+    },
+)
+orch = response.json()
+orch_id = orch["id"]
+```
+
+```typescript TypeScript
+const response = await fetch(`${BASE_URL}/api/orchestrations`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    name: "Customer Support Team",
+    strategy: "supervisor",
+    orchestrator_config: {
+      additional_instructions: "Route billing questions to the Billing agent and technical questions to the Tech Support agent.",
+    },
+  }),
+});
+const orch = await response.json();
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/orchestrations' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Customer Support Team", "strategy": "supervisor"}'
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Add agents as entities">
+
+Add each agent to the orchestration with a role description that helps the coordinator decide when to delegate.
+
+**Endpoint:** `POST /api/orchestrations/{id}/entities`
+
+<CodeGroup>
+
+```python Python
+# Add billing agent
+requests.post(
+    f"{BASE_URL}/api/orchestrations/{orch_id}/entities",
+    headers=headers,
+    json={
+        "agent_id": billing_agent_id,
+        "role": "Handles billing, invoices, and payment questions",
+    },
+)
+
+# Add tech support agent
+requests.post(
+    f"{BASE_URL}/api/orchestrations/{orch_id}/entities",
+    headers=headers,
+    json={
+        "agent_id": tech_agent_id,
+        "role": "Handles technical issues, bugs, and setup questions",
+    },
+)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}/entities`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    agent_id: billingAgentId,
+    role: "Handles billing, invoices, and payment questions",
+  }),
+});
+
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}/entities`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    agent_id: techAgentId,
+    role: "Handles technical issues, bugs, and setup questions",
+  }),
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/orchestrations/{orch_id}/entities' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id": "{billing_agent_id}", "role": "Handles billing questions"}'
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Run the orchestration">
+
+Send a message to the orchestration. The coordinator delegates to the appropriate agent. Events include delegation_started and delegation_completed.
+
+**Endpoint:** `POST /api/orchestrations/{id}/run/stream`
+
+<Note>
+Additional SSE events for orchestrations: delegation_started (agent name + child run ID), delegation_completed (agent name + usage stats).
+</Note>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/orchestrations/{orch_id}/run/stream",
+    headers=headers,
+    json={"message": "I have a question about my last invoice"},
+    stream=True,
+)
+
+for line in response.iter_lines():
+    if not line:
+        continue
+    text = line.decode("utf-8")
+    if text.startswith("data: "):
+        event = json.loads(text[6:])
+        if event["event"] == "delegation_started":
+            print(f"Delegating to: {event['agent']}")
+        elif event["event"] == "chunk":
+            print(event["content"], end="")
+        elif event["event"] == "complete":
+            print("\nDone.")
+```
+
+```typescript TypeScript
+const response = await fetch(`${BASE_URL}/api/orchestrations/${orchId}/run/stream`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ message: "I have a question about my last invoice" }),
+});
+// Parse SSE stream — events include delegation_started, chunk, complete
+```
+
+```bash cURL
+curl -N -X POST '{BASE_URL}/api/orchestrations/{orch_id}/run/stream' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "I have a question about my last invoice"}'
+```
+
+</CodeGroup>
+
+</Step>
+
+</Steps>
+
+## What's Next
+
+<CardGroup cols={2}>
+
+<Card title="Multi-Agent Orchestration" href="/concepts/orchestrations-concept">
+Understand the coordinator pattern.
+</Card>
+
+<Card title="Orchestrations API Reference" href="/api-reference/orchestrations">
+Full endpoint documentation.
+</Card>
+
+</CardGroup>

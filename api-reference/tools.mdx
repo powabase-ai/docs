@@ -1,0 +1,161 @@
+---
+title: "Tools"
+description: "Manage custom tools and view builtin tools available to agents."
+---
+
+Tools extend agent capabilities beyond conversation. The platform provides builtin tools (database_query, database_write, http_request, code_execute, storage_read, storage_write, web_search, web_scrape) and lets you create custom tools that call your own endpoints. Custom tools are defined with a name, description, JSON Schema for inputs, and an endpoint URL that the platform calls when the agent uses the tool.
+
+## Common Patterns
+
+List available tools with GET /api/tools to see both builtin and custom tools. Create custom tools with a clear description and input schema — agents use the description to decide when to call the tool. Assign tools to agents via the agent tools API (POST /api/agents/\{id\}/tools).
+
+### GET /api/tools
+
+List all tools (builtin: database_query, database_write, http_request, code_execute, storage_read, storage_write, web_search, web_scrape + custom).
+
+<CodeGroup>
+
+```python Python
+response = requests.get(f"{BASE_URL}/api/tools", headers=headers)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/tools`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/tools' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/tools
+
+Create a custom tool (HTTP endpoint with JSON schema).
+
+<RequestExample>
+
+```json Request
+{
+  "name": "weather_lookup",
+  "description": "Get current weather for a city",
+  "endpoint_url": "https://api.weather.com/v1/current",
+  "method": "GET",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "city": { "type": "string" }
+    },
+    "required": ["city"]
+  }
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(f"{BASE_URL}/api/tools", headers=headers, json={
+    "name": "weather_lookup",
+    "description": "Get current weather",
+    "endpoint_url": "https://api.weather.com/v1/current",
+    "method": "GET",
+    "input_schema": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]},
+})
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/tools`, { method: "POST", headers, body: JSON.stringify({
+  name: "weather_lookup",
+  description: "Get current weather",
+  endpoint_url: "https://api.weather.com/v1/current",
+  method: "GET",
+  input_schema: { type: "object", properties: { city: { type: "string" } }, required: ["city"] },
+}) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/tools' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"name": "weather_lookup", ...}'
+```
+
+</CodeGroup>
+
+### GET /api/tools/{id}
+
+Get a tool definition by ID.
+
+<ParamField path="id" type="string" required>
+Tool ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.get(f"{BASE_URL}/api/tools/{tool_id}", headers=headers)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/tools/${toolId}`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/tools/{id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### PUT /api/tools/{id}
+
+Update a custom tool.
+
+<ParamField path="id" type="string" required>
+Tool ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.put(f"{BASE_URL}/api/tools/{tool_id}", headers=headers, json={"description": "Updated"})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/tools/${toolId}`, { method: "PUT", headers, body: JSON.stringify({ description: "Updated" }) });
+```
+
+```bash cURL
+curl -X PUT '{BASE_URL}/api/tools/{id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"description": "Updated"}'
+```
+
+</CodeGroup>
+
+### DELETE /api/tools/{id}
+
+Delete a custom tool.
+
+<ParamField path="id" type="string" required>
+Tool ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.delete(f"{BASE_URL}/api/tools/{tool_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/tools/${toolId}`, { method: "DELETE", headers });
+```
+
+```bash cURL
+curl -X DELETE '{BASE_URL}/api/tools/{id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+## Error Responses
+
+| Status | Code | Description |
+| --- | --- | --- |
+| 400 | `invalid_schema` | The tool's input_schema is not valid JSON Schema |
+| 404 | `tool_not_found` | No tool exists with the given ID |

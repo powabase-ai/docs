@@ -1,0 +1,143 @@
+---
+title: "Streaming & SSE"
+description: "The platform uses Server-Sent Events (SSE) for real-time streaming of agent responses, orchestration flows, and workflow executions. This page covers the event format, event types, and consumption patterns."
+---
+
+## SSE Overview
+
+Server-Sent Events (SSE) provide a one-directional stream from server to client over a single HTTP connection. When you call a streaming endpoint (e.g. /api/agents/\{id\}/run/stream), the response is a text/event-stream with individual events sent as they occur. Each event is a JSON object prefixed with 'data: ' on a single line, separated by blank lines.
+
+## Agent Streaming Events
+
+| Event | Key Fields | Description |
+| --- | --- | --- |
+| start | run_id, session_id | Agent run has started — save session_id for multi-turn |
+| step_started | step | Agent is beginning a new reasoning step |
+| chunk | content | A piece of the agent's text response |
+| tool_call | tool_name, arguments | Agent is calling a tool with the given arguments |
+| tool_result | tool_name, result | Tool execution completed with this result |
+| step_completed | step | Agent finished a reasoning step |
+| approval_requested | tool_name, tool_input | Tool call paused — waiting for approval via the approve endpoint |
+| complete | run_id | Agent run finished |
+| error | message | An error occurred during execution |
+
+## Consuming SSE in Python
+
+<CodeGroup>
+
+```python Python
+import requests
+import json
+
+response = requests.post(
+    f"{BASE_URL}/api/agents/{agent_id}/run/stream",
+    headers=headers,
+    json={"message": "What can you help me with?"},
+    stream=True,
+)
+
+for line in response.iter_lines():
+    if not line:
+        continue
+    text = line.decode("utf-8")
+    if text.startswith("data: "):
+        event = json.loads(text[6:])
+        event_type = event["event"]
+
+        if event_type == "start":
+            print(f"Session: {event['session_id']}")
+        elif event_type == "chunk":
+            print(event["content"], end="", flush=True)
+        elif event_type == "tool_call":
+            print(f"\n[Calling {event['tool_name']}...]")
+        elif event_type == "tool_result":
+            print(f"[Tool returned result]")
+        elif event_type == "error":
+            print(f"\nError: {event['message']}")
+        elif event_type == "complete":
+            print("\nDone.")
+```
+
+```typescript TypeScript
+const response = await fetch(`${BASE_URL}/api/agents/${agentId}/run/stream`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ message: "What can you help me with?" }),
+});
+
+const reader = response.body!.getReader();
+const decoder = new TextDecoder();
+let buffer = "";
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  buffer += decoder.decode(value, { stream: true });
+
+  const lines = buffer.split("\n");
+  buffer = lines.pop() || "";
+
+  for (const line of lines) {
+    if (line.startsWith("data: ")) {
+      const event = JSON.parse(line.slice(6));
+      switch (event.event) {
+        case "start":
+          console.log("Session:", event.session_id);
+          break;
+        case "chunk":
+          process.stdout.write(event.content);
+          break;
+        case "tool_call":
+          console.log(`\n[Calling ${event.tool_name}...]`);
+          break;
+        case "complete":
+          console.log("\nDone.");
+          break;
+      }
+    }
+  }
+}
+```
+
+```bash cURL
+# Stream events to terminal (each line is a JSON event)
+curl -N -X POST '{BASE_URL}/api/agents/{agent_id}/run/stream' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What can you help me with?"}'
+```
+
+</CodeGroup>
+
+## Orchestration Events
+
+Orchestration streaming extends the agent event model with delegation events. You see the coordinator reasoning, delegating to entity agents, each entity's response, and the coordinator's final synthesis. Events like delegation_start and entity_chunk let you show which agent is currently working.
+
+## Workflow Streaming
+
+Workflow streaming sends events as each block executes: block_started, block_output, block_completed, and the final workflow result. This lets you show a progress indicator for each step in a multi-block workflow.
+
+<Tip>
+**Buffer handling**
+
+SSE data may arrive in partial chunks — a single read() call might contain half an event or multiple events. Always buffer incoming data and split on newlines to ensure you process complete events.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Streaming Responses Guide" href="/guides/streaming-guide">
+Hands-on guide to consuming streaming events.
+</Card>
+
+<Card title="Build an Agent" href="/guides/build-agent">
+Create an agent with streaming support.
+</Card>
+
+<Card title="Agents API Reference" href="/api-reference/agents">
+Streaming endpoint documentation.
+</Card>
+
+</CardGroup>

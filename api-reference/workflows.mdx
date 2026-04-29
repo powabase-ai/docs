@@ -1,0 +1,375 @@
+---
+title: "Workflows"
+description: "Create and manage automated block-based workflows with visual graph definitions."
+---
+
+Workflows are DAG-based automation pipelines that execute a fixed sequence of blocks (LLM calls, code execution, conditions, agent runs). Unlike agents that decide what to do dynamically, workflows follow a predetermined graph. They can be executed directly, streamed, or triggered externally via webhooks.
+
+## Common Patterns
+
+Create a workflow, define its graph with PUT /api/workflows/\{id\}/graph, then execute. For external triggers, deploy the workflow and arm it to get a webhook URL. Webhooks are single-use — re-arm after each trigger. Use the streaming endpoint for real-time block execution updates.
+
+## CRUD
+
+### GET /api/workflows
+
+List workflows.
+
+<ParamField query="limit" type="integer">
+Max results
+</ParamField>
+
+<ParamField query="offset" type="integer">
+Pagination offset
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/workflows", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/workflows`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/workflows' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/workflows
+
+Create a workflow.
+
+<RequestExample>
+
+```json Request
+{ "name": "My Workflow" }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/workflows", headers=headers, json={"name": "My Workflow"})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/workflows`, { method: "POST", headers, body: JSON.stringify({ name: "My Workflow" }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/workflows' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"name": "My Workflow"}'
+```
+
+</CodeGroup>
+
+### GET /api/workflows/{id}
+
+Get workflow with blocks and edges.
+
+<ParamField path="id" type="string" required>
+Workflow ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/workflows/{wf_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/workflows/${wfId}`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/workflows/{id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### PATCH /api/workflows/{id}
+
+Update workflow metadata.
+
+<ParamField path="id" type="string" required>
+Workflow ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.patch(f"{BASE_URL}/api/workflows/{wf_id}", headers=headers, json={"name": "Renamed"})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/workflows/${wfId}`, { method: "PATCH", headers, body: JSON.stringify({ name: "Renamed" }) });
+```
+
+```bash cURL
+curl -X PATCH '{BASE_URL}/api/workflows/{id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"name": "Renamed"}'
+```
+
+</CodeGroup>
+
+### DELETE /api/workflows/{id}
+
+Delete a workflow.
+
+<ParamField path="id" type="string" required>
+Workflow ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.delete(f"{BASE_URL}/api/workflows/{wf_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/workflows/${wfId}`, { method: "DELETE", headers });
+```
+
+```bash cURL
+curl -X DELETE '{BASE_URL}/api/workflows/{id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+## Graph
+
+### PUT /api/workflows/{id}/graph
+
+Save the complete graph — blocks and edges.
+
+<ParamField path="id" type="string" required>
+Workflow ID
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{
+  "blocks": [
+    { "id": "input", "type": "input", "config": {}, "position": {"x": 0, "y": 0} }
+  ],
+  "edges": [
+    { "source": "input", "target": "output" }
+  ]
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.put(f"{BASE_URL}/api/workflows/{wf_id}/graph", headers=headers, json={"blocks": [...], "edges": [...]})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/workflows/${wfId}/graph`, { method: "PUT", headers, body: JSON.stringify({ blocks: [...], edges: [...] }) });
+```
+
+```bash cURL
+curl -X PUT '{BASE_URL}/api/workflows/{id}/graph' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"blocks": [], "edges": []}'
+```
+
+</CodeGroup>
+
+## Deploy
+
+### POST /api/workflows/{id}/deploy
+
+Deploy the workflow (enables webhook triggering).
+
+<ParamField path="id" type="string" required>
+Workflow ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/workflows/{wf_id}/deploy", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/workflows/${wfId}/deploy`, { method: "POST", headers });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/workflows/{id}/deploy' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/workflows/{id}/undeploy
+
+Undeploy the workflow.
+
+<ParamField path="id" type="string" required>
+Workflow ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/workflows/{wf_id}/undeploy", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/workflows/${wfId}/undeploy`, { method: "POST", headers });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/workflows/{id}/undeploy' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/workflows/{id}/arm
+
+Arm webhook for a single external trigger.
+
+<ParamField path="id" type="string" required>
+Workflow ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(f"{BASE_URL}/api/workflows/{wf_id}/arm", headers=headers)
+print(response.json())  # { webhook_id, secret }
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/workflows/${wfId}/arm`, { method: "POST", headers });
+const { webhook_id, secret } = await res.json();
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/workflows/{id}/arm' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+## Execution
+
+### POST /api/workflows/{id}/execute
+
+Execute the workflow synchronously.
+
+<ParamField path="id" type="string" required>
+Workflow ID
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{ "input": { "text": "..." } }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/workflows/{wf_id}/execute", headers=headers, json={"input": {"text": "..."}})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/workflows/${wfId}/execute`, { method: "POST", headers, body: JSON.stringify({ input: { text: "..." } }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/workflows/{id}/execute' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"input": {"text": "..."}}'
+```
+
+</CodeGroup>
+
+### POST /api/workflows/{id}/execute/stream
+
+Execute with streaming SSE.
+
+<ParamField path="id" type="string" required>
+Workflow ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/workflows/{wf_id}/execute/stream", headers=headers, json={"input": {"text": "..."}}, stream=True)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/workflows/${wfId}/execute/stream`, { method: "POST", headers, body: JSON.stringify({ input: { text: "..." } }) });
+```
+
+```bash cURL
+curl -N -X POST '{BASE_URL}/api/workflows/{id}/execute/stream' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"input": {"text": "..."}}'
+```
+
+</CodeGroup>
+
+### GET /api/workflows/{id}/executions
+
+List execution history.
+
+<ParamField path="id" type="string" required>
+Workflow ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/workflows/{wf_id}/executions", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/workflows/${wfId}/executions`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/workflows/{id}/executions' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### GET /api/workflows/{id}/executions/{eid}/logs
+
+Get per-block execution logs.
+
+<ParamField path="id" type="string" required>
+Workflow ID
+</ParamField>
+
+<ParamField path="eid" type="string" required>
+Execution ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/workflows/{wf_id}/executions/{exec_id}/logs", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/workflows/${wfId}/executions/${execId}/logs`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/workflows/{id}/executions/{eid}/logs' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+## Error Responses
+
+| Status | Code | Description |
+| --- | --- | --- |
+| 400 | `invalid_graph` | The workflow graph is invalid (e.g., cycles, disconnected blocks, missing required config) |
+| 404 | `workflow_not_found` | No workflow exists with the given ID |
+| 409 | `already_deployed` | The workflow is already deployed — undeploy first to make changes |

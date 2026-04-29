@@ -1,0 +1,245 @@
+---
+title: "Build Workflows with Copilot"
+description: "Describe what you want in natural language and let the AI copilot build the workflow graph for you. The copilot generates blocks and edges based on your description."
+icon: "book-open"
+---
+
+The AI copilot can generate a complete workflow graph from a natural language description. You create a copilot session linked to a workflow, describe what you want, and the copilot generates the blocks and edges. You can iterate through multiple chat turns to refine the workflow.
+
+<Note>
+**Prerequisites:**
+
+- Authentication configured (see Authentication guide)
+</Note>
+
+<Steps>
+
+<Step title="Create a workflow">
+
+Create an empty workflow that the copilot will populate.
+
+**Endpoint:** `POST /api/workflows`
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/workflows",
+    headers=headers,
+    json={"name": "Email Classifier"},
+)
+workflow = response.json()
+wf_id = workflow["id"]
+```
+
+```typescript TypeScript
+const response = await fetch(`${BASE_URL}/api/workflows`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ name: "Email Classifier" }),
+});
+const workflow = await response.json();
+const wfId = workflow.id;
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/workflows' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Email Classifier"}'
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Start a copilot session">
+
+Create a copilot session linked to the workflow.
+
+**Endpoint:** `POST /api/copilot/sessions`
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/copilot/sessions",
+    headers=headers,
+    json={"workflow_id": wf_id},
+)
+session = response.json()
+session_id = session["id"]
+```
+
+```typescript TypeScript
+const response = await fetch(`${BASE_URL}/api/copilot/sessions`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ workflow_id: wfId }),
+});
+const session = await response.json();
+const sessionId = session.id;
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/copilot/sessions' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"workflow_id": "{wf_id}"}'
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Describe your workflow">
+
+Send a natural language description via the chat endpoint. The copilot responds with a streaming SSE response that includes the generated workflow graph.
+
+**Endpoint:** `POST /api/copilot/sessions/{id}/chat`
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/copilot/sessions/{session_id}/chat",
+    headers=headers,
+    json={
+        "message": "Build a workflow that takes an email as input, classifies it as spam/not-spam using an LLM, and outputs the classification with confidence score.",
+    },
+    stream=True,
+)
+
+message_id = None
+for line in response.iter_lines():
+    if not line:
+        continue
+    text = line.decode("utf-8")
+    if text.startswith("data: "):
+        event = json.loads(text[6:])
+        if event.get("message_id"):
+            message_id = event["message_id"]
+        if event["event"] == "chunk":
+            print(event["content"], end="")
+print(f"\nMessage ID: {message_id}")
+```
+
+```typescript TypeScript
+const response = await fetch(`${BASE_URL}/api/copilot/sessions/${sessionId}/chat`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    message: "Build a workflow that takes an email as input, classifies it as spam/not-spam using an LLM, and outputs the classification with confidence score.",
+  }),
+});
+// Parse SSE stream for chunks and message_id
+```
+
+```bash cURL
+curl -N -X POST '{BASE_URL}/api/copilot/sessions/{session_id}/chat' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Build a workflow that classifies emails as spam or not-spam"}'
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Save the copilot's suggestion">
+
+Save the copilot's generated workflow graph as a snapshot. This applies the blocks and edges to the workflow.
+
+**Endpoint:** `POST /api/copilot/sessions/{id}/messages/{mid}/snapshot`
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/copilot/sessions/{session_id}/messages/{message_id}/snapshot",
+    headers=headers,
+)
+print(response.json())
+```
+
+```typescript TypeScript
+await fetch(
+  `${BASE_URL}/api/copilot/sessions/${sessionId}/messages/${messageId}/snapshot`,
+  { method: "POST", headers },
+);
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/copilot/sessions/{session_id}/messages/{message_id}/snapshot' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Execute the workflow">
+
+Run the copilot-built workflow with input data.
+
+**Endpoint:** `POST /api/workflows/{id}/execute`
+
+<Note>
+You can also build workflows programmatically via PUT /api/workflows/\{id\}/graph — see the Build Workflows Programmatically guide.
+</Note>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/workflows/{wf_id}/execute",
+    headers=headers,
+    json={"input": {"email": "Congratulations! You've won a free iPhone..."}},
+)
+print(response.json())
+```
+
+```typescript TypeScript
+const response = await fetch(`${BASE_URL}/api/workflows/${wfId}/execute`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ input: { email: "Congratulations! You've won a free iPhone..." } }),
+});
+console.log(await response.json());
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/workflows/{wf_id}/execute' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"email": "Congratulations! You have won a free iPhone..."}}'
+```
+
+</CodeGroup>
+
+</Step>
+
+</Steps>
+
+## What's Next
+
+<CardGroup cols={2}>
+
+<Card title="Workflows (Programmatic)" href="/guides/workflows-programmatic">
+Fine-tune workflows by editing the graph directly.
+</Card>
+
+<Card title="Workflows" href="/concepts/workflows-concept">
+Understand block types and graph execution.
+</Card>
+
+<Card title="Copilot API Reference" href="/api-reference/copilot">
+Full endpoint documentation.
+</Card>
+
+</CardGroup>

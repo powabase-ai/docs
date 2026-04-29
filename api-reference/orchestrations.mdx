@@ -1,0 +1,311 @@
+---
+title: "Orchestrations"
+description: "Combine multiple agents into coordinated multi-agent systems."
+---
+
+Orchestrations coordinate multiple agents to handle complex, multi-domain tasks. A coordinator agent analyzes incoming messages and delegates subtasks to specialized entity agents based on their role descriptions. The coordinator synthesizes entity responses into a unified reply.
+
+## Common Patterns
+
+Create an orchestration, add entity agents with clear role descriptions, then use the streaming endpoint. The coordinator automatically handles delegation. Entity role descriptions should be specific and non-overlapping so the coordinator can make clear routing decisions.
+
+## CRUD
+
+### POST /api/orchestrations
+
+Create an orchestration.
+
+<RequestExample>
+
+```json Request
+{ "name": "Team", "strategy": "supervisor" }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/orchestrations", headers=headers, json={"name": "Team", "strategy": "supervisor"})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations`, { method: "POST", headers, body: JSON.stringify({ name: "Team", strategy: "supervisor" }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/orchestrations' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"name": "Team"}'
+```
+
+</CodeGroup>
+
+### GET /api/orchestrations
+
+List all orchestrations.
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/orchestrations", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/orchestrations' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### GET /api/orchestrations/{id}
+
+Get orchestration with its entities.
+
+<ParamField path="id" type="string" required>
+Orchestration ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/orchestrations/{orch_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/orchestrations/{id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### PUT /api/orchestrations/{id}
+
+Update orchestration config.
+
+<ParamField path="id" type="string" required>
+Orchestration ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.put(f"{BASE_URL}/api/orchestrations/{orch_id}", headers=headers, json={"name": "Updated"})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}`, { method: "PUT", headers, body: JSON.stringify({ name: "Updated" }) });
+```
+
+```bash cURL
+curl -X PUT '{BASE_URL}/api/orchestrations/{id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"name": "Updated"}'
+```
+
+</CodeGroup>
+
+### DELETE /api/orchestrations/{id}
+
+Delete an orchestration.
+
+<ParamField path="id" type="string" required>
+Orchestration ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.delete(f"{BASE_URL}/api/orchestrations/{orch_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}`, { method: "DELETE", headers });
+```
+
+```bash cURL
+curl -X DELETE '{BASE_URL}/api/orchestrations/{id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+## Entities
+
+### POST /api/orchestrations/{id}/entities
+
+Add an agent as an entity.
+
+<ParamField path="id" type="string" required>
+Orchestration ID
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{ "agent_id": "uuid", "role": "Handles billing" }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/orchestrations/{orch_id}/entities", headers=headers, json={"agent_id": agent_id, "role": "Handles billing"})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}/entities`, { method: "POST", headers, body: JSON.stringify({ agent_id: agentId, role: "Handles billing" }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/orchestrations/{id}/entities' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"agent_id": "uuid", "role": "Handles billing"}'
+```
+
+</CodeGroup>
+
+### GET /api/orchestrations/{id}/entities
+
+List entities in the orchestration.
+
+<ParamField path="id" type="string" required>
+Orchestration ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/orchestrations/{orch_id}/entities", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}/entities`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/orchestrations/{id}/entities' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### PUT /api/orchestrations/{id}/entities/{eid}
+
+Update an entity's role or config.
+
+<ParamField path="id" type="string" required>
+Orchestration ID
+</ParamField>
+
+<ParamField path="eid" type="string" required>
+Entity ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.put(f"{BASE_URL}/api/orchestrations/{orch_id}/entities/{entity_id}", headers=headers, json={"role": "Updated role"})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}/entities/${entityId}`, { method: "PUT", headers, body: JSON.stringify({ role: "Updated" }) });
+```
+
+```bash cURL
+curl -X PUT '{BASE_URL}/api/orchestrations/{id}/entities/{eid}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"role": "Updated"}'
+```
+
+</CodeGroup>
+
+### DELETE /api/orchestrations/{id}/entities/{eid}
+
+Remove an entity.
+
+<ParamField path="id" type="string" required>
+Orchestration ID
+</ParamField>
+
+<ParamField path="eid" type="string" required>
+Entity ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.delete(f"{BASE_URL}/api/orchestrations/{orch_id}/entities/{entity_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}/entities/${entityId}`, { method: "DELETE", headers });
+```
+
+```bash cURL
+curl -X DELETE '{BASE_URL}/api/orchestrations/{id}/entities/{eid}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+## Execution
+
+### POST /api/orchestrations/{id}/run/stream
+
+Run orchestration with streaming SSE. Includes delegation events.
+
+<ParamField path="id" type="string" required>
+Orchestration ID
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{ "message": "Hello" }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/orchestrations/{orch_id}/run/stream", headers=headers, json={"message": "Hello"}, stream=True)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}/run/stream`, { method: "POST", headers, body: JSON.stringify({ message: "Hello" }) });
+```
+
+```bash cURL
+curl -N -X POST '{BASE_URL}/api/orchestrations/{id}/run/stream' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"message": "Hello"}'
+```
+
+</CodeGroup>
+
+### GET /api/orchestrations/runs/{run_id}
+
+Get orchestration run result.
+
+<ParamField path="run_id" type="string" required>
+Run ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/orchestrations/runs/{run_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations/runs/${runId}`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/orchestrations/runs/{run_id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+## Error Responses
+
+| Status | Code | Description |
+| --- | --- | --- |
+| 400 | `no_entities` | The orchestration has no entity agents — add at least one before running |
+| 404 | `orchestration_not_found` | No orchestration exists with the given ID |

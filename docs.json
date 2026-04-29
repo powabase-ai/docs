@@ -1,0 +1,88 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Powabase",
+  "colors": {
+    "primary": "#A855F7",
+    "light": "#C4B5FD",
+    "dark": "#6D28D9"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "concepts/platform-overview",
+              "guides/quickstart",
+              "guides/introduction",
+              "concepts/platform-comparison"
+            ]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/sources-extraction",
+              "concepts/knowledge-bases-indexing",
+              "concepts/agents-tools",
+              "concepts/orchestrations-concept",
+              "concepts/workflows-concept",
+              "concepts/streaming-patterns",
+              "concepts/database-access",
+              "concepts/ai-coding-assistants"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/upload-document",
+              "guides/create-knowledge-base",
+              "guides/build-agent",
+              "guides/orchestration",
+              "guides/workflows-programmatic",
+              "guides/workflows-copilot",
+              "guides/streaming-guide",
+              "guides/advanced-agent-config"
+            ]
+          },
+          {
+            "group": "API Reference",
+            "pages": [
+              "api-reference/sources",
+              "api-reference/knowledge-bases",
+              "api-reference/agents",
+              "api-reference/sessions",
+              "api-reference/orchestrations",
+              "api-reference/workflows",
+              "api-reference/copilot",
+              "api-reference/tools",
+              "api-reference/context-handlers",
+              "api-reference/auth-storage"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "/logo/powabase-light.svg",
+    "dark": "/logo/powabase-dark.svg"
+  },
+  "navbar": {
+    "links": [],
+    "primary": {
+      "type": "button",
+      "label": "Start a project",
+      "href": "https://app.powabase.ai/sign-up"
+    }
+  },
+  "footer": {
+    "socials": {
+      "discord": "https://discord.gg/k8W2A9KRtc"
+    }
+  }
+}

@@ -1,0 +1,145 @@
+---
+title: "Authentication & Storage"
+description: "Auth user management and storage operations are served by the control-plane proxy, not the per-project service API. Routing is ref-only: /api/platform/auth/{ref}/* and /api/platform/storage/{ref}/*."
+---
+
+Auth and Storage endpoints are proxied through the control plane to each project's GoTrue (authentication) and Storage (file management) services. Substitute <PLATFORM_URL> with your Studio app's base URL (e.g. http://localhost:3001 in dev) and \{ref\} with your project ref.
+
+## Common Patterns
+
+For authentication, list users with GET /api/platform/auth/\{ref\}/users and create them with POST. For storage, list buckets and upload files under /api/platform/storage/\{ref\}/*. A platform JWT (signed-in user's access token) is required; service-role bypasses are not available through the proxy.
+
+## Authentication (via Control Plane)
+
+### GET /api/platform/auth/{ref}/users
+
+List project auth users. Full URL: GET <PLATFORM_URL>/api/platform/auth/\{ref\}/users
+
+<CodeGroup>
+
+```python Python
+import requests
+
+PLATFORM_URL = "http://localhost:3001"  # your Studio app base
+REF = "your-project-ref"
+
+response = requests.get(
+    f"{PLATFORM_URL}/api/platform/auth/{REF}/users",
+    headers={"Authorization": "Bearer YOUR_PLATFORM_JWT"},
+)
+```
+
+```typescript TypeScript
+const PLATFORM_URL = "http://localhost:3001";  // your Studio app base
+const ref = "your-project-ref";
+const res = await fetch(
+  `${PLATFORM_URL}/api/platform/auth/${ref}/users`,
+  { headers: { Authorization: `Bearer ${platformJwt}` } },
+);
+```
+
+```bash cURL
+curl '<PLATFORM_URL>/api/platform/auth/{ref}/users' \
+  -H "Authorization: Bearer YOUR_PLATFORM_JWT"
+```
+
+</CodeGroup>
+
+### POST /api/platform/auth/{ref}/users
+
+Create an auth user. Full URL: POST <PLATFORM_URL>/api/platform/auth/\{ref\}/users
+
+<CodeGroup>
+
+```python Python
+requests.post(
+    f"{PLATFORM_URL}/api/platform/auth/{REF}/users",
+    headers={"Authorization": "Bearer YOUR_PLATFORM_JWT", "Content-Type": "application/json"},
+    json={"email": "user@example.com", "password": "securepass"},
+)
+```
+
+```typescript TypeScript
+await fetch(
+  `${PLATFORM_URL}/api/platform/auth/${ref}/users`,
+  {
+    method: "POST",
+    headers: { Authorization: `Bearer ${platformJwt}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "user@example.com", password: "securepass" }),
+  },
+);
+```
+
+```bash cURL
+curl -X POST '<PLATFORM_URL>/api/platform/auth/{ref}/users' \
+  -H "Authorization: Bearer YOUR_PLATFORM_JWT" -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "securepass"}'
+```
+
+</CodeGroup>
+
+## Storage (via Control Plane)
+
+### GET /api/platform/storage/{ref}/buckets
+
+List storage buckets. Full URL: GET <PLATFORM_URL>/api/platform/storage/\{ref\}/buckets
+
+<CodeGroup>
+
+```python Python
+response = requests.get(
+    f"{PLATFORM_URL}/api/platform/storage/{REF}/buckets",
+    headers={"Authorization": "Bearer YOUR_PLATFORM_JWT"},
+)
+```
+
+```typescript TypeScript
+const res = await fetch(
+  `${PLATFORM_URL}/api/platform/storage/${ref}/buckets`,
+  { headers: { Authorization: `Bearer ${platformJwt}` } },
+);
+```
+
+```bash cURL
+curl '<PLATFORM_URL>/api/platform/storage/{ref}/buckets' \
+  -H "Authorization: Bearer YOUR_PLATFORM_JWT"
+```
+
+</CodeGroup>
+
+### POST /api/platform/storage/{ref}/object/{bucket}/{path}
+
+Upload a file. Full URL: POST <PLATFORM_URL>/api/platform/storage/\{ref\}/object/\{bucket\}/\{path\}
+
+<CodeGroup>
+
+```python Python
+with open("file.txt", "rb") as f:
+    requests.post(
+        f"{PLATFORM_URL}/api/platform/storage/{REF}/object/mybucket/file.txt",
+        headers={"Authorization": "Bearer YOUR_PLATFORM_JWT"},
+        files={"file": f},
+    )
+```
+
+```typescript TypeScript
+const form = new FormData();
+form.append("file", blob);
+await fetch(
+  `${PLATFORM_URL}/api/platform/storage/${ref}/object/mybucket/file.txt`,
+  { method: "POST", headers: { Authorization: `Bearer ${platformJwt}` }, body: form },
+);
+```
+
+```bash cURL
+curl -X POST '<PLATFORM_URL>/api/platform/storage/{ref}/object/mybucket/file.txt' \
+  -H "Authorization: Bearer YOUR_PLATFORM_JWT" -F "file=@file.txt"
+```
+
+</CodeGroup>
+
+## Error Responses
+
+| Status | Code | Description |
+| --- | --- | --- |
+| 401 | `unauthorized` | Missing or invalid authentication credentials |

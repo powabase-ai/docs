@@ -1,0 +1,267 @@
+---
+title: "Build Workflows Programmatically"
+description: "Create automated workflows by defining blocks and edges via the API. Blocks are processing steps (LLM calls, agent runs, conditions). Edges connect them into a directed graph."
+icon: "book-open"
+---
+
+Workflows are deterministic automation pipelines. Unlike agents (which decide what to do), workflows follow a fixed graph of blocks and edges. This guide creates a simple summarizer workflow and deploys it as a webhook.
+
+<Note>
+**Prerequisites:**
+
+- Authentication configured (see Authentication guide)
+</Note>
+
+<Steps>
+
+<Step title="Create a workflow">
+
+Create an empty workflow container.
+
+**Endpoint:** `POST /api/workflows`
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/workflows",
+    headers=headers,
+    json={"name": "Document Summarizer", "description": "Summarizes uploaded documents"},
+)
+workflow = response.json()
+wf_id = workflow["id"]
+```
+
+```typescript TypeScript
+const response = await fetch(`${BASE_URL}/api/workflows`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ name: "Document Summarizer", description: "Summarizes uploaded documents" }),
+});
+const workflow = await response.json();
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/workflows' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Document Summarizer"}'
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Define the graph">
+
+Save blocks (processing steps) and edges (connections between them) as a complete graph. Block types include: input, output, llm, agent, condition, code, and more.
+
+**Endpoint:** `PUT /api/workflows/{id}/graph`
+
+<CodeGroup>
+
+```python Python
+response = requests.put(
+    f"{BASE_URL}/api/workflows/{wf_id}/graph",
+    headers=headers,
+    json={
+        "blocks": [
+            {"id": "input", "type": "input", "config": {}, "position": {"x": 0, "y": 0}},
+            {"id": "summarize", "type": "llm", "config": {
+                "model": "gpt-4o",
+                "prompt": "Summarize the following document:\n\n{{input.text}}",
+            }, "position": {"x": 300, "y": 0}},
+            {"id": "output", "type": "output", "config": {}, "position": {"x": 600, "y": 0}},
+        ],
+        "edges": [
+            {"source": "input", "target": "summarize"},
+            {"source": "summarize", "target": "output"},
+        ],
+    },
+)
+print(response.json())
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/workflows/${wfId}/graph`, {
+  method: "PUT",
+  headers,
+  body: JSON.stringify({
+    blocks: [
+      { id: "input", type: "input", config: {}, position: { x: 0, y: 0 } },
+      { id: "summarize", type: "llm", config: {
+        model: "gpt-4o",
+        prompt: "Summarize the following document:\n\n{{input.text}}",
+      }, position: { x: 300, y: 0 } },
+      { id: "output", type: "output", config: {}, position: { x: 600, y: 0 } },
+    ],
+    edges: [
+      { source: "input", target: "summarize" },
+      { source: "summarize", target: "output" },
+    ],
+  }),
+});
+```
+
+```bash cURL
+curl -X PUT '{BASE_URL}/api/workflows/{wf_id}/graph' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"blocks": [...], "edges": [...]}'
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Execute the workflow">
+
+Run the workflow with input data. Returns execution results.
+
+**Endpoint:** `POST /api/workflows/{id}/execute`
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/workflows/{wf_id}/execute",
+    headers=headers,
+    json={"input": {"text": "Your document content here..."}},
+)
+result = response.json()
+print(result)
+```
+
+```typescript TypeScript
+const response = await fetch(`${BASE_URL}/api/workflows/${wfId}/execute`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ input: { text: "Your document content here..." } }),
+});
+const result = await response.json();
+console.log(result);
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/workflows/{wf_id}/execute' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"text": "Your document content here..."}}'
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Deploy with webhook">
+
+Deploy the workflow to make it externally triggerable via webhook. First deploy, then arm for a single execution.
+
+**Endpoint:** `POST /api/workflows/{id}/deploy + POST /api/workflows/{id}/arm`
+
+<CodeGroup>
+
+```python Python
+# Deploy
+requests.post(f"{BASE_URL}/api/workflows/{wf_id}/deploy", headers=headers)
+
+# Arm for webhook trigger
+arm_response = requests.post(f"{BASE_URL}/api/workflows/{wf_id}/arm", headers=headers)
+webhook_info = arm_response.json()
+print(f"Webhook ID: {webhook_info['webhook_id']}")
+print(f"Secret: {webhook_info['secret']}")
+```
+
+```typescript TypeScript
+// Deploy
+await fetch(`${BASE_URL}/api/workflows/${wfId}/deploy`, { method: "POST", headers });
+
+// Arm for webhook trigger
+const armRes = await fetch(`${BASE_URL}/api/workflows/${wfId}/arm`, { method: "POST", headers });
+const webhookInfo = await armRes.json();
+console.log("Webhook ID:", webhookInfo.webhook_id);
+```
+
+```bash cURL
+# Deploy
+curl -X POST '{BASE_URL}/api/workflows/{wf_id}/deploy' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}"
+
+# Arm
+curl -X POST '{BASE_URL}/api/workflows/{wf_id}/arm' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Trigger externally">
+
+Call the webhook endpoint from any external system. No API key needed — uses the secret from the arm step.
+
+**Endpoint:** `POST /api/webhooks/{webhook_id}`
+
+<Note>
+Webhooks are unauthenticated but validated by secret. After one trigger, you must re-arm the workflow for the next execution.
+</Note>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/webhooks/{webhook_id}",
+    json={
+        "secret": webhook_secret,
+        "input": {"text": "Document to summarize..."},
+    },
+)
+print(response.json())
+```
+
+```typescript TypeScript
+const response = await fetch(`${BASE_URL}/api/webhooks/${webhookId}`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    secret: webhookSecret,
+    input: { text: "Document to summarize..." },
+  }),
+});
+console.log(await response.json());
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/webhooks/{webhook_id}' \
+  -H "Content-Type: application/json" \
+  -d '{"secret": "{webhook_secret}", "input": {"text": "Document to summarize..."}}'
+```
+
+</CodeGroup>
+
+</Step>
+
+</Steps>
+
+## What's Next
+
+<CardGroup cols={2}>
+
+<Card title="Workflows (Copilot)" href="/guides/workflows-copilot">
+Build workflows with natural language.
+</Card>
+
+<Card title="Workflows" href="/concepts/workflows-concept">
+Understand block types and graph execution.
+</Card>
+
+<Card title="Workflows API Reference" href="/api-reference/workflows">
+Full endpoint documentation.
+</Card>
+
+</CardGroup>

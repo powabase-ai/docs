@@ -1,0 +1,224 @@
+---
+title: "Copilot"
+description: "AI-powered workflow builder. Describe what you want in natural language and the copilot generates the workflow graph."
+---
+
+The Copilot API provides an AI-assisted workflow builder. Create a copilot session linked to a workflow, describe what you want in natural language, and the copilot generates the workflow graph. You can iterate through multiple chat turns to refine the workflow, then save a snapshot to apply the generated graph.
+
+## Common Patterns
+
+Create a copilot session with a workflow_id, send messages via the chat endpoint (streaming SSE), and save good suggestions with the snapshot endpoint. Each chat message can produce a new version of the workflow graph. The copilot maintains conversation context within a session.
+
+### POST /api/copilot/sessions
+
+Create a copilot session for a workflow.
+
+<RequestExample>
+
+```json Request
+{ "workflow_id": "wf-uuid" }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/copilot/sessions", headers=headers, json={"workflow_id": wf_id})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/copilot/sessions`, { method: "POST", headers, body: JSON.stringify({ workflow_id: wfId }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/copilot/sessions' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"workflow_id": "uuid"}'
+```
+
+</CodeGroup>
+
+### GET /api/copilot/sessions
+
+Get session by workflow_id.
+
+<ParamField query="workflow_id" type="string" required>
+Workflow ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/copilot/sessions?workflow_id={wf_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/copilot/sessions?workflow_id=${wfId}`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/copilot/sessions?workflow_id={wf_id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### DELETE /api/copilot/sessions/{id}
+
+Delete a copilot session.
+
+<ParamField path="id" type="string" required>
+Session ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.delete(f"{BASE_URL}/api/copilot/sessions/{session_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/copilot/sessions/${sessionId}`, { method: "DELETE", headers });
+```
+
+```bash cURL
+curl -X DELETE '{BASE_URL}/api/copilot/sessions/{id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### GET /api/copilot/sessions/{id}/messages
+
+Get copilot conversation history.
+
+<ParamField path="id" type="string" required>
+Session ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/copilot/sessions/{session_id}/messages", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/copilot/sessions/${sessionId}/messages`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/copilot/sessions/{id}/messages' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/copilot/sessions/{id}/messages/{mid}/snapshot
+
+Save the copilot's workflow suggestion as a snapshot.
+
+<ParamField path="id" type="string" required>
+Session ID
+</ParamField>
+
+<ParamField path="mid" type="string" required>
+Message ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/copilot/sessions/{session_id}/messages/{message_id}/snapshot", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/copilot/sessions/${sessionId}/messages/${messageId}/snapshot`, { method: "POST", headers });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/copilot/sessions/{id}/messages/{mid}/snapshot' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/copilot/sessions/{id}/chat
+
+Send a message and stream the copilot response (SSE).
+
+<ParamField path="id" type="string" required>
+Session ID
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{ "message": "Build a workflow that..." }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/copilot/sessions/{session_id}/chat", headers=headers, json={"message": "Build a workflow that..."}, stream=True)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/copilot/sessions/${sessionId}/chat`, { method: "POST", headers, body: JSON.stringify({ message: "Build a workflow that..." }) });
+```
+
+```bash cURL
+curl -N -X POST '{BASE_URL}/api/copilot/sessions/{id}/chat' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"message": "Build a workflow that..."}'
+```
+
+</CodeGroup>
+
+### GET /api/copilot/settings/model
+
+Get copilot model configuration.
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/copilot/settings/model", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/copilot/settings/model`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/copilot/settings/model' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### PUT /api/copilot/settings/model
+
+Set copilot model.
+
+<RequestExample>
+
+```json Request
+{ "model": "gpt-4o" }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.put(f"{BASE_URL}/api/copilot/settings/model", headers=headers, json={"model": "gpt-4o"})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/copilot/settings/model`, { method: "PUT", headers, body: JSON.stringify({ model: "gpt-4o" }) });
+```
+
+```bash cURL
+curl -X PUT '{BASE_URL}/api/copilot/settings/model' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"model": "gpt-4o"}'
+```
+
+</CodeGroup>
+
+## Error Responses
+
+| Status | Code | Description |
+| --- | --- | --- |
+| 404 | `session_not_found` | No copilot session exists with the given ID |

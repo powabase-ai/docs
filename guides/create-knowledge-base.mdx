@@ -1,0 +1,215 @@
+---
+title: "Create a Knowledge Base"
+description: "Index your documents for semantic search and retrieval-augmented generation. Knowledge bases chunk, embed, and store your content for fast vector similarity search."
+icon: "book-open"
+---
+
+Knowledge bases give your AI agents the ability to search and retrieve relevant information from your documents. This guide walks through creating a KB, adding a source, waiting for indexing, and testing semantic search.
+
+<Note>
+**Prerequisites:**
+
+- A completed source (see Upload a Document guide)
+</Note>
+
+<Steps>
+
+<Step title="Create the knowledge base">
+
+Choose a name and indexing strategy. The default strategy works well for most documents.
+
+**Endpoint:** `POST /api/knowledge-bases`
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/knowledge-bases",
+    headers=headers,
+    json={
+        "name": "Product Docs",
+        "description": "Product documentation and guides",
+    },
+)
+kb = response.json()
+kb_id = kb["id"]
+print(f"KB created: {kb_id}")
+```
+
+```typescript TypeScript
+const response = await fetch(`${BASE_URL}/api/knowledge-bases`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    name: "Product Docs",
+    description: "Product documentation and guides",
+  }),
+});
+const kb = await response.json();
+console.log("KB created:", kb.id);
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/knowledge-bases' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Product Docs", "description": "Product documentation and guides"}'
+```
+
+</CodeGroup>
+
+**Response:**
+
+```json
+{
+  "id": "kb-uuid",
+  "name": "Product Docs",
+  "description": "Product documentation and guides",
+  "created_at": "2026-01-01T00:00:00Z"
+}
+```
+
+</Step>
+
+<Step title="Add a source to the knowledge base">
+
+Link an uploaded source (from the previous guide) to trigger indexing. The source's extracted content is chunked, embedded, and stored.
+
+**Endpoint:** `POST /api/knowledge-bases/{id}/sources`
+
+<Note>
+Indexing runs asynchronously. For large documents this can take 30 seconds or more.
+</Note>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/knowledge-bases/{kb_id}/sources",
+    headers=headers,
+    json={"source_id": source_id},
+)
+print(response.json())
+```
+
+```typescript TypeScript
+const response = await fetch(
+  `${BASE_URL}/api/knowledge-bases/${kbId}/sources`,
+  {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ source_id: sourceId }),
+  },
+);
+console.log(await response.json());
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/knowledge-bases/{kb_id}/sources' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"source_id": "{source_id}"}'
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Check indexing status">
+
+Fetch the knowledge base to see the status of each indexed source. Wait until all sources show 'indexed'.
+
+**Endpoint:** `GET /api/knowledge-bases/{id}`
+
+<CodeGroup>
+
+```python Python
+response = requests.get(
+    f"{BASE_URL}/api/knowledge-bases/{kb_id}",
+    headers=headers,
+)
+kb = response.json()
+for src in kb.get("indexed_sources", []):
+    print(f"Source {src['source_id']}: {src['index_status']}")
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}`, { headers });
+const kb = await res.json();
+kb.indexed_sources?.forEach((s: any) =>
+  console.log(`Source ${s.source_id}: ${s.index_status}`)
+);
+```
+
+```bash cURL
+curl '{BASE_URL}/api/knowledge-bases/{kb_id}' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Test search">
+
+Run a semantic search query against the knowledge base to verify indexing worked.
+
+**Endpoint:** `POST /api/knowledge-bases/{id}/search`
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/knowledge-bases/{kb_id}/search",
+    headers=headers,
+    json={"query": "How do I get started?", "top_k": 5},
+)
+results = response.json()
+for r in results.get("results", []):
+    print(f"Score: {r['score']:.3f} — {r['text'][:80]}...")
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/search`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ query: "How do I get started?", top_k: 5 }),
+});
+const { results } = await res.json();
+results.forEach((r: any) => console.log(`Score: ${r.score} — ${r.text.slice(0, 80)}...`));
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/knowledge-bases/{kb_id}/search' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "How do I get started?", "top_k": 5}'
+```
+
+</CodeGroup>
+
+</Step>
+
+</Steps>
+
+## What's Next
+
+<CardGroup cols={2}>
+
+<Card title="Build an Agent" href="/guides/build-agent">
+Create an agent that uses your knowledge base.
+</Card>
+
+<Card title="Knowledge Bases & Indexing" href="/concepts/knowledge-bases-indexing">
+Deep dive into chunking and embeddings.
+</Card>
+
+<Card title="Knowledge Bases API Reference" href="/api-reference/knowledge-bases">
+Full endpoint documentation.
+</Card>
+
+</CardGroup>

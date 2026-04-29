@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+      id="platform-pipeline"
+      viewBox="0 0 800 200"
+      width="800"
+      height="200"
+      xmlns="http://www.w3.org/2000/svg"
+      
+    >
+      <defs>
+        <marker
+          id="arrowPP"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="8"
+          markerHeight="8"
+          orient="auto-start-auto"
+        >
+          <path
+            d="M 0 0 L 10 5 L 0 10 Z"
+            fill="#27272A"
+          />
+        </marker>
+      </defs>
+
+      
+      <rect
+        x="20"
+        y="40"
+        width="120"
+        height="80"
+        rx="12"
+        ry="12"
+        fill="#0E0E10"
+        stroke="#27272A"
+        strokeWidth="1.5"
+      />
+      <text
+        x="80"
+        y="72"
+        textAnchor="middle"
+        fill="#A855F7"
+        fontSize="22"
+      >
+        &#128196;
+      </text>
+      <text
+        x="80"
+        y="100"
+        textAnchor="middle"
+        fill="#FAFAFA"
+        fontSize="13"
+        fontWeight="600"
+      >
+        Document
+      </text>
+
+      
+      <line
+        x1="140"
+        y1="80"
+        x2="170"
+        y2="80"
+        stroke="#27272A"
+        strokeWidth="1.5"
+        markerEnd="url(#arrowPP)"
+      />
+
+      
+      <rect
+        x="180"
+        y="40"
+        width="120"
+        height="80"
+        rx="12"
+        ry="12"
+        fill="#0E0E10"
+        stroke="#27272A"
+        strokeWidth="1.5"
+      />
+      <text
+        x="240"
+        y="72"
+        textAnchor="middle"
+        fill="#A855F7"
+        fontSize="22"
+      >
+        &#128451;
+      </text>
+      <text
+        x="240"
+        y="100"
+        textAnchor="middle"
+        fill="#FAFAFA"
+        fontSize="13"
+        fontWeight="600"
+      >
+        Source
+      </text>
+
+      
+      <line
+        x1="300"
+        y1="80"
+        x2="330"
+        y2="80"
+        stroke="#27272A"
+        strokeWidth="1.5"
+        markerEnd="url(#arrowPP)"
+      />
+
+      
+      <rect
+        x="340"
+        y="40"
+        width="120"
+        height="80"
+        rx="12"
+        ry="12"
+        fill="#0E0E10"
+        stroke="#27272A"
+        strokeWidth="1.5"
+      />
+      <text
+        x="400"
+        y="72"
+        textAnchor="middle"
+        fill="#A855F7"
+        fontSize="22"
+      >
+        &#128218;
+      </text>
+      <text
+        x="400"
+        y="100"
+        textAnchor="middle"
+        fill="#FAFAFA"
+        fontSize="13"
+        fontWeight="600"
+      >
+        Knowledge Base
+      </text>
+
+      
+      <line
+        x1="460"
+        y1="80"
+        x2="490"
+        y2="80"
+        stroke="#27272A"
+        strokeWidth="1.5"
+        markerEnd="url(#arrowPP)"
+      />
+
+      
+      <rect
+        x="500"
+        y="40"
+        width="120"
+        height="80"
+        rx="12"
+        ry="12"
+        fill="#0E0E10"
+        stroke="#27272A"
+        strokeWidth="1.5"
+      />
+      <text
+        x="560"
+        y="72"
+        textAnchor="middle"
+        fill="#A855F7"
+        fontSize="22"
+      >
+        &#129302;
+      </text>
+      <text
+        x="560"
+        y="100"
+        textAnchor="middle"
+        fill="#FAFAFA"
+        fontSize="13"
+        fontWeight="600"
+      >
+        Agent
+      </text>
+
+      
+      <line
+        x1="620"
+        y1="80"
+        x2="650"
+        y2="80"
+        stroke="#27272A"
+        strokeWidth="1.5"
+        markerEnd="url(#arrowPP)"
+      />
+
+      
+      <rect
+        x="660"
+        y="40"
+        width="120"
+        height="80"
+        rx="12"
+        ry="12"
+        fill="#0E0E10"
+        stroke="#27272A"
+        strokeWidth="1.5"
+      />
+      <text
+        x="720"
+        y="72"
+        textAnchor="middle"
+        fill="#A855F7"
+        fontSize="22"
+      >
+        &#128100;
+      </text>
+      <text
+        x="720"
+        y="100"
+        textAnchor="middle"
+        fill="#FAFAFA"
+        fontSize="13"
+        fontWeight="600"
+      >
+        User
+      </text>
+
+      
+      <text
+        x="400"
+        y="160"
+        textAnchor="middle"
+        fill="#A1A1AA"
+        fontSize="12"
+      >
+        End-to-end platform pipeline: ingest, index, retrieve, respond
+      </text>
+
+    </svg>

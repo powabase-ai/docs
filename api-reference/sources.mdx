@@ -1,0 +1,406 @@
+---
+title: "Sources"
+description: "Upload, manage, and extract content from documents and files."
+---
+
+Sources represent uploaded documents in the platform. Each source goes through an asynchronous extraction pipeline that converts files into structured derivatives (page texts, markdown, per-page images). Sources are the raw material for knowledge bases — once extracted, their content can be chunked and indexed for semantic search.
+
+## Common Patterns
+
+The typical flow is: upload a file (POST /api/sources/upload), poll for completion (GET /api/sources/\{id\} until extraction_status is 'extracted' or 'attention_required'), then retrieve extracted text (GET /api/sources/\{id\}/page-texts). For files already in project storage, use import-from-storage. For web pages, use import-url. To swap extraction backends after the fact, POST /api/sources/\{id\}/reextract with a new extraction_model.
+
+### GET /api/sources
+
+List all sources with optional status filter.
+
+<ParamField query="status" type="string">
+Filter by extraction_status. One of: pending, extracting, extracted, attention_required, failed, cancelled.
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.get(f"{BASE_URL}/api/sources", headers=headers)
+print(response.json())
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/sources`, { headers });
+const sources = await res.json();
+```
+
+```bash cURL
+curl '{BASE_URL}/api/sources' \
+  -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/sources/upload
+
+Upload a file for extraction. Accepts PDF, DOCX, PPTX, XLSX, images (PNG/JPG/WebP/GIF/TIFF), and plain text. Uses multipart/form-data. Optional fields: name (display name), metadata (JSON string, preserved through indexing), extraction_model (PDF only — one of auto, mistral, paddleocr, lighton, opendataloader, fitz, pdfplumber).
+
+<CodeGroup>
+
+```python Python
+with open("file.pdf", "rb") as f:
+    response = requests.post(
+        f"{BASE_URL}/api/sources/upload",
+        headers={"apikey": API_KEY, "Authorization": f"Bearer {API_KEY}"},
+        files={"file": ("file.pdf", f, "application/pdf")},
+        data={"extraction_model": "mistral"},
+    )
+```
+
+```typescript TypeScript
+const form = new FormData();
+form.append("file", blob, "file.pdf");
+form.append("extraction_model", "mistral");
+const res = await fetch(`${BASE_URL}/api/sources/upload`, {
+  method: "POST",
+  headers: { apikey: API_KEY, Authorization: `Bearer ${API_KEY}` },
+  body: form,
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/sources/upload' \
+  -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" \
+  -F "file=@file.pdf" \
+  -F "extraction_model=mistral"
+```
+
+</CodeGroup>
+
+### POST /api/sources/import-from-storage
+
+Import a file already in project storage as a source.
+
+<RequestExample>
+
+```json Request
+{
+  "bucket": "documents",
+  "path": "reports/q4.pdf",
+  "name": "Q4 Report"
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/sources/import-from-storage",
+    headers=headers,
+    json={"bucket": "documents", "path": "reports/q4.pdf"},
+)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/sources/import-from-storage`, {
+  method: "POST", headers,
+  body: JSON.stringify({ bucket: "documents", path: "reports/q4.pdf" }),
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/sources/import-from-storage' \
+  -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"bucket": "documents", "path": "reports/q4.pdf"}'
+```
+
+</CodeGroup>
+
+### POST /api/sources/import-url
+
+Import content from web URLs. mode='urls' imports a fixed list, mode='crawl' spiders from a seed URL, mode='sitemap' parses a sitemap XML. Requires Firecrawl API key to be configured in project settings.
+
+<RequestExample>
+
+```json Request
+{
+  "mode": "urls",
+  "urls": ["https://example.com/page1", "https://example.com/page2"],
+  "max_pages": 50
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/sources/import-url",
+    headers=headers,
+    json={"mode": "urls", "urls": ["https://example.com/page1"]},
+)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/sources/import-url`, {
+  method: "POST", headers,
+  body: JSON.stringify({ mode: "urls", urls: ["https://example.com/page1"] }),
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/sources/import-url' \
+  -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"mode": "urls", "urls": ["https://example.com/page1"]}'
+```
+
+</CodeGroup>
+
+### GET /api/sources/{id}
+
+Get source details including extraction status.
+
+<ParamField path="id" type="string" required>
+Source ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.get(f"{BASE_URL}/api/sources/{source_id}", headers=headers)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/sources/${sourceId}`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/sources/{id}' \
+  -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### GET /api/sources/{id}/page-texts
+
+Get extracted text content organized by page.
+
+<ParamField path="id" type="string" required>
+Source ID
+</ParamField>
+
+<ParamField query="page" type="integer">
+Specific page number
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.get(f"{BASE_URL}/api/sources/{source_id}/page-texts", headers=headers)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/sources/${sourceId}/page-texts`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/sources/{id}/page-texts' \
+  -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### PATCH /api/sources/{id}
+
+Update a source's display name or metadata.
+
+<ParamField path="id" type="string" required>
+Source ID
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{
+  "name": "New Display Name",
+  "metadata": { "author": "alice" }
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+response = requests.patch(f"{BASE_URL}/api/sources/{source_id}", headers=headers, json={"name": "New Display Name"})
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/sources/${sourceId}`, { method: "PATCH", headers, body: JSON.stringify({ name: "New Display Name" }) });
+```
+
+```bash cURL
+curl -X PATCH '{BASE_URL}/api/sources/{id}' \
+  -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "New Display Name"}'
+```
+
+</CodeGroup>
+
+### POST /api/sources/{id}/reextract
+
+Re-run extraction on an existing source, optionally with a different extraction_model.
+
+<ParamField path="id" type="string" required>
+Source ID
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{
+  "extraction_model": "paddleocr"
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(f"{BASE_URL}/api/sources/{source_id}/reextract", headers=headers, json={"extraction_model": "paddleocr"})
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/sources/${sourceId}/reextract`, { method: "POST", headers, body: JSON.stringify({ extraction_model: "paddleocr" }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/sources/{id}/reextract' \
+  -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"extraction_model": "paddleocr"}'
+```
+
+</CodeGroup>
+
+### POST /api/sources/{id}/cancel
+
+Cancel an in-progress extraction. Sets extraction_status to 'cancelled'.
+
+<ParamField path="id" type="string" required>
+Source ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(f"{BASE_URL}/api/sources/{source_id}/cancel", headers=headers)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/sources/${sourceId}/cancel`, { method: "POST", headers });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/sources/{id}/cancel' \
+  -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### GET /api/sources/{id}/download
+
+Download the original uploaded file (as stored in project storage).
+
+<ParamField path="id" type="string" required>
+Source ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.get(f"{BASE_URL}/api/sources/{source_id}/download", headers=headers)
+open("source.pdf", "wb").write(response.content)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/sources/${sourceId}/download`, { headers });
+const blob = await res.blob();
+```
+
+```bash cURL
+curl '{BASE_URL}/api/sources/{id}/download' -o source.pdf \
+  -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### GET /api/sources/{id}/derivatives/{type}/download
+
+Download a derivative artifact. type is one of: markdown, text, page_text, image. For per-page types (page_text, image) pass index=N (0-based) in the query string.
+
+<ParamField path="id" type="string" required>
+Source ID
+</ParamField>
+
+<ParamField path="type" type="string" required>
+Derivative type: markdown, text, page_text, or image
+</ParamField>
+
+<ParamField query="index" type="integer">
+0-based index for per-page derivatives (page_text, image)
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.get(f"{BASE_URL}/api/sources/{source_id}/derivatives/markdown/download", headers=headers)
+print(response.text)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/sources/${sourceId}/derivatives/markdown/download`, { headers });
+const text = await res.text();
+```
+
+```bash cURL
+curl '{BASE_URL}/api/sources/{id}/derivatives/markdown/download' \
+  -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### DELETE /api/sources/{id}
+
+Delete a source and its associated storage files (original + derivatives).
+
+<ParamField path="id" type="string" required>
+Source ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.delete(f"{BASE_URL}/api/sources/{source_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/sources/${sourceId}`, { method: "DELETE", headers });
+```
+
+```bash cURL
+curl -X DELETE '{BASE_URL}/api/sources/{id}' \
+  -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+## Error Responses
+
+| Status | Code | Description |
+| --- | --- | --- |
+| 400 | `invalid_file` | The uploaded file type is not supported or the file is corrupted |
+| 404 | `source_not_found` | No source exists with the given ID |
+| 413 | `file_too_large` | The uploaded file exceeds the maximum allowed size |

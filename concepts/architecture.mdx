@@ -1,0 +1,59 @@
+---
+title: "Architecture"
+description: "Understand the control plane / data plane split, per-project isolation, authentication model, and database schemas."
+---
+
+## Control Plane vs Data Plane
+
+The platform uses a two-tier architecture. A single shared Control Plane manages organizations, projects, users, and authentication. It provisions a fully isolated Data Plane for each project — including its own Postgres database, API gateway, auth service, storage, and AI service.
+
+<Frame caption="Request flow from browser through control plane to per-project stack">
+  <img src="/diagrams/architecture-overview.svg" alt="Architecture diagram: Browser → Next.js Frontend → Control Plane API → Per-Project Stack (Kong API Gateway, GoTrue Auth, PostgREST, Project Service, Postgres with pgvector). The control plane manages routing and authentication while each project gets a fully isolated stack." />
+</Frame>
+
+## Per-Project Isolation
+
+Each project gets its own complete infrastructure stack. This means one project's data, users, and configuration are completely separate from another's. Projects can't see each other's databases, storage buckets, or API keys. This isolation is enforced at the infrastructure level — each project runs its own Postgres instance, its own auth service, and its own AI service worker.
+
+## API Authentication
+
+Every API request requires two headers: an apikey header and a Bearer token in the Authorization header. The service_role key gives full access and bypasses Row Level Security — use it for server-side calls only. The anon key respects RLS policies and is safe for client-side use.
+
+<Warning>
+**Never expose the service_role key**
+
+The service_role key bypasses all Row Level Security policies. Only use it in server-side code. For client-side applications, use the anon key with appropriate RLS policies.
+</Warning>
+
+## Request Routing
+
+When you make an API call, the request first hits the project's Kong API gateway. Kong routes /api/* paths to the Project Service (AI features), /auth/* to GoTrue (authentication), /rest/* to PostgREST (direct database access), and /storage/* to the Storage API. The control plane acts as a reverse proxy, routing requests to the correct project's infrastructure based on the project URL.
+
+## Database Schemas
+
+Each project database has four schemas. The ai schema is managed by the platform and stores all AI-related data. The public schema is yours to use for application data. The auth and storage schemas are managed by GoTrue and the Storage API respectively.
+
+| Schema | Owner | Purpose |
+| --- | --- | --- |
+| ai | Platform | Sources, knowledge bases, chunks, embeddings, agents, sessions, runs, workflows |
+| public | You | Your application tables, accessible via PostgREST |
+| auth | GoTrue | User accounts, sessions, tokens |
+| storage | Storage API | File metadata, bucket configuration |
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Authentication Guide" href="/guides/introduction">
+Set up API keys and make your first request.
+</Card>
+
+<Card title="Sources & Extraction" href="/concepts/sources-extraction">
+Learn how document ingestion works.
+</Card>
+
+<Card title="Database Access" href="/concepts/database-access">
+Query your project database via PostgREST.
+</Card>
+
+</CardGroup>

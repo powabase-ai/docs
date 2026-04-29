@@ -1,0 +1,59 @@
+---
+title: "Workflows"
+description: "Workflows are DAG-based automation pipelines that chain together LLM calls, code execution, conditions, and agent runs into deterministic, repeatable processes."
+---
+
+## What is a Workflow?
+
+A Workflow is a directed acyclic graph (DAG) of blocks connected by edges. Each block performs a specific action — calling an LLM, running code, evaluating a condition, or executing an agent. Data flows from block to block through the edges. Unlike orchestrations (where the coordinator decides what happens), workflows follow a fixed, predetermined path every time.
+
+## Block Types
+
+| Block | Description | Key Config |
+| --- | --- | --- |
+| input | Entry point — accepts user input or webhook payload | Variable name for downstream blocks |
+| output | Exit point — returns the workflow result | Result template with block references |
+| llm | Calls a language model with a prompt template | Model, temperature, system prompt, input references |
+| agent | Runs an existing agent with a message | Agent ID, message template |
+| condition | Branches the flow based on a boolean expression | JavaScript expression evaluated against block outputs |
+| code | Executes custom Python or JavaScript code | Language, source code, input variable mappings |
+
+## Graph Execution
+
+When you execute a workflow, the engine evaluates blocks in topological order. Each block receives the outputs of its upstream blocks as input. Condition blocks create branches — only the matching branch continues execution. The workflow finishes when all output blocks have been reached.
+
+<Frame caption="Workflow DAG with branching logic">
+  <img src="/diagrams/workflow-execution.svg" alt="Workflow execution DAG: Input block → LLM block (processes input) → Condition block (branches based on result) → Branch A: Output A / Branch B: Output B. Blocks are connected by directional edges showing data flow." />
+</Frame>
+
+## Programmatic vs Copilot
+
+You can build workflows two ways. The programmatic approach uses the PUT /api/workflows/\{id\}/graph endpoint to define blocks and edges as JSON. The Copilot approach uses natural language — describe what you want, and the AI copilot generates the workflow graph for you. Both produce the same underlying graph structure.
+
+## Deployment & Webhooks
+
+Workflows can be deployed and armed for webhook execution. Once armed, you get a webhook URL and secret. External systems can trigger the workflow by POSTing to the webhook URL. Each arm produces a single-use webhook — after it fires, you need to re-arm for the next execution.
+
+<Tip>
+**Webhook security**
+
+The webhook secret is returned when you arm the workflow. Include it in your webhook payload to verify that the request is legitimate. Each arm generates a new secret.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Workflows (Programmatic)" href="/guides/workflows-programmatic">
+Build a workflow step by step using the API.
+</Card>
+
+<Card title="Workflows (Copilot)" href="/guides/workflows-copilot">
+Build a workflow using natural language.
+</Card>
+
+<Card title="Workflows API Reference" href="/api-reference/workflows">
+Full endpoint documentation.
+</Card>
+
+</CardGroup>

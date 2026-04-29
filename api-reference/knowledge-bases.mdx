@@ -1,0 +1,229 @@
+---
+title: "Knowledge Bases"
+description: "Create and manage knowledge bases for semantic search and RAG."
+---
+
+Knowledge bases provide semantic search over your document content. They store chunked and embedded text from one or more sources, enabling retrieval-augmented generation (RAG). When you add a source to a knowledge base, the platform automatically chunks the source's page texts, generates vector embeddings, and stores them for similarity search.
+
+## Common Patterns
+
+Create a knowledge base, add one or more sources to trigger indexing, then use the search endpoint to query. Check indexing status by fetching the knowledge base details. Reindex when you change chunking parameters or want to re-process sources.
+
+### GET /api/knowledge-bases
+
+List all knowledge bases.
+
+<CodeGroup>
+
+```python Python
+response = requests.get(f"{BASE_URL}/api/knowledge-bases", headers=headers)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/knowledge-bases`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/knowledge-bases' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/knowledge-bases
+
+Create a new knowledge base.
+
+<RequestExample>
+
+```json Request
+{
+  "name": "Product Docs",
+  "description": "Product documentation"
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(f"{BASE_URL}/api/knowledge-bases", headers=headers, json={"name": "Product Docs"})
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/knowledge-bases`, { method: "POST", headers, body: JSON.stringify({ name: "Product Docs" }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/knowledge-bases' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"name": "Product Docs"}'
+```
+
+</CodeGroup>
+
+### GET /api/knowledge-bases/{id}
+
+Get a knowledge base with its indexed sources and status.
+
+<ParamField path="id" type="string" required>
+KB ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.get(f"{BASE_URL}/api/knowledge-bases/{kb_id}", headers=headers)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/knowledge-bases/{id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### PATCH /api/knowledge-bases/{id}
+
+Update knowledge base configuration or strategy.
+
+<ParamField path="id" type="string" required>
+KB ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.patch(f"{BASE_URL}/api/knowledge-bases/{kb_id}", headers=headers, json={"description": "Updated"})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}`, { method: "PATCH", headers, body: JSON.stringify({ description: "Updated" }) });
+```
+
+```bash cURL
+curl -X PATCH '{BASE_URL}/api/knowledge-bases/{id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"description": "Updated"}'
+```
+
+</CodeGroup>
+
+### DELETE /api/knowledge-bases/{id}
+
+Delete a knowledge base and all its indexed data.
+
+<ParamField path="id" type="string" required>
+KB ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.delete(f"{BASE_URL}/api/knowledge-bases/{kb_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}`, { method: "DELETE", headers });
+```
+
+```bash cURL
+curl -X DELETE '{BASE_URL}/api/knowledge-bases/{id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/knowledge-bases/{id}/sources
+
+Add a source to the knowledge base. Triggers asynchronous indexing.
+
+<ParamField path="id" type="string" required>
+KB ID
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{ "source_id": "source-uuid" }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(f"{BASE_URL}/api/knowledge-bases/{kb_id}/sources", headers=headers, json={"source_id": source_id})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/sources`, { method: "POST", headers, body: JSON.stringify({ source_id: sourceId }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/sources' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"source_id": "uuid"}'
+```
+
+</CodeGroup>
+
+### POST /api/knowledge-bases/{id}/reindex
+
+Reindex all sources in the knowledge base.
+
+<ParamField path="id" type="string" required>
+KB ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(f"{BASE_URL}/api/knowledge-bases/{kb_id}/reindex", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/reindex`, { method: "POST", headers });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/reindex' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/knowledge-bases/{id}/search
+
+Run a semantic vector search against the knowledge base.
+
+<ParamField path="id" type="string" required>
+KB ID
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{ "query": "search text", "top_k": 5 }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(f"{BASE_URL}/api/knowledge-bases/{kb_id}/search", headers=headers, json={"query": "search text", "top_k": 5})
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/search`, { method: "POST", headers, body: JSON.stringify({ query: "search text", top_k: 5 }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/search' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"query": "search text", "top_k": 5}'
+```
+
+</CodeGroup>
+
+## Error Responses
+
+| Status | Code | Description |
+| --- | --- | --- |
+| 400 | `invalid_config` | Invalid chunking or embedding configuration |
+| 404 | `kb_not_found` | No knowledge base exists with the given ID |
+| 409 | `already_indexing` | The knowledge base is already being indexed — wait for completion before reindexing |

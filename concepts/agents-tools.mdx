@@ -1,0 +1,127 @@
+---
+title: "Agents & Tools"
+description: "Agents are LLM-powered conversational entities that use a ReAct loop to reason, call tools, and respond. They support nine builtin tools, custom HTTP tools, MCP server integration, session-based memory, hook-based middleware, and a human-in-the-loop approval flow."
+---
+
+## What is an Agent?
+
+An Agent wraps an LLM with a system prompt, temperature, a set of tools, and optional knowledge bases. When you send a message, the agent enters a ReAct (Reason + Act) loop: the LLM decides whether it needs to call a tool, executes the tool if needed, observes the result, and either calls another tool or generates a final response. This loop continues for up to 25 steps (configurable per run). On the final step, tools are withheld so the LLM is forced to produce a text response.
+
+## The ReAct Loop
+
+<Frame caption="Agent ReAct loop: reason, act, observe, respond">
+  <img src="/diagrams/agent-react-loop.svg" alt="ReAct loop diagram: User Message → LLM (Reason) → Tool Call? If yes → Execute Tool → Tool Result → back to LLM. If no → Generate Response → Stream to User." />
+</Frame>
+
+Each iteration of the loop is a step. Within a step, the agent can call multiple tools — concurrency-safe tools (like knowledge base search) run in parallel via a thread pool, while other tools execute sequentially. If the agent makes the same tool call with identical arguments three times in a row, the platform detects a doom loop and terminates the run. During streaming, each step is visible as SSE events: step_started, tool_call, tool_result, step_completed, and chunk events for the final response.
+
+### Context Management
+
+The agent automatically manages its context window. Before each LLM call, it estimates the token count and, if nearing the model's context limit, triggers proactive compaction: first pruning old tool results (replacing them with placeholders while keeping the last 3 user turns), then if still over the limit, summarizing the older conversation using a lightweight LLM (gpt-4.1-nano). If the LLM returns a prompt_too_long error, the agent retries with compaction. If the LLM output is truncated, the agent injects a "continue where you left off" message and retries up to 3 times.
+
+## Tool Types
+
+Agents can use three categories of tools: builtin tools provided by the platform, custom tools that call your HTTP endpoints, and MCP server tools discovered at runtime.
+
+### Builtin Tools
+
+The platform provides eight builtin tools. Assign them to an agent by name via POST /api/agents/\{id\}/tools. The database tools include schema-level access control — when assigning them, you configure which schemas and tables the agent can access.
+
+| Tool | Description | Constraints |
+| --- | --- | --- |
+| database_query | Execute read-only SQL SELECT queries against the project database | Must start with SELECT. Multi-statement blocked (no semicolons). Results capped at 50,000 chars. Rollback after read. |
+| database_write | Execute INSERT, UPDATE, and DELETE operations | UPDATE requires a WHERE clause (no mass updates). DELETE requires a WHERE clause (no mass deletes). All identifiers validated against injection. |
+| http_request | Make HTTP requests to external APIs | Response capped at 10,000 chars. 30-second timeout. SSRF validation on URLs. |
+| code_execute | Run Python or JavaScript in a sandboxed environment | Delegated to external sandbox service. Default 30-second timeout, configurable per call. |
+| storage_read | List and download files from project storage buckets | Binary files return a signed URL instead of content. Supports list (with prefix/limit/offset) and download operations. |
+| storage_write | Upload text content to project storage buckets | UTF-8 text content only. Returns path and file size. |
+| web_search | Search the web using Exa.ai with neural/keyword modes, domain filters, date ranges, and content depth control | Results capped at 20K-50K chars by content mode. 1-10 results. Requires EXA_API_KEY. |
+| web_scrape | Extract content from web pages as clean markdown, with optional AI vision image analysis | Results capped at 200K chars. Supports markdown/HTML/links formats. include_images uses gpt-4.1-mini vision. Direct image URLs bypass Firecrawl. Requires FIRECRAWL_API_KEY. |
+
+### Custom Tools
+
+Custom tools call your own HTTP endpoints. You define the tool with a name, description, JSON Schema for inputs, an endpoint URL, HTTP method, and optional headers. When the agent decides to use the tool, the platform POSTs the tool arguments as JSON to your endpoint and returns the response to the agent. Responses are capped at 10,000 characters. Timeout is 30 seconds. SSRF validation prevents the agent from calling internal network addresses.
+
+### MCP Servers
+
+MCP (Model Context Protocol) servers let you connect agents to external tool providers. Add an MCP server URL to your agent, and at the start of each run the platform sends a tools/list JSON-RPC request to discover available tools. Discovered tools are namespaced (mcp__\{server_name\}__\{tool_name\}) and added to the agent's tool set alongside builtin and custom tools. Tool calls are executed via tools/call JSON-RPC requests. If discovery fails, the agent runs without those tools (fail-open). Timeout is 30 seconds per tool call.
+
+### Knowledge Base Search Tool
+
+When you link a knowledge base to an agent, the platform automatically creates a knowledge_search tool. The agent can call this tool with a natural language query to search the KB using whatever retrieval strategy is configured (vector, hybrid, full-text, or tree search). If multiple KBs are linked, a single knowledge_search tool is created with a knowledge_base_names filter parameter so the agent can target specific KBs. The search tool is concurrency-safe and read-only, so it runs in parallel with other safe tools.
+
+## Sessions & Memory
+
+Every agent conversation happens within a session. A session stores a sequence of runs, each containing the user input, assistant response, tool calls, tool results, and usage statistics. When you pass a session_id with a new message, the platform loads all completed runs from that session and reconstructs the full message history for the LLM. Sessions persist until explicitly deleted, enabling long-running multi-turn conversations. New sessions are created automatically if no session_id is provided — the start SSE event returns the generated session_id for future use.
+
+## Hooks & Middleware
+
+Hooks let you intercept agent execution at key points with three types of middleware: HTTP webhooks, rule-based policies, and human approval gates. Each hook is configured with an event (when it fires), a type (what it does), an optional matcher (which tool to target), and a config object.
+
+| Event | When It Fires | Can Block? | Can Modify? |
+| --- | --- | --- | --- |
+| OnRunStart | Before the agent begins processing | Yes (blocks entire run) | No |
+| PreToolUse | Before each tool execution | Yes (returns error to LLM) | Yes (can replace tool arguments) |
+| PostToolUse | After each tool execution | No | Yes (can replace tool result) |
+| PreResponse | After the ReAct loop, before returning content | Yes (replaces response with blocked message) | Yes (can modify final content) |
+| OnRunComplete | After successful completion (fire-and-forget) | No | No |
+
+| Hook Type | Behavior |
+| --- | --- |
+| http | POSTs event data to a webhook URL. Response can allow, deny, or modify. Fail-open on error (non-200 or timeout). Default 5-second timeout. |
+| rule | Evaluates conditions against tool arguments. Supports operators: CONTAINS, STARTS_WITH, MATCHES (regex), IN. First matching deny rule wins. |
+| approval | Pauses execution and emits an approval_requested SSE event. Blocks until the approve endpoint is called or 300-second timeout expires. |
+
+## Human-in-the-Loop Approval
+
+The approval flow is implemented as a PreToolUse hook of type approval. When the agent tries to call a matching tool, execution pauses: the SSE stream emits an approval_requested event with the tool name and arguments, then the thread blocks waiting for a decision. Your application calls POST /api/agents/runs/\{run_id\}/approve with \{approved: true\} or \{approved: false\}. On approval, the tool executes normally and the stream resumes. On rejection, the tool call is skipped and the agent receives a denial message so it can choose an alternative approach. If no decision arrives within 300 seconds (configurable), the tool call is blocked with a timeout error.
+
+<Tip>
+**Scope approval to specific tools**
+
+Set the hook's matcher field to a specific tool name (e.g., "database_write") to only require approval for that tool. Omit matcher to require approval for all tool calls.
+</Tip>
+
+## Streaming
+
+The streaming endpoint (POST /api/agents/\{id\}/run/stream) returns Server-Sent Events for the entire run lifecycle. When tools are present, the agent runs the full ReAct loop and events are emitted as they occur. When no tools are assigned, the agent streams LLM tokens directly as chunk events. If the client disconnects mid-stream, the platform detects the GeneratorExit, sets the abort signal to stop the agent, and spawns a background thread to persist the partial run.
+
+## Sync (Non-Streaming) Run
+
+The sync endpoint (POST /api/agents/\{id\}/run) runs the agent without streaming and returns the full response as JSON. In this mode, no tools are loaded and no ReAct loop runs — the agent makes a single LLM call with the conversation context. This is useful for simple question-answering where tool use isn't needed.
+
+## Limits & Safeguards
+
+| Constraint | Default | Notes |
+| --- | --- | --- |
+| Max ReAct steps | 25 | Configurable per run. On the final step, tools are withheld to force a text response. |
+| Doom loop detection | 3 identical calls | If the last 3 tool calls have the same name and arguments, the run fails. |
+| Output truncation recovery | 3 retries | If the LLM output is truncated, the agent retries with a continuation prompt. |
+| Context compaction failures | 3 attempts | After 3 failed compaction attempts, the agent stops trying to compact. |
+| LLM retries | 3 | Automatic retry on transient LLM errors. |
+| Custom/MCP tool timeout | 30 seconds | Per-tool execution timeout. |
+| Tool result truncation | 50,000 chars | Results beyond this are truncated. KB search and delegation have no limit. |
+| Approval timeout | 300 seconds | Configurable via hook config. Blocks tool execution until decision arrives. |
+| Max orchestration depth | 3 | Prevents infinite recursive delegation between agents. |
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Build an Agent" href="/guides/build-agent">
+Create an agent, assign tools, and start chatting.
+</Card>
+
+<Card title="Advanced Agent Config" href="/guides/advanced-agent-config">
+Add MCP servers, hooks, and approval flows.
+</Card>
+
+<Card title="Multi-Agent Orchestration" href="/concepts/orchestrations-concept">
+Coordinate multiple agents for complex tasks.
+</Card>
+
+<Card title="Agents API Reference" href="/api-reference/agents">
+Full endpoint documentation.
+</Card>
+
+</CardGroup>

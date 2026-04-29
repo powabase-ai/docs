@@ -1,0 +1,404 @@
+---
+title: "Quickstart"
+description: "Build an end-to-end RAG agent in 5 minutes — from document upload to a streaming conversation."
+icon: "book-open"
+---
+
+In this guide you will upload a document, create a knowledge base, index the document into it, spin up an agent backed by that knowledge base, and run a streaming conversation — all through the REST API. By the end you will have a fully functional RAG agent that can answer questions grounded in your own content.
+
+<Note>
+**Prerequisites:**
+
+- A project with API keys configured (see Authentication guide)
+</Note>
+
+<Steps>
+
+<Step title="Authenticate">
+
+Set up your base URL and authentication headers. Every request to the project API requires the service_role key.
+
+**Endpoint:** `Headers: apikey + Authorization`
+
+<CodeGroup>
+
+```python Python
+import requests
+
+BASE_URL = "{BASE_URL}"
+API_KEY = "{API_KEY}"
+
+headers = {
+    "apikey": API_KEY,
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json",
+}
+```
+
+```typescript TypeScript
+const BASE_URL = "{BASE_URL}";
+const API_KEY = "{API_KEY}";
+
+const headers = {
+  apikey: API_KEY,
+  Authorization: `Bearer ${API_KEY}`,
+  "Content-Type": "application/json",
+};
+```
+
+```bash cURL
+# Set these variables for the rest of the guide
+BASE_URL="{BASE_URL}"
+API_KEY="{API_KEY}"
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Upload a document">
+
+Upload a file to create a Source. The platform automatically extracts its text content for indexing.
+
+**Endpoint:** `POST /api/sources/upload`
+
+<CodeGroup>
+
+```python Python
+with open("product-docs.pdf", "rb") as f:
+    response = requests.post(
+        f"{BASE_URL}/api/sources/upload",
+        headers={"apikey": API_KEY, "Authorization": f"Bearer {API_KEY}"},
+        files={"file": ("product-docs.pdf", f, "application/pdf")},
+    )
+source = response.json()
+source_id = source["id"]
+print(f"Source created: {source_id}, status: {source['extraction_status']}")
+
+# Poll until extraction completes
+import time
+TERMINAL = {"extracted", "attention_required", "failed", "cancelled"}
+while True:
+    res = requests.get(f"{BASE_URL}/api/sources/{source_id}", headers=headers)
+    status = res.json()["extraction_status"]
+    if status in TERMINAL:
+        print(f"Extraction ended with status: {status}")
+        break
+    time.sleep(2)
+```
+
+```typescript TypeScript
+const formData = new FormData();
+formData.append("file", fileBlob, "product-docs.pdf");
+
+const uploadRes = await fetch(`${BASE_URL}/api/sources/upload`, {
+  method: "POST",
+  headers: { apikey: API_KEY, Authorization: `Bearer ${API_KEY}` },
+  body: formData,
+});
+const source = await uploadRes.json();
+const sourceId = source.id;
+console.log("Source created:", sourceId);
+
+// Poll until extraction reaches a terminal state
+const TERMINAL = new Set(["extracted", "attention_required", "failed", "cancelled"]);
+let status = "pending";
+while (!TERMINAL.has(status)) {
+  await new Promise((r) => setTimeout(r, 2000));
+  const res = await fetch(`${BASE_URL}/api/sources/${sourceId}`, { headers });
+  status = (await res.json()).extraction_status;
+}
+console.log("Extraction ended with status:", status);
+```
+
+```bash cURL
+# Upload the document
+curl -X POST '{BASE_URL}/api/sources/upload' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -F "file=@product-docs.pdf"
+
+# Poll extraction status (replace {source_id})
+curl '{BASE_URL}/api/sources/{source_id}' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+**Response:**
+
+```json
+{
+  "id": "source-uuid",
+  "filename": "product-docs.pdf",
+  "content_type": "application/pdf",
+  "extraction_status": "pending",
+  "created_at": "2026-01-01T00:00:00Z"
+}
+```
+
+</Step>
+
+<Step title="Create a knowledge base and index the document">
+
+Create a knowledge base, then add the source to it. Adding a source triggers chunking and vector indexing automatically.
+
+**Endpoint:** `POST /api/knowledge-bases`
+
+<CodeGroup>
+
+```python Python
+# Create the knowledge base
+response = requests.post(
+    f"{BASE_URL}/api/knowledge-bases",
+    headers=headers,
+    json={
+        "name": "Product Docs",
+        "description": "Product documentation knowledge base",
+    },
+)
+kb = response.json()
+kb_id = kb["id"]
+print(f"Knowledge base created: {kb_id}")
+
+# Add the source to trigger indexing
+response = requests.post(
+    f"{BASE_URL}/api/knowledge-bases/{kb_id}/sources",
+    headers=headers,
+    json={"source_id": source_id},
+)
+print(f"Source added, indexing started: {response.json()}")
+```
+
+```typescript TypeScript
+// Create the knowledge base
+const kbRes = await fetch(`${BASE_URL}/api/knowledge-bases`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    name: "Product Docs",
+    description: "Product documentation knowledge base",
+  }),
+});
+const kb = await kbRes.json();
+const kbId = kb.id;
+console.log("Knowledge base created:", kbId);
+
+// Add the source to trigger indexing
+await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/sources`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ source_id: sourceId }),
+});
+console.log("Source added, indexing started");
+```
+
+```bash cURL
+# Create the knowledge base
+curl -X POST '{BASE_URL}/api/knowledge-bases' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Product Docs",
+    "description": "Product documentation knowledge base"
+  }'
+
+# Add source to trigger indexing (replace {kb_id})
+curl -X POST '{BASE_URL}/api/knowledge-bases/{kb_id}/sources' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"source_id": "{source_id}"}'
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Create an agent with the knowledge base">
+
+Create an agent and link the knowledge base to it. The agent automatically gets a search tool for each linked knowledge base.
+
+**Endpoint:** `POST /api/agents`
+
+<CodeGroup>
+
+```python Python
+# Create the agent
+response = requests.post(
+    f"{BASE_URL}/api/agents",
+    headers=headers,
+    json={
+        "name": "Docs Assistant",
+        "model": "gpt-4o",
+        "system_prompt": "You are a helpful assistant. Use the knowledge base to answer questions about our product documentation.",
+        "temperature": 0.7,
+    },
+)
+agent = response.json()
+agent_id = agent["id"]
+print(f"Agent created: {agent_id}")
+
+# Link the knowledge base
+response = requests.post(
+    f"{BASE_URL}/api/agents/{agent_id}/knowledge-bases",
+    headers=headers,
+    json={"knowledge_base_id": kb_id},
+)
+print(f"Knowledge base linked: {response.json()}")
+```
+
+```typescript TypeScript
+// Create the agent
+const agentRes = await fetch(`${BASE_URL}/api/agents`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    name: "Docs Assistant",
+    model: "gpt-4o",
+    system_prompt: "You are a helpful assistant. Use the knowledge base to answer questions about our product documentation.",
+    temperature: 0.7,
+  }),
+});
+const agent = await agentRes.json();
+const agentId = agent.id;
+console.log("Agent created:", agentId);
+
+// Link the knowledge base
+await fetch(`${BASE_URL}/api/agents/${agentId}/knowledge-bases`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ knowledge_base_id: kbId }),
+});
+console.log("Knowledge base linked");
+```
+
+```bash cURL
+# Create the agent
+curl -X POST '{BASE_URL}/api/agents' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Docs Assistant",
+    "model": "gpt-4o",
+    "system_prompt": "You are a helpful assistant.",
+    "temperature": 0.7
+  }'
+
+# Link knowledge base (replace {agent_id})
+curl -X POST '{BASE_URL}/api/agents/{agent_id}/knowledge-bases' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"knowledge_base_id": "{kb_id}"}'
+```
+
+</CodeGroup>
+
+</Step>
+
+<Step title="Chat with your agent (streaming)">
+
+Send a message and consume the SSE stream. The agent will search the knowledge base, reason about the results, and stream back an answer.
+
+**Endpoint:** `POST /api/agents/{id}/run/stream`
+
+<Note>
+The agent will emit tool_call and tool_result events as it searches the knowledge base, followed by chunk events containing the streamed answer.
+</Note>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/agents/{agent_id}/run/stream",
+    headers=headers,
+    json={"message": "How do I get started with the product?"},
+    stream=True,
+)
+
+import json
+
+session_id = None
+for line in response.iter_lines():
+    if not line:
+        continue
+    text = line.decode("utf-8")
+    if text.startswith("data: "):
+        event = json.loads(text[6:])
+        if event["event"] == "start":
+            session_id = event["session_id"]
+        elif event["event"] == "chunk":
+            print(event["content"], end="")
+        elif event["event"] == "tool_call":
+            print(f"\n[Searching: {event['tool_name']}]")
+        elif event["event"] == "tool_result":
+            print(f"[Results received]")
+        elif event["event"] == "complete":
+            print(f"\n\nDone! Session: {session_id}")
+```
+
+```typescript TypeScript
+const response = await fetch(`${BASE_URL}/api/agents/${agentId}/run/stream`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    message: "How do I get started with the product?",
+  }),
+});
+
+const reader = response.body!.getReader();
+const decoder = new TextDecoder();
+let sessionId: string | null = null;
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  const text = decoder.decode(value);
+  for (const line of text.split("\n")) {
+    if (line.startsWith("data: ")) {
+      const event = JSON.parse(line.slice(6));
+      if (event.event === "start") sessionId = event.session_id;
+      if (event.event === "chunk") process.stdout.write(event.content);
+      if (event.event === "tool_call") console.log(`\n[Searching: ${event.tool_name}]`);
+      if (event.event === "tool_result") console.log("[Results received]");
+      if (event.event === "complete") console.log(`\nDone! Session: ${sessionId}`);
+    }
+  }
+}
+```
+
+```bash cURL
+curl -N -X POST '{BASE_URL}/api/agents/{agent_id}/run/stream' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "How do I get started with the product?"}'
+```
+
+</CodeGroup>
+
+</Step>
+
+</Steps>
+
+## What's Next
+
+<CardGroup cols={2}>
+
+<Card title="Agents & Tools" href="/concepts/agents-tools">
+Understand the ReAct loop, tool types, and how agents reason.
+</Card>
+
+<Card title="Streaming Responses" href="/guides/streaming-guide">
+Deep dive into SSE event handling and multi-turn sessions.
+</Card>
+
+<Card title="Agents API Reference" href="/api-reference/agents">
+Full endpoint documentation for agents.
+</Card>
+
+</CardGroup>
