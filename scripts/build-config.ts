@@ -56,8 +56,8 @@ const config = {
     ],
   },
   logo: {
-    light: "/logo/powabase-light.svg",
-    dark: "/logo/powabase-dark.svg",
+    light: "/logo/powabase-compact-colored.svg",
+    dark: "/logo/powabase-compact-white.svg",
   },
   navbar: {
     links: [],
