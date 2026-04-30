@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg
       id="indexing-pipeline"
-      viewBox="0 0 800 150"
-      width="800"
-      height="150"
+      viewBox="20 35 760 100"
+      width="760"
+      height="100"
       xmlns="http://www.w3.org/2000/svg" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
       <defs>
         <marker
@@ -29,14 +29,14 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        stroke-width="2.1"
+        stroke-width="1.78"
       />
       <text
         x="100"
         y="78"
         text-anchor="middle"
         fill="#A855F7"
-        font-size="32"
+        font-size="22.4"
       >
         &#128451;
       </text>
@@ -45,7 +45,7 @@
         y="100"
         text-anchor="middle"
         fill="#FAFAFA"
-        font-size="20.8"
+        font-size="14.56"
         font-weight="600"
       >
         Source
@@ -55,7 +55,7 @@
         y="115"
         text-anchor="middle"
         fill="#A1A1AA"
-        font-size="16"
+        font-size="11.2"
       >
         extracted text
       </text>
@@ -67,7 +67,7 @@
         x2="210"
         y2="85"
         stroke="#27272A"
-        stroke-width="2.1"
+        stroke-width="1.78"
         marker-end="url(#arrowIP)"
       />
 
@@ -81,14 +81,14 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        stroke-width="2.1"
+        stroke-width="1.78"
       />
       <text
         x="295"
         y="75"
         text-anchor="middle"
         fill="#FAFAFA"
-        font-size="20.8"
+        font-size="14.56"
         font-weight="600"
       >
         Chunker
@@ -99,14 +99,14 @@
         x2="350"
         y2="84"
         stroke="#27272A"
-        stroke-width="1.05"
+        stroke-width="0.89"
       />
       <text
         x="295"
         y="100"
         text-anchor="middle"
         fill="#A1A1AA"
-        font-size="17.6"
+        font-size="12.32"
       >
         splits text into
       </text>
@@ -115,7 +115,7 @@
         y="115"
         text-anchor="middle"
         fill="#A1A1AA"
-        font-size="17.6"
+        font-size="12.32"
       >
         overlapping chunks
       </text>
@@ -127,7 +127,7 @@
         x2="410"
         y2="85"
         stroke="#27272A"
-        stroke-width="2.1"
+        stroke-width="1.78"
         marker-end="url(#arrowIP)"
       />
 
@@ -141,14 +141,14 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        stroke-width="2.1"
+        stroke-width="1.78"
       />
       <text
         x="495"
         y="75"
         text-anchor="middle"
         fill="#FAFAFA"
-        font-size="20.8"
+        font-size="14.56"
         font-weight="600"
       >
         Embedder
@@ -159,14 +159,14 @@
         x2="550"
         y2="84"
         stroke="#27272A"
-        stroke-width="1.05"
+        stroke-width="0.89"
       />
       <text
         x="495"
         y="100"
         text-anchor="middle"
         fill="#A1A1AA"
-        font-size="17.6"
+        font-size="12.32"
       >
         generates vector
       </text>
@@ -175,7 +175,7 @@
         y="115"
         text-anchor="middle"
         fill="#A1A1AA"
-        font-size="17.6"
+        font-size="12.32"
       >
         embeddings
       </text>
@@ -187,7 +187,7 @@
         x2="610"
         y2="85"
         stroke="#27272A"
-        stroke-width="2.1"
+        stroke-width="1.78"
         marker-end="url(#arrowIP)"
       />
 
@@ -201,14 +201,14 @@
         ry="12"
         fill="#0E0E10"
         stroke="#A855F7"
-        stroke-width="2.8"
+        stroke-width="2.38"
       />
       <text
         x="695"
         y="78"
         text-anchor="middle"
         fill="#A855F7"
-        font-size="32"
+        font-size="22.4"
       >
         &#128450;
       </text>
@@ -217,7 +217,7 @@
         y="100"
         text-anchor="middle"
         fill="#FAFAFA"
-        font-size="20.8"
+        font-size="14.56"
         font-weight="600"
       >
         pgvector
@@ -227,7 +227,7 @@
         y="115"
         text-anchor="middle"
         fill="#A1A1AA"
-        font-size="16"
+        font-size="11.2"
       >
         vector similarity search
       </text>

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg
       id="platform-pipeline"
-      viewBox="0 0 800 200"
-      width="800"
-      height="200"
+      viewBox="10 30 780 145"
+      width="780"
+      height="145"
       xmlns="http://www.w3.org/2000/svg" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
       <defs>
         <marker
@@ -32,14 +32,14 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        stroke-width="2.1"
+        stroke-width="1.78"
       />
       <text
         x="80"
         y="72"
         text-anchor="middle"
         fill="#A855F7"
-        font-size="35.2"
+        font-size="24.64"
       >
         &#128196;
       </text>
@@ -48,7 +48,7 @@
         y="100"
         text-anchor="middle"
         fill="#FAFAFA"
-        font-size="20.8"
+        font-size="14.56"
         font-weight="600"
       >
         Document
@@ -61,7 +61,7 @@
         x2="170"
         y2="80"
         stroke="#27272A"
-        stroke-width="2.1"
+        stroke-width="1.78"
         marker-end="url(#arrowPP)"
       />
 
@@ -75,14 +75,14 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        stroke-width="2.1"
+        stroke-width="1.78"
       />
       <text
         x="240"
         y="72"
         text-anchor="middle"
         fill="#A855F7"
-        font-size="35.2"
+        font-size="24.64"
       >
         &#128451;
       </text>
@@ -91,7 +91,7 @@
         y="100"
         text-anchor="middle"
         fill="#FAFAFA"
-        font-size="20.8"
+        font-size="14.56"
         font-weight="600"
       >
         Source
@@ -104,7 +104,7 @@
         x2="330"
         y2="80"
         stroke="#27272A"
-        stroke-width="2.1"
+        stroke-width="1.78"
         marker-end="url(#arrowPP)"
       />
 
@@ -118,14 +118,14 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        stroke-width="2.1"
+        stroke-width="1.78"
       />
       <text
         x="400"
         y="72"
         text-anchor="middle"
         fill="#A855F7"
-        font-size="35.2"
+        font-size="24.64"
       >
         &#128218;
       </text>
@@ -134,7 +134,7 @@
         y="100"
         text-anchor="middle"
         fill="#FAFAFA"
-        font-size="20.8"
+        font-size="14.56"
         font-weight="600"
       >
         Knowledge Base
@@ -147,7 +147,7 @@
         x2="490"
         y2="80"
         stroke="#27272A"
-        stroke-width="2.1"
+        stroke-width="1.78"
         marker-end="url(#arrowPP)"
       />
 
@@ -161,14 +161,14 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        stroke-width="2.1"
+        stroke-width="1.78"
       />
       <text
         x="560"
         y="72"
         text-anchor="middle"
         fill="#A855F7"
-        font-size="35.2"
+        font-size="24.64"
       >
         &#129302;
       </text>
@@ -177,7 +177,7 @@
         y="100"
         text-anchor="middle"
         fill="#FAFAFA"
-        font-size="20.8"
+        font-size="14.56"
         font-weight="600"
       >
         Agent
@@ -190,7 +190,7 @@
         x2="650"
         y2="80"
         stroke="#27272A"
-        stroke-width="2.1"
+        stroke-width="1.78"
         marker-end="url(#arrowPP)"
       />
 
@@ -204,14 +204,14 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        stroke-width="2.1"
+        stroke-width="1.78"
       />
       <text
         x="720"
         y="72"
         text-anchor="middle"
         fill="#A855F7"
-        font-size="35.2"
+        font-size="24.64"
       >
         &#128100;
       </text>
@@ -220,7 +220,7 @@
         y="100"
         text-anchor="middle"
         fill="#FAFAFA"
-        font-size="20.8"
+        font-size="14.56"
         font-weight="600"
       >
         User
@@ -232,7 +232,7 @@
         y="160"
         text-anchor="middle"
         fill="#A1A1AA"
-        font-size="19.2"
+        font-size="13.44"
       >
         End-to-end platform pipeline: ingest, index, retrieve, respond
       </text>
