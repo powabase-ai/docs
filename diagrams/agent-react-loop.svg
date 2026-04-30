@@ -4,9 +4,7 @@
       viewBox="0 0 800 300"
       width="800"
       height="300"
-      xmlns="http://www.w3.org/2000/svg"
-      
-    >
+      xmlns="http://www.w3.org/2000/svg" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
       <defs>
         <marker
           id="arrow-react"
