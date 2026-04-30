@@ -34,14 +34,14 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        stroke-width="1.5"
+        stroke-width="2.1"
       />
       <text
         x="80"
         y="72"
         text-anchor="middle"
         fill="#A855F7"
-        font-size="22"
+        font-size="35.2"
       >
         &#128196;
       </text>
@@ -50,7 +50,7 @@
         y="100"
         text-anchor="middle"
         fill="#FAFAFA"
-        font-size="13"
+        font-size="20.8"
         font-weight="600"
       >
         Document
@@ -63,7 +63,7 @@
         x2="170"
         y2="80"
         stroke="#27272A"
-        stroke-width="1.5"
+        stroke-width="2.1"
         marker-end="url(#arrowPP)"
       />
 
@@ -77,14 +77,14 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        stroke-width="1.5"
+        stroke-width="2.1"
       />
       <text
         x="240"
         y="72"
         text-anchor="middle"
         fill="#A855F7"
-        font-size="22"
+        font-size="35.2"
       >
         &#128451;
       </text>
@@ -93,7 +93,7 @@
         y="100"
         text-anchor="middle"
         fill="#FAFAFA"
-        font-size="13"
+        font-size="20.8"
         font-weight="600"
       >
         Source
@@ -106,7 +106,7 @@
         x2="330"
         y2="80"
         stroke="#27272A"
-        stroke-width="1.5"
+        stroke-width="2.1"
         marker-end="url(#arrowPP)"
       />
 
@@ -120,14 +120,14 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        stroke-width="1.5"
+        stroke-width="2.1"
       />
       <text
         x="400"
         y="72"
         text-anchor="middle"
         fill="#A855F7"
-        font-size="22"
+        font-size="35.2"
       >
         &#128218;
       </text>
@@ -136,7 +136,7 @@
         y="100"
         text-anchor="middle"
         fill="#FAFAFA"
-        font-size="13"
+        font-size="20.8"
         font-weight="600"
       >
         Knowledge Base
@@ -149,7 +149,7 @@
         x2="490"
         y2="80"
         stroke="#27272A"
-        stroke-width="1.5"
+        stroke-width="2.1"
         marker-end="url(#arrowPP)"
       />
 
@@ -163,14 +163,14 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        stroke-width="1.5"
+        stroke-width="2.1"
       />
       <text
         x="560"
         y="72"
         text-anchor="middle"
         fill="#A855F7"
-        font-size="22"
+        font-size="35.2"
       >
         &#129302;
       </text>
@@ -179,7 +179,7 @@
         y="100"
         text-anchor="middle"
         fill="#FAFAFA"
-        font-size="13"
+        font-size="20.8"
         font-weight="600"
       >
         Agent
@@ -192,7 +192,7 @@
         x2="650"
         y2="80"
         stroke="#27272A"
-        stroke-width="1.5"
+        stroke-width="2.1"
         marker-end="url(#arrowPP)"
       />
 
@@ -206,14 +206,14 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        stroke-width="1.5"
+        stroke-width="2.1"
       />
       <text
         x="720"
         y="72"
         text-anchor="middle"
         fill="#A855F7"
-        font-size="22"
+        font-size="35.2"
       >
         &#128100;
       </text>
@@ -222,7 +222,7 @@
         y="100"
         text-anchor="middle"
         fill="#FAFAFA"
-        font-size="13"
+        font-size="20.8"
         font-weight="600"
       >
         User
@@ -234,7 +234,7 @@
         y="160"
         text-anchor="middle"
         fill="#A1A1AA"
-        font-size="12"
+        font-size="19.2"
       >
         End-to-end platform pipeline: ingest, index, retrieve, respond
       </text>
