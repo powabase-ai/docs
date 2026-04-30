@@ -3,7 +3,7 @@ title: "Sessions"
 description: "Manage multi-turn chat sessions and their message/run history."
 ---
 
-Sessions store the conversation history between users and agents. Each session contains messages (user inputs, assistant responses, tool calls, tool results) and can span multiple agent runs. Sessions persist until explicitly deleted, enabling long-running multi-turn conversations.
+Sessions store the conversation history between users and agents. Each session contains messages (user inputs, assistant responses, tool calls, tool results, plus the retrieved context that grounded each assistant turn) and can span multiple agent runs. Sessions also track reasoning configuration on a per-run basis when the agent is configured for reasoning. Sessions persist until explicitly deleted, enabling long-running multi-turn conversations.
 
 ## Common Patterns
 
@@ -35,7 +35,7 @@ curl '{BASE_URL}/api/sessions/{id}' -H "apikey: {API_KEY}" -H "Authorization: Be
 
 ### GET /api/sessions/{id}/messages
 
-Get assembled chat messages for a session.
+Get assembled chat messages for a session. Each assistant message includes its retrieved_context (knowledge-base chunks fetched during the run) so you can surface citations alongside replies.
 
 <ParamField path="id" type="string" required>
 Session ID

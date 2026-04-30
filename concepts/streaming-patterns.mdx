@@ -16,6 +16,8 @@ Server-Sent Events (SSE) provide a one-directional stream from server to client 
 | chunk | content | A piece of the agent's text response |
 | tool_call | tool_name, arguments | Agent is calling a tool with the given arguments |
 | tool_result | tool_name, result | Tool execution completed with this result |
+| reasoning | delta | An incremental piece of the model's reasoning trace (only when reasoning_requested=true) |
+| reasoning_summary | summary | Final summarised reasoning trace at the end of the step |
 | step_completed | step | Agent finished a reasoning step |
 | approval_requested | tool_name, tool_input | Tool call paused — waiting for approval via the approve endpoint |
 | complete | run_id | Agent run finished |

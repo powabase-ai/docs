@@ -190,7 +190,7 @@ curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/reindex' -H "apikey: {API_KEY}
 
 ### POST /api/knowledge-bases/{id}/search
 
-Run a semantic vector search against the knowledge base.
+Run a search against the knowledge base. Supports vector_search (semantic, default), full_text (BM25 keyword), and hybrid (RRF fusion) via retrieval_method. Optional filter_metadata narrows results to chunks whose metadata matches; similarity_threshold sets a minimum vector score (0–1).
 
 <ParamField path="id" type="string" required>
 KB ID
@@ -199,7 +199,13 @@ KB ID
 <RequestExample>
 
 ```json Request
-{ "query": "search text", "top_k": 5 }
+{
+  "query": "search text",
+  "top_k": 5,
+  "retrieval_method": "hybrid",
+  "filter_metadata": { "source_id": "..." },
+  "similarity_threshold": 0.3
+}
 ```
 
 </RequestExample>
@@ -207,15 +213,15 @@ KB ID
 <CodeGroup>
 
 ```python Python
-response = requests.post(f"{BASE_URL}/api/knowledge-bases/{kb_id}/search", headers=headers, json={"query": "search text", "top_k": 5})
+response = requests.post(f"{BASE_URL}/api/knowledge-bases/{kb_id}/search", headers=headers, json={"query": "search text", "top_k": 5, "retrieval_method": "hybrid"})
 ```
 
 ```typescript TypeScript
-const res = await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/search`, { method: "POST", headers, body: JSON.stringify({ query: "search text", top_k: 5 }) });
+const res = await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/search`, { method: "POST", headers, body: JSON.stringify({ query: "search text", top_k: 5, retrieval_method: "hybrid" }) });
 ```
 
 ```bash cURL
-curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/search' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"query": "search text", "top_k": 5}'
+curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/search' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"query": "search text", "top_k": 5, "retrieval_method": "hybrid"}'
 ```
 
 </CodeGroup>

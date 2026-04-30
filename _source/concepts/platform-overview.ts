@@ -3,18 +3,18 @@ import type { ConceptPage } from "../types";
 export const platformOverviewConcept: ConceptPage = {
   id: "platform-overview",
   title: "Platform Overview",
-  description: "Agentic Platform is a multi-tenant AI Backend-as-a-Service that provides a unified REST API for building production AI applications. It combines three core modules — Context Engineering, Agent Orchestration, and Workflow Automation — that work independently or together.",
+  description: "Powabase is a multi-tenant AI Backend-as-a-Service that provides a unified REST API for building production AI applications. It combines three core modules — Context Engineering, Agent Orchestration, and Workflow Automation — that work independently or together.",
   content: [
     {
-      type: "heading", level: 2, text: "What is Agentic Platform?", id: "what-is",
+      type: "heading", level: 2, text: "What is Powabase?", id: "what-is",
     },
     {
       type: "prose",
-      text: "Agentic Platform is the infrastructure layer for AI-powered applications. Most teams building with LLMs end up assembling the same stack: a vector database for RAG, an agent framework for tool use, a workflow engine for automation, an auth layer, a file storage service, and a database — then writing the glue code to connect them. Agentic Platform replaces that entire stack with a single API.",
+      text: "Powabase is the infrastructure layer for AI-powered applications. Most teams building with LLMs end up assembling the same stack: a vector database for RAG, an agent framework for tool use, a workflow engine for automation, an auth layer, a file storage service, and a database — then writing the glue code to connect them. Powabase replaces that entire stack with a single API.",
     },
     {
       type: "prose",
-      text: "Unlike frameworks like LangChain or Agno that give you libraries to run in your own infrastructure, Agentic Platform is a fully managed backend — you don't deploy or operate anything. Unlike workflow-only tools like n8n or Dify, the platform provides deep AI primitives (multiple indexing strategies, four retrieval algorithms, ReAct agents with tool execution, multi-agent orchestration) alongside automation. And unlike Supabase, which provides a general-purpose backend, Agentic Platform is purpose-built for AI workloads with first-class support for embeddings, vector search, LLM sessions, and streaming.",
+      text: "Unlike frameworks like LangChain or Agno that give you libraries to run in your own infrastructure, Powabase is a fully managed backend — you don't deploy or operate anything. Unlike workflow-only tools like n8n or Dify, the platform provides deep AI primitives (multiple indexing strategies, four retrieval algorithms, ReAct agents with tool execution, multi-agent orchestration) alongside automation. And unlike Supabase, which provides a general-purpose backend, Powabase is purpose-built for AI workloads with first-class support for embeddings, vector search, LLM sessions, and streaming.",
     },
     {
       type: "prose",

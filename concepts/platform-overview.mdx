@@ -1,13 +1,13 @@
 ---
 title: "Platform Overview"
-description: "Agentic Platform is a multi-tenant AI Backend-as-a-Service that provides a unified REST API for building production AI applications. It combines three core modules — Context Engineering, Agent Orchestration, and Workflow Automation — that work independently or together."
+description: "Powabase is a multi-tenant AI Backend-as-a-Service that provides a unified REST API for building production AI applications. It combines three core modules — Context Engineering, Agent Orchestration, and Workflow Automation — that work independently or together."
 ---
 
-## What is Agentic Platform?
+## What is Powabase?
 
-Agentic Platform is the infrastructure layer for AI-powered applications. Most teams building with LLMs end up assembling the same stack: a vector database for RAG, an agent framework for tool use, a workflow engine for automation, an auth layer, a file storage service, and a database — then writing the glue code to connect them. Agentic Platform replaces that entire stack with a single API.
+Powabase is the infrastructure layer for AI-powered applications. Most teams building with LLMs end up assembling the same stack: a vector database for RAG, an agent framework for tool use, a workflow engine for automation, an auth layer, a file storage service, and a database — then writing the glue code to connect them. Powabase replaces that entire stack with a single API.
 
-Unlike frameworks like LangChain or Agno that give you libraries to run in your own infrastructure, Agentic Platform is a fully managed backend — you don't deploy or operate anything. Unlike workflow-only tools like n8n or Dify, the platform provides deep AI primitives (multiple indexing strategies, four retrieval algorithms, ReAct agents with tool execution, multi-agent orchestration) alongside automation. And unlike Supabase, which provides a general-purpose backend, Agentic Platform is purpose-built for AI workloads with first-class support for embeddings, vector search, LLM sessions, and streaming.
+Unlike frameworks like LangChain or Agno that give you libraries to run in your own infrastructure, Powabase is a fully managed backend — you don't deploy or operate anything. Unlike workflow-only tools like n8n or Dify, the platform provides deep AI primitives (multiple indexing strategies, four retrieval algorithms, ReAct agents with tool execution, multi-agent orchestration) alongside automation. And unlike Supabase, which provides a general-purpose backend, Powabase is purpose-built for AI workloads with first-class support for embeddings, vector search, LLM sessions, and streaming.
 
 Each project gets a fully isolated stack: its own Postgres database with pgvector, API gateway, auth service, file storage, and AI service worker. There is no shared state between projects — isolation is enforced at the infrastructure level.
 

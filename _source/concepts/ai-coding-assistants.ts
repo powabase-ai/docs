@@ -3,7 +3,7 @@ import type { ConceptPage } from "../types";
 export const aiCodingAssistantsConcept: ConceptPage = {
   id: "ai-coding-assistants",
   title: "Using the Platform with AI Coding Assistants",
-  description: "Agentic Platform's REST API is designed to be consumed by AI coding assistants like Claude Code, GitHub Copilot, Cursor, and others. This page describes how to integrate effectively and previews our upcoming skill framework.",
+  description: "Powabase's REST API is designed to be consumed by AI coding assistants like Claude Code, GitHub Copilot, Cursor, and others. This page describes how to integrate effectively and previews our upcoming skill framework.",
   content: [
     {
       type: "heading", level: 2, text: "Why AI Coding Assistants?", id: "why",
@@ -18,13 +18,13 @@ export const aiCodingAssistantsConcept: ConceptPage = {
     },
     {
       type: "prose",
-      text: "Claude Code works particularly well with the Agentic Platform API because it can read this documentation, understand the type system, and generate correct API calls in Python, TypeScript, or cURL. To get the best results, provide Claude Code with your project's base URL and API key, and reference the specific API section you're working with.",
+      text: "Claude Code works particularly well with the Powabase API because it can read this documentation, understand the type system, and generate correct API calls in Python, TypeScript, or cURL. To get the best results, provide Claude Code with your project's base URL and API key, and reference the specific API section you're working with.",
     },
     {
       type: "callout",
       variant: "tip",
       title: "Share your project context",
-      text: "Tell your coding assistant: \"I'm building with the Agentic Platform API. My base URL is {BASE_URL} and I'm using the service_role key for authentication. I need to [create a knowledge base / build an agent / set up a workflow].\" This gives the assistant enough context to generate correct code.",
+      text: "Tell your coding assistant: \"I'm building with the Powabase API. My base URL is {BASE_URL} and I'm using the service_role key for authentication. I need to [create a knowledge base / build an agent / set up a workflow].\" This gives the assistant enough context to generate correct code.",
     },
 
     {
@@ -32,7 +32,7 @@ export const aiCodingAssistantsConcept: ConceptPage = {
     },
     {
       type: "prose",
-      text: "These are the most common tasks AI coding assistants help with when integrating the Agentic Platform:",
+      text: "These are the most common tasks AI coding assistants help with when integrating the Powabase:",
     },
     {
       type: "table",
@@ -52,7 +52,7 @@ export const aiCodingAssistantsConcept: ConceptPage = {
     },
     {
       type: "prose",
-      text: "We are developing a skill.md framework that will give AI coding assistants deep, structured knowledge of the Agentic Platform API. Instead of relying on general documentation, the skill file will provide the assistant with decision trees, common patterns, error handling strategies, and code templates — enabling it to build complete integrations autonomously.",
+      text: "We are developing a skill.md framework that will give AI coding assistants deep, structured knowledge of the Powabase API. Instead of relying on general documentation, the skill file will provide the assistant with decision trees, common patterns, error handling strategies, and code templates — enabling it to build complete integrations autonomously.",
     },
     {
       type: "prose",

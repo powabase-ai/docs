@@ -82,13 +82,19 @@ export const knowledgeBasesReference: ReferenceSection = {
         },
         {
           method: "POST", path: "/api/knowledge-bases/{id}/search",
-          description: "Run a semantic vector search against the knowledge base.",
+          description: "Run a search against the knowledge base. Supports vector_search (semantic, default), full_text (BM25 keyword), and hybrid (RRF fusion) via retrieval_method. Optional filter_metadata narrows results to chunks whose metadata matches; similarity_threshold sets a minimum vector score (0–1).",
           parameters: [{ name: "id", in: "path", type: "string", required: true, description: "KB ID" }],
-          requestBody: `{ "query": "search text", "top_k": 5 }`,
+          requestBody: `{
+  "query": "search text",
+  "top_k": 5,
+  "retrieval_method": "hybrid",
+  "filter_metadata": { "source_id": "..." },
+  "similarity_threshold": 0.3
+}`,
           snippets: {
-            python: `response = requests.post(f"{BASE_URL}/api/knowledge-bases/{kb_id}/search", headers=headers, json={"query": "search text", "top_k": 5})`,
-            typescript: `const res = await fetch(\`\${BASE_URL}/api/knowledge-bases/\${kbId}/search\`, { method: "POST", headers, body: JSON.stringify({ query: "search text", top_k: 5 }) });`,
-            curl: `curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/search' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"query": "search text", "top_k": 5}'`,
+            python: `response = requests.post(f"{BASE_URL}/api/knowledge-bases/{kb_id}/search", headers=headers, json={"query": "search text", "top_k": 5, "retrieval_method": "hybrid"})`,
+            typescript: `const res = await fetch(\`\${BASE_URL}/api/knowledge-bases/\${kbId}/search\`, { method: "POST", headers, body: JSON.stringify({ query: "search text", top_k: 5, retrieval_method: "hybrid" }) });`,
+            curl: `curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/search' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"query": "search text", "top_k": 5, "retrieval_method": "hybrid"}'`,
           },
         },
       ],

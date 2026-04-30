@@ -201,7 +201,7 @@ function buildPlatformComparison(): string {
   const padY = 16;
 
   const columns = [
-    { label: "Agentic", highlighted: true },
+    { label: "Powabase", highlighted: true },
     { label: "Supabase" },
     { label: "LangChain" },
     { label: "Agno" },
@@ -240,9 +240,9 @@ function buildPlatformComparison(): string {
 
   const parts: string[] = [];
   parts.push(`<?xml version="1.0" encoding="UTF-8"?>`);
-  parts.push(`<svg viewBox="0 0 ${totalW} ${totalH}" width="${totalW}" height="${totalH}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Feature coverage table comparing Agentic Platform with Supabase, LangChain, Agno, Vectara, Dify, and n8n">`);
+  parts.push(`<svg viewBox="0 0 ${totalW} ${totalH}" width="${totalW}" height="${totalH}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Feature coverage table comparing Powabase with Supabase, LangChain, Agno, Vectara, Dify, and n8n">`);
 
-  // Highlighted Agentic column background
+  // Highlighted Powabase column background
   parts.push(`  <rect x="${colX(0)}" y="${tableY}" width="${cellW}" height="${tableH}" fill="${brand}" fill-opacity="0.06"/>`);
 
   // Zebra row striping
@@ -332,22 +332,19 @@ fs.mkdirSync(DIAGRAM_OUT, { recursive: true });
 for (const { file, id } of DIAGRAMS) {
   const srcPath = path.join(DIAGRAM_SRC, file);
 
-  if (!fs.existsSync(srcPath)) {
-    console.error(`  MISSING: ${file}`);
-    continue;
-  }
-
   let svgContent: string;
 
   if (id === "platform-comparison") {
-    // This component uses computed geometry — build directly
+    // Built from inline computed geometry — no TSX source required.
     svgContent = buildPlatformComparison();
     console.log(`  built ${id}.svg (computed)`);
   } else {
+    if (!fs.existsSync(srcPath)) {
+      console.error(`  MISSING: ${file}`);
+      continue;
+    }
     const src = fs.readFileSync(srcPath, "utf8");
-    // Apply token substitution (CSS variables → hex)
     const substituted = applyTokens(src);
-    // Convert JSX to SVG
     svgContent = jsxToSvg(substituted);
     console.log(`  converted ${file} → ${id}.svg`);
   }

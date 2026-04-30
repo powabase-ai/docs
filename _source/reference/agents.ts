@@ -269,13 +269,13 @@ export const agentsReference: ReferenceSection = {
         },
         {
           method: "POST", path: "/api/agents/{id}/run/stream",
-          description: "Run agent with streaming SSE. Supports tools, ReAct loop, and multi-turn via session_id.",
+          description: "Run agent with streaming SSE. Supports tools, ReAct loop, and multi-turn via session_id. SSE event types include start, chunk, tool_call, tool_result, reasoning, reasoning_summary, and complete; the reasoning events surface the model's internal thought stream when reasoning is enabled. Set reasoning_requested=true to request reasoning output for this run.",
           parameters: [{ name: "id", in: "path", type: "string", required: true, description: "Agent ID" }],
-          requestBody: `{\n  "message": "Hello",\n  "session_id": "optional-session-uuid"\n}`,
+          requestBody: `{\n  "message": "Hello",\n  "session_id": "optional-session-uuid",\n  "reasoning_requested": false\n}`,
           snippets: {
-            python: `response = requests.post(\n    f"{BASE_URL}/api/agents/{agent_id}/run/stream",\n    headers=headers,\n    json={"message": "Hello"},\n    stream=True,\n)\nfor line in response.iter_lines():\n    if line and line.decode().startswith("data: "):\n        event = json.loads(line.decode()[6:])\n        print(event)`,
-            typescript: `const response = await fetch(\`\${BASE_URL}/api/agents/\${agentId}/run/stream\`, {\n  method: "POST", headers,\n  body: JSON.stringify({ message: "Hello" }),\n});\n// Parse SSE events: start, chunk, tool_call, tool_result, complete`,
-            curl: `curl -N -X POST '{BASE_URL}/api/agents/{id}/run/stream' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"message": "Hello"}'`,
+            python: `response = requests.post(\n    f"{BASE_URL}/api/agents/{agent_id}/run/stream",\n    headers=headers,\n    json={"message": "Hello", "reasoning_requested": True},\n    stream=True,\n)\nfor line in response.iter_lines():\n    if line and line.decode().startswith("data: "):\n        event = json.loads(line.decode()[6:])\n        print(event)`,
+            typescript: `const response = await fetch(\`\${BASE_URL}/api/agents/\${agentId}/run/stream\`, {\n  method: "POST", headers,\n  body: JSON.stringify({ message: "Hello", reasoning_requested: true }),\n});\n// Parse SSE events: start, chunk, tool_call, tool_result, reasoning, complete`,
+            curl: `curl -N -X POST '{BASE_URL}/api/agents/{id}/run/stream' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"message": "Hello", "reasoning_requested": true}'`,
           },
         },
         {

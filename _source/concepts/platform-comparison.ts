@@ -3,14 +3,14 @@ import type { ConceptPage } from "../types";
 export const platformComparisonConcept: ConceptPage = {
   id: "platform-comparison",
   title: "Platform Comparison",
-  description: "How Agentic Platform compares to popular AI frameworks, RAG services, workflow tools, and backend platforms. Understand where each tool excels and why Agentic Platform's unified approach is different.",
+  description: "How Powabase compares to popular AI frameworks, RAG services, workflow tools, and backend platforms. Understand where each tool excels and why Powabase's unified approach is different.",
   content: [
     {
       type: "heading", level: 2, text: "The Problem with Assembling Your Own Stack", id: "the-problem",
     },
     {
       type: "prose",
-      text: "Building a production AI application typically requires stitching together 5–7 separate tools: a vector database for RAG, an agent framework for tool calling, a workflow engine for automation, an LLM gateway for model routing, an auth system for users, a file storage service for documents, and a database for application state. Each tool has its own API, deployment model, and failure modes. Agentic Platform replaces this entire assembly with a single, unified REST API — one endpoint, one auth model, one database, one deployment.",
+      text: "Building a production AI application typically requires stitching together 5–7 separate tools: a vector database for RAG, an agent framework for tool calling, a workflow engine for automation, an LLM gateway for model routing, an auth system for users, a file storage service for documents, and a database for application state. Each tool has its own API, deployment model, and failure modes. Powabase replaces this entire assembly with a single, unified REST API — one endpoint, one auth model, one database, one deployment.",
     },
 
     {
@@ -19,8 +19,8 @@ export const platformComparisonConcept: ConceptPage = {
     {
       type: "diagram",
       svgId: "platform-comparison",
-      caption: "Agentic Platform covers the full AI application stack in one service",
-      alt: "Comparison chart showing feature coverage: Agentic Platform covers RAG, Agents, Workflows, Database, Auth, and Storage. Other platforms cover only subsets.",
+      caption: "Powabase covers the full AI application stack in one service",
+      alt: "Comparison chart showing feature coverage: Powabase covers RAG, Agents, Workflows, Database, Auth, and Storage. Other platforms cover only subsets.",
     },
 
     // ─── VS SUPABASE ───────────────────────────────────────────────
@@ -30,11 +30,11 @@ export const platformComparisonConcept: ConceptPage = {
     },
     {
       type: "prose",
-      text: "Supabase is an excellent general-purpose backend-as-a-service (Postgres, auth, storage, real-time) that Agentic Platform actually builds on — each project's infrastructure uses Supabase components. The difference is purpose: Supabase provides the database and infrastructure primitives common to most SaaS apps, while Agentic Platform provides a good number of prebuilt agentic abstractions on top to accelerate development of AI-native applications.",
+      text: "Supabase is an excellent general-purpose backend-as-a-service (Postgres, auth, storage, real-time) that Powabase actually builds on — each project's infrastructure uses Supabase components. The difference is purpose: Supabase provides the database and infrastructure primitives common to most SaaS apps, while Powabase provides a good number of prebuilt agentic abstractions on top to accelerate development of AI-native applications.",
     },
     {
       type: "table",
-      headers: ["Capability", "Agentic Platform", "Supabase"],
+      headers: ["Capability", "Powabase", "Supabase"],
       rows: [
         ["Database", "Postgres + pgvector per project (included)", "Postgres + pgvector (included)"],
         ["Auth & Storage", "GoTrue + Storage API per project (included)", "GoTrue + Storage API (included)"],
@@ -48,7 +48,7 @@ export const platformComparisonConcept: ConceptPage = {
     },
     {
       type: "prose",
-      text: "Choose Supabase when you need a general-purpose backend without AI features. Choose Agentic Platform when your application's core value is AI-powered — you get everything Supabase offers (Postgres, auth, storage, PostgREST) plus a complete AI abstraction layer.",
+      text: "Choose Supabase when you need a general-purpose backend without AI features. Choose Powabase when your application's core value is AI-powered — you get everything Supabase offers (Postgres, auth, storage, PostgREST) plus a complete AI abstraction layer.",
     },
 
     // ─── VS LANGCHAIN / LANGGRAPH ──────────────────────────────────
@@ -62,7 +62,7 @@ export const platformComparisonConcept: ConceptPage = {
     },
     {
       type: "table",
-      headers: ["Capability", "Agentic Platform", "LangChain / LangGraph"],
+      headers: ["Capability", "Powabase", "LangChain / LangGraph"],
       rows: [
         ["Deployment model", "Managed API — no infrastructure to operate", "Framework — you deploy, scale, and monitor your own services"],
         ["Database", "Postgres + pgvector included per project", "None — bring your own (Pinecone, Weaviate, pgvector, etc.)"],
@@ -77,7 +77,7 @@ export const platformComparisonConcept: ConceptPage = {
     },
     {
       type: "prose",
-      text: "Choose LangChain/LangGraph when you need maximum flexibility, custom execution models, or durable agent state with time-travel debugging. Choose Agentic Platform when you want a production-ready API without managing infrastructure — especially if you also need auth, storage, and a database alongside your AI features.",
+      text: "Choose LangChain/LangGraph when you need maximum flexibility, custom execution models, or durable agent state with time-travel debugging. Choose Powabase when you want a production-ready API without managing infrastructure — especially if you also need auth, storage, and a database alongside your AI features.",
     },
 
     // ─── VS AGNO ───────────────────────────────────────────────────
@@ -91,7 +91,7 @@ export const platformComparisonConcept: ConceptPage = {
     },
     {
       type: "table",
-      headers: ["Capability", "Agentic Platform", "Agno"],
+      headers: ["Capability", "Powabase", "Agno"],
       rows: [
         ["Deployment model", "Managed API with per-project isolation", "Framework — you deploy agents in your own infrastructure"],
         ["Database & Auth", "Postgres + pgvector + GoTrue included", "None — bring your own database and auth"],
@@ -105,7 +105,7 @@ export const platformComparisonConcept: ConceptPage = {
     },
     {
       type: "prose",
-      text: "Choose Agno when you want a lightweight Python framework and are comfortable managing your own infrastructure. Choose Agentic Platform when you want a fully managed backend with database, auth, storage, and AI — all accessible via REST API from any language.",
+      text: "Choose Agno when you want a lightweight Python framework and are comfortable managing your own infrastructure. Choose Powabase when you want a fully managed backend with database, auth, storage, and AI — all accessible via REST API from any language.",
     },
 
     // ─── VS VECTARA ────────────────────────────────────────────────
@@ -119,7 +119,7 @@ export const platformComparisonConcept: ConceptPage = {
     },
     {
       type: "table",
-      headers: ["Capability", "Agentic Platform", "Vectara"],
+      headers: ["Capability", "Powabase", "Vectara"],
       rows: [
         ["RAG pipeline", "4 indexing strategies (ChunkEmbed, PageIndex, GraphIndex, Doc2JSON), 4 retrieval methods, reranking", "ML-based chunking, hybrid search (neural + lexical), Boomerang reranker, hallucination detection"],
         ["Document ingestion", "Upload API, OCR, multi-format extraction", "100+ format ingestion, zero-config"],
@@ -134,7 +134,7 @@ export const platformComparisonConcept: ConceptPage = {
     },
     {
       type: "prose",
-      text: "Choose Vectara when RAG is your only need and you want zero-config document processing with best-in-class hallucination detection. Choose Agentic Platform when you need RAG plus agents, orchestration, workflows, a database, and auth — a complete AI application backend.",
+      text: "Choose Vectara when RAG is your only need and you want zero-config document processing with best-in-class hallucination detection. Choose Powabase when you need RAG plus agents, orchestration, workflows, a database, and auth — a complete AI application backend.",
     },
 
     // ─── VS DIFY ───────────────────────────────────────────────────
@@ -148,7 +148,7 @@ export const platformComparisonConcept: ConceptPage = {
     },
     {
       type: "table",
-      headers: ["Capability", "Agentic Platform", "Dify"],
+      headers: ["Capability", "Powabase", "Dify"],
       rows: [
         ["RAG depth", "4 indexing strategies including tree-based (PageIndex) and structured extraction (Doc2JSON)", "Standard chunking + embedding with configurable strategies"],
         ["Agent framework", "ReAct with hooks, approval flow, MCP, 6 builtin tools", "ReAct agents with tool calling and conversation variables"],
@@ -162,7 +162,7 @@ export const platformComparisonConcept: ConceptPage = {
     },
     {
       type: "prose",
-      text: "Choose Dify when you want a visual builder for prototyping AI apps quickly, especially if your team prefers drag-and-drop over code. Choose Agentic Platform when you need an API-first backend that your application code calls directly, with deep RAG capabilities, per-project isolation, and included database/auth infrastructure.",
+      text: "Choose Dify when you want a visual builder for prototyping AI apps quickly, especially if your team prefers drag-and-drop over code. Choose Powabase when you need an API-first backend that your application code calls directly, with deep RAG capabilities, per-project isolation, and included database/auth infrastructure.",
     },
 
     // ─── VS N8N ────────────────────────────────────────────────────
@@ -176,7 +176,7 @@ export const platformComparisonConcept: ConceptPage = {
     },
     {
       type: "table",
-      headers: ["Capability", "Agentic Platform", "n8n"],
+      headers: ["Capability", "Powabase", "n8n"],
       rows: [
         ["Primary focus", "AI application backend (RAG, agents, orchestration)", "General-purpose workflow automation with AI add-ons"],
         ["RAG pipeline", "Managed end-to-end: ingest, index (4 strategies), retrieve (4 methods), rerank", "None built-in — connect to external vector DBs and embedding APIs via nodes"],
@@ -188,7 +188,7 @@ export const platformComparisonConcept: ConceptPage = {
     },
     {
       type: "prose",
-      text: "Choose n8n when you need to automate business processes across many SaaS tools and want to add some AI capabilities. Choose Agentic Platform when AI is your application's core function and you need deep RAG, agent, and orchestration capabilities.",
+      text: "Choose n8n when you need to automate business processes across many SaaS tools and want to add some AI capabilities. Choose Powabase when AI is your application's core function and you need deep RAG, agent, and orchestration capabilities.",
     },
 
     // ─── VS CREWAI ─────────────────────────────────────────────────
@@ -202,7 +202,7 @@ export const platformComparisonConcept: ConceptPage = {
     },
     {
       type: "table",
-      headers: ["Capability", "Agentic Platform", "CrewAI"],
+      headers: ["Capability", "Powabase", "CrewAI"],
       rows: [
         ["Deployment model", "Managed API", "Framework — deploy in your infrastructure"],
         ["Multi-agent", "3 strategies via API (Supervisor, Sequential, Parallel)", "3 process types (sequential, hierarchical, consensual) — code-defined"],
@@ -215,13 +215,13 @@ export const platformComparisonConcept: ConceptPage = {
     },
     {
       type: "prose",
-      text: "Choose CrewAI when you want fine-grained Python control over multi-agent collaboration patterns and are comfortable managing your own infrastructure. Choose Agentic Platform when you want managed multi-agent orchestration with a complete backend (database, auth, RAG) accessible from any language.",
+      text: "Choose CrewAI when you want fine-grained Python control over multi-agent collaboration patterns and are comfortable managing your own infrastructure. Choose Powabase when you want managed multi-agent orchestration with a complete backend (database, auth, RAG) accessible from any language.",
     },
 
     // ─── SUMMARY ───────────────────────────────────────────────────
 
     {
-      type: "heading", level: 2, text: "What Makes Agentic Platform Different", id: "differentiators",
+      type: "heading", level: 2, text: "What Makes Powabase Different", id: "differentiators",
     },
     {
       type: "table",

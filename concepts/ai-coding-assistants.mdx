@@ -1,6 +1,6 @@
 ---
 title: "Using the Platform with AI Coding Assistants"
-description: "Agentic Platform's REST API is designed to be consumed by AI coding assistants like Claude Code, GitHub Copilot, Cursor, and others. This page describes how to integrate effectively and previews our upcoming skill framework."
+description: "Powabase's REST API is designed to be consumed by AI coding assistants like Claude Code, GitHub Copilot, Cursor, and others. This page describes how to integrate effectively and previews our upcoming skill framework."
 ---
 
 ## Why AI Coding Assistants?
@@ -9,17 +9,17 @@ The platform's REST API is the primary interface for building AI applications. A
 
 ## Getting Started with Claude Code
 
-Claude Code works particularly well with the Agentic Platform API because it can read this documentation, understand the type system, and generate correct API calls in Python, TypeScript, or cURL. To get the best results, provide Claude Code with your project's base URL and API key, and reference the specific API section you're working with.
+Claude Code works particularly well with the Powabase API because it can read this documentation, understand the type system, and generate correct API calls in Python, TypeScript, or cURL. To get the best results, provide Claude Code with your project's base URL and API key, and reference the specific API section you're working with.
 
 <Tip>
 **Share your project context**
 
-Tell your coding assistant: "I'm building with the Agentic Platform API. My base URL is \{BASE_URL\} and I'm using the service_role key for authentication. I need to [create a knowledge base / build an agent / set up a workflow]." This gives the assistant enough context to generate correct code.
+Tell your coding assistant: "I'm building with the Powabase API. My base URL is \{BASE_URL\} and I'm using the service_role key for authentication. I need to [create a knowledge base / build an agent / set up a workflow]." This gives the assistant enough context to generate correct code.
 </Tip>
 
 ## Common Patterns
 
-These are the most common tasks AI coding assistants help with when integrating the Agentic Platform:
+These are the most common tasks AI coding assistants help with when integrating the Powabase:
 
 | Task | What to Ask For | Key API Endpoints |
 | --- | --- | --- |
@@ -32,7 +32,7 @@ These are the most common tasks AI coding assistants help with when integrating 
 
 ## Upcoming: Skill Framework
 
-We are developing a skill.md framework that will give AI coding assistants deep, structured knowledge of the Agentic Platform API. Instead of relying on general documentation, the skill file will provide the assistant with decision trees, common patterns, error handling strategies, and code templates — enabling it to build complete integrations autonomously.
+We are developing a skill.md framework that will give AI coding assistants deep, structured knowledge of the Powabase API. Instead of relying on general documentation, the skill file will provide the assistant with decision trees, common patterns, error handling strategies, and code templates — enabling it to build complete integrations autonomously.
 
 The skill framework will include: API reference in a format optimized for LLM consumption, decision logic for choosing indexing strategies and retrieval methods, end-to-end integration templates for common use cases (RAG chatbot, document processing pipeline, multi-agent support team), streaming event parsers for all three languages, and error recovery patterns.
 

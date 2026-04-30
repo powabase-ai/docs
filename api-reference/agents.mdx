@@ -592,7 +592,7 @@ curl -X POST '{BASE_URL}/api/agents/{id}/run' -H "apikey: {API_KEY}" -H "Authori
 
 ### POST /api/agents/{id}/run/stream
 
-Run agent with streaming SSE. Supports tools, ReAct loop, and multi-turn via session_id.
+Run agent with streaming SSE. Supports tools, ReAct loop, and multi-turn via session_id. SSE event types include start, chunk, tool_call, tool_result, reasoning, reasoning_summary, and complete; the reasoning events surface the model's internal thought stream when reasoning is enabled. Set reasoning_requested=true to request reasoning output for this run.
 
 <ParamField path="id" type="string" required>
 Agent ID
@@ -603,7 +603,8 @@ Agent ID
 ```json Request
 {
   "message": "Hello",
-  "session_id": "optional-session-uuid"
+  "session_id": "optional-session-uuid",
+  "reasoning_requested": false
 }
 ```
 
@@ -615,7 +616,7 @@ Agent ID
 response = requests.post(
     f"{BASE_URL}/api/agents/{agent_id}/run/stream",
     headers=headers,
-    json={"message": "Hello"},
+    json={"message": "Hello", "reasoning_requested": True},
     stream=True,
 )
 for line in response.iter_lines():
@@ -627,13 +628,13 @@ for line in response.iter_lines():
 ```typescript TypeScript
 const response = await fetch(`${BASE_URL}/api/agents/${agentId}/run/stream`, {
   method: "POST", headers,
-  body: JSON.stringify({ message: "Hello" }),
+  body: JSON.stringify({ message: "Hello", reasoning_requested: true }),
 });
-// Parse SSE events: start, chunk, tool_call, tool_result, complete
+// Parse SSE events: start, chunk, tool_call, tool_result, reasoning, complete
 ```
 
 ```bash cURL
-curl -N -X POST '{BASE_URL}/api/agents/{id}/run/stream' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"message": "Hello"}'
+curl -N -X POST '{BASE_URL}/api/agents/{id}/run/stream' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"message": "Hello", "reasoning_requested": true}'
 ```
 
 </CodeGroup>
