@@ -31,24 +31,24 @@
         ry="10"
         fill="#0E0E10"
         stroke="#27272A"
-        strokeWidth="1.5"
+        stroke-width="1.5"
       />
       <text
         x="65"
         y="82"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#A855F7"
-        fontSize="20"
+        font-size="20"
       >
         &#128228;
       </text>
       <text
         x="65"
         y="105"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#FAFAFA"
-        fontSize="12"
-        fontWeight="600"
+        font-size="12"
+        font-weight="600"
       >
         File Upload
       </text>
@@ -60,8 +60,8 @@
         x2="148"
         y2="85"
         stroke="#27272A"
-        strokeWidth="1.5"
-        markerEnd="url(#arrowEP)"
+        stroke-width="1.5"
+        marker-end="url(#arrowEP)"
       />
 
       
@@ -74,24 +74,24 @@
         ry="10"
         fill="#0E0E10"
         stroke="#27272A"
-        strokeWidth="1.5"
+        stroke-width="1.5"
       />
       <text
         x="213"
         y="82"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#A855F7"
-        fontSize="20"
+        font-size="20"
       >
         &#128230;
       </text>
       <text
         x="213"
         y="105"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#FAFAFA"
-        fontSize="12"
-        fontWeight="600"
+        font-size="12"
+        font-weight="600"
       >
         Storage
       </text>
@@ -103,8 +103,8 @@
         x2="296"
         y2="85"
         stroke="#27272A"
-        strokeWidth="1.5"
-        markerEnd="url(#arrowEP)"
+        stroke-width="1.5"
+        marker-end="url(#arrowEP)"
       />
 
       
@@ -117,15 +117,15 @@
         ry="12"
         fill="#0E0E10"
         stroke="#A855F7"
-        strokeWidth="2"
+        stroke-width="2"
       />
       <text
         x="401"
         y="58"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#FAFAFA"
-        fontSize="13"
-        fontWeight="700"
+        font-size="13"
+        font-weight="700"
       >
         Extraction Worker
       </text>
@@ -139,15 +139,15 @@
         ry="6"
         fill="none"
         stroke="#27272A"
-        strokeWidth="1"
+        stroke-width="1"
       />
       <text
         x="343"
         y="85"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#A1A1AA"
-        fontSize="10"
-        fontWeight="500"
+        font-size="10"
+        font-weight="500"
       >
         PDF
       </text>
@@ -160,15 +160,15 @@
         ry="6"
         fill="none"
         stroke="#27272A"
-        strokeWidth="1"
+        stroke-width="1"
       />
       <text
         x="402"
         y="85"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#A1A1AA"
-        fontSize="10"
-        fontWeight="500"
+        font-size="10"
+        font-weight="500"
       >
         DOCX
       </text>
@@ -181,24 +181,24 @@
         ry="6"
         fill="none"
         stroke="#27272A"
-        strokeWidth="1"
+        stroke-width="1"
       />
       <text
         x="461"
         y="85"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#A1A1AA"
-        fontSize="10"
-        fontWeight="500"
+        font-size="10"
+        font-weight="500"
       >
         OCR
       </text>
       <text
         x="401"
         y="118"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#A1A1AA"
-        fontSize="10"
+        font-size="10"
       >
         Celery background task
       </text>
@@ -210,8 +210,8 @@
         x2="524"
         y2="85"
         stroke="#27272A"
-        strokeWidth="1.5"
-        markerEnd="url(#arrowEP)"
+        stroke-width="1.5"
+        marker-end="url(#arrowEP)"
       />
 
       
@@ -224,24 +224,24 @@
         ry="10"
         fill="#0E0E10"
         stroke="#27272A"
-        strokeWidth="1.5"
+        stroke-width="1.5"
       />
       <text
         x="589"
         y="82"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#A855F7"
-        fontSize="20"
+        font-size="20"
       >
         &#128220;
       </text>
       <text
         x="589"
         y="105"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#FAFAFA"
-        fontSize="12"
-        fontWeight="600"
+        font-size="12"
+        font-weight="600"
       >
         Page Texts
       </text>
@@ -253,8 +253,8 @@
         x2="672"
         y2="85"
         stroke="#27272A"
-        strokeWidth="1.5"
-        markerEnd="url(#arrowEP)"
+        stroke-width="1.5"
+        marker-end="url(#arrowEP)"
       />
 
       
@@ -267,24 +267,24 @@
         ry="10"
         fill="#0E0E10"
         stroke="#27272A"
-        strokeWidth="1.5"
+        stroke-width="1.5"
       />
       <text
         x="732"
         y="82"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#A855F7"
-        fontSize="20"
+        font-size="20"
       >
         &#128451;
       </text>
       <text
         x="732"
         y="105"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#FAFAFA"
-        fontSize="12"
-        fontWeight="600"
+        font-size="12"
+        font-weight="600"
       >
         Source
       </text>
@@ -293,9 +293,9 @@
       <text
         x="400"
         y="175"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#A1A1AA"
-        fontSize="12"
+        font-size="12"
       >
         Document extraction: upload files, extract text using strategy-based workers
       </text>

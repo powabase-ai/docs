@@ -34,24 +34,24 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        strokeWidth="1.5"
+        stroke-width="1.5"
       />
       <text
         x="80"
         y="72"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#A855F7"
-        fontSize="22"
+        font-size="22"
       >
         &#128196;
       </text>
       <text
         x="80"
         y="100"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#FAFAFA"
-        fontSize="13"
-        fontWeight="600"
+        font-size="13"
+        font-weight="600"
       >
         Document
       </text>
@@ -63,8 +63,8 @@
         x2="170"
         y2="80"
         stroke="#27272A"
-        strokeWidth="1.5"
-        markerEnd="url(#arrowPP)"
+        stroke-width="1.5"
+        marker-end="url(#arrowPP)"
       />
 
       
@@ -77,24 +77,24 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        strokeWidth="1.5"
+        stroke-width="1.5"
       />
       <text
         x="240"
         y="72"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#A855F7"
-        fontSize="22"
+        font-size="22"
       >
         &#128451;
       </text>
       <text
         x="240"
         y="100"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#FAFAFA"
-        fontSize="13"
-        fontWeight="600"
+        font-size="13"
+        font-weight="600"
       >
         Source
       </text>
@@ -106,8 +106,8 @@
         x2="330"
         y2="80"
         stroke="#27272A"
-        strokeWidth="1.5"
-        markerEnd="url(#arrowPP)"
+        stroke-width="1.5"
+        marker-end="url(#arrowPP)"
       />
 
       
@@ -120,24 +120,24 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        strokeWidth="1.5"
+        stroke-width="1.5"
       />
       <text
         x="400"
         y="72"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#A855F7"
-        fontSize="22"
+        font-size="22"
       >
         &#128218;
       </text>
       <text
         x="400"
         y="100"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#FAFAFA"
-        fontSize="13"
-        fontWeight="600"
+        font-size="13"
+        font-weight="600"
       >
         Knowledge Base
       </text>
@@ -149,8 +149,8 @@
         x2="490"
         y2="80"
         stroke="#27272A"
-        strokeWidth="1.5"
-        markerEnd="url(#arrowPP)"
+        stroke-width="1.5"
+        marker-end="url(#arrowPP)"
       />
 
       
@@ -163,24 +163,24 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        strokeWidth="1.5"
+        stroke-width="1.5"
       />
       <text
         x="560"
         y="72"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#A855F7"
-        fontSize="22"
+        font-size="22"
       >
         &#129302;
       </text>
       <text
         x="560"
         y="100"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#FAFAFA"
-        fontSize="13"
-        fontWeight="600"
+        font-size="13"
+        font-weight="600"
       >
         Agent
       </text>
@@ -192,8 +192,8 @@
         x2="650"
         y2="80"
         stroke="#27272A"
-        strokeWidth="1.5"
-        markerEnd="url(#arrowPP)"
+        stroke-width="1.5"
+        marker-end="url(#arrowPP)"
       />
 
       
@@ -206,24 +206,24 @@
         ry="12"
         fill="#0E0E10"
         stroke="#27272A"
-        strokeWidth="1.5"
+        stroke-width="1.5"
       />
       <text
         x="720"
         y="72"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#A855F7"
-        fontSize="22"
+        font-size="22"
       >
         &#128100;
       </text>
       <text
         x="720"
         y="100"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#FAFAFA"
-        fontSize="13"
-        fontWeight="600"
+        font-size="13"
+        font-weight="600"
       >
         User
       </text>
@@ -232,9 +232,9 @@
       <text
         x="400"
         y="160"
-        textAnchor="middle"
+        text-anchor="middle"
         fill="#A1A1AA"
-        fontSize="12"
+        font-size="12"
       >
         End-to-end platform pipeline: ingest, index, retrieve, respond
       </text>

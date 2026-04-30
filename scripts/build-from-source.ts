@@ -226,11 +226,18 @@ function contentBlockToMdx(block: ContentBlock): string {
     }
 
     case "table": {
+      // MDX cell content needs `|` escaped (markdown table syntax) and `<`
+      // escaped when it isn't starting a JSX tag — otherwise content like
+      // "<100ms" tries to parse as a tag with name `1`.
+      const escapeCell = (cell: string) =>
+        cell
+          .replace(/\|/g, "\\|")
+          .replace(/<(?=[^a-zA-Z_/!?])/g, "&lt;");
       const lines: string[] = [];
-      lines.push("| " + block.headers.join(" | ") + " |");
+      lines.push("| " + block.headers.map(escapeCell).join(" | ") + " |");
       lines.push("| " + block.headers.map(() => "---").join(" | ") + " |");
       for (const row of block.rows) {
-        lines.push("| " + row.map((cell) => cell.replace(/\|/g, "\\|")).join(" | ") + " |");
+        lines.push("| " + row.map(escapeCell).join(" | ") + " |");
       }
       return lines.join("\n") + "\n";
     }

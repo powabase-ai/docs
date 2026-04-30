@@ -162,9 +162,50 @@ function jsxToSvg(src: string): string {
   // The {rows.map(...)} and {columns.map(...)} expressions in PlatformComparison
   // are the most complex. We'll handle this component separately.
 
-  // 15. Convert camelCase SVG attributes to SVG spec
-  // strokeWidth → stroke-width, etc. - SVG in JSX uses camelCase, but SVG spec uses kebab
-  // Actually JSX SVG uses camelCase which browsers also accept, so leave as-is
+  // 15. Convert camelCase SVG attributes to SVG spec kebab-case.
+  // Standalone SVG files served via <img src> are parsed in strict SVG mode;
+  // browsers will silently ignore camelCase attribute names like strokeWidth
+  // or textAnchor (which is why earlier exports rendered wrong). JSX-only
+  // attribute names (className, htmlFor) are not in SVG and don't apply here.
+  // Note: a small set of SVG attributes ARE camelCase per spec — viewBox,
+  // preserveAspectRatio, markerWidth, markerHeight, markerUnits, patternUnits,
+  // patternTransform, gradientUnits, gradientTransform, spreadMethod,
+  // pathLength — those are kept as-is.
+  const ATTR_MAP: Record<string, string> = {
+    strokeWidth: "stroke-width",
+    strokeDasharray: "stroke-dasharray",
+    strokeDashoffset: "stroke-dashoffset",
+    strokeLinecap: "stroke-linecap",
+    strokeLinejoin: "stroke-linejoin",
+    strokeOpacity: "stroke-opacity",
+    strokeMiterlimit: "stroke-miterlimit",
+    fillOpacity: "fill-opacity",
+    fillRule: "fill-rule",
+    clipPath: "clip-path",
+    clipRule: "clip-rule",
+    fontFamily: "font-family",
+    fontSize: "font-size",
+    fontWeight: "font-weight",
+    fontStyle: "font-style",
+    letterSpacing: "letter-spacing",
+    textAnchor: "text-anchor",
+    textDecoration: "text-decoration",
+    dominantBaseline: "dominant-baseline",
+    alignmentBaseline: "alignment-baseline",
+    markerStart: "marker-start",
+    markerMid: "marker-mid",
+    markerEnd: "marker-end",
+    stopColor: "stop-color",
+    stopOpacity: "stop-opacity",
+    pointerEvents: "pointer-events",
+    floodColor: "flood-color",
+    floodOpacity: "flood-opacity",
+    baselineShift: "baseline-shift",
+    wordSpacing: "word-spacing",
+  };
+  for (const [jsx, svg] of Object.entries(ATTR_MAP)) {
+    svgContent = svgContent.replace(new RegExp(`\\b${jsx}=`, "g"), `${svg}=`);
+  }
 
   // 16. Remove null returns from map (null fragments)
   svgContent = svgContent.replace(/\s*null\s*/g, "");

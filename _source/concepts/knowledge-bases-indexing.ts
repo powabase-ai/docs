@@ -390,7 +390,7 @@ response = requests.post(
       type: "table",
       headers: ["Method", "How It Works", "Latency", "Cost", "Best For"],
       rows: [
-        ["vector_search", "Embeds the query and finds nearest vectors via cosine similarity in pgvector", "Very low (<100ms)", "Low (one embed call)", "Semantic matching — captures meaning even without shared keywords"],
+        ["vector_search", "Embeds the query and finds nearest vectors via cosine similarity in pgvector", "Very low (~100ms)", "Low (one embed call)", "Semantic matching — captures meaning even without shared keywords"],
         ["full_text", "BM25 keyword scoring with stemming via PostgreSQL tsvector", "Low", "None (no API calls)", "Exact phrases, product names, error codes, IDs, proper nouns"],
         ["hybrid (recommended)", "Runs vector + BM25 in parallel, fuses results with Reciprocal Rank Fusion (k=60)", "Low", "Low (one embed call)", "Production RAG — robust across query types"],
         ["tree_search", "LLM selects documents, then selects sections by reasoning over ToC structure", "Medium (1–3s)", "Medium (two LLM calls)", "PageIndex KBs only — complex structural queries"],
