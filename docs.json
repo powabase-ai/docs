@@ -84,5 +84,11 @@
     "socials": {
       "discord": "https://discord.gg/k8W2A9KRtc"
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/guides/orchestration"
+    }
+  ]
 }
