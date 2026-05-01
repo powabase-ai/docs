@@ -15,7 +15,7 @@ const REPO_ROOT = path.resolve(
 );
 
 // IDs to skip (no corresponding MDX file)
-const SKIP_IDS = new Set(["ref-postgrest"]);
+const SKIP_IDS = new Set<string>();
 
 function selToPage(sel: PageSelection): string {
   if (sel.type === "guide") return `guides/${sel.guideId}`;
@@ -72,6 +72,12 @@ const config = {
       discord: "https://discord.gg/k8W2A9KRtc",
     },
   },
+  redirects: [
+    {
+      source: "/",
+      destination: "/concepts/platform-overview",
+    },
+  ],
 };
 
 const outPath = path.join(REPO_ROOT, "docs.json");

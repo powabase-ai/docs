@@ -61,6 +61,7 @@
               "api-reference/copilot",
               "api-reference/tools",
               "api-reference/context-handlers",
+              "api-reference/postgrest",
               "api-reference/auth-storage"
             ]
           }

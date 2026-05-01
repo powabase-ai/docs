@@ -1,6 +1,7 @@
 ---
 title: "Sessions"
 description: "Manage multi-turn chat sessions and their message/run history."
+icon: "message"
 ---
 
 Sessions store the conversation history between users and agents. Each session contains messages (user inputs, assistant responses, tool calls, tool results, plus the retrieved context that grounded each assistant turn) and can span multiple agent runs. Sessions also track reasoning configuration on a per-run basis when the agent is configured for reasoning. Sessions persist until explicitly deleted, enabling long-running multi-turn conversations.

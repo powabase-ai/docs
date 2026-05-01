@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { ALL_GUIDES } from "../_source/guides/index.ts";
 import { ALL_CONCEPTS } from "../_source/concepts/index.ts";
 import { ALL_REFERENCES } from "../_source/reference/index.ts";
+import { NAV_SECTIONS } from "../_source/navigation.ts";
 import type {
   Guide,
   ConceptPage,
@@ -49,6 +50,48 @@ function selToHref(target: NavCard["target"]): string {
   return "/";
 }
 
+// Lucide → Font Awesome icon name map. Mintlify accepts FA names directly in
+// the `icon` frontmatter field, so we translate the navigation's lucide names
+// (which mirror the Studio's built-in docs sidebar) into FA equivalents.
+const LUCIDE_TO_FA: Record<string, string> = {
+  BookOpen: "book-open",
+  Rocket: "rocket",
+  Key: "key",
+  Shield: "shield-halved",
+  Server: "server",
+  FileText: "file-lines",
+  Database: "database",
+  Bot: "robot",
+  Network: "diagram-project",
+  Workflow: "share-nodes",
+  Radio: "tower-broadcast",
+  Table2: "table",
+  Code: "code",
+  BrainCircuit: "microchip",
+  Wrench: "wrench",
+  Layers: "layer-group",
+  MessageSquare: "message",
+};
+
+function iconForPage(
+  type: "guide" | "concept" | "reference",
+  id: string,
+): string | undefined {
+  for (const section of NAV_SECTIONS) {
+    for (const item of section.items) {
+      const sel = item.selection;
+      const matches =
+        (sel.type === "guide" && type === "guide" && sel.guideId === id) ||
+        (sel.type === "concept" && type === "concept" && sel.conceptId === id) ||
+        (sel.type === "reference" && type === "reference" && sel.sectionId === id);
+      if (matches) {
+        return LUCIDE_TO_FA[item.icon] ?? item.icon.toLowerCase();
+      }
+    }
+  }
+  return undefined;
+}
+
 function codeGroup(snippets: { python: string; typescript: string; curl: string }): string {
   return [
     "<CodeGroup>",
@@ -69,9 +112,19 @@ function codeGroup(snippets: { python: string; typescript: string; curl: string 
   ].join("\n");
 }
 
-// Escape MDX-significant curly braces in raw prose text (not in code blocks).
+// Escape MDX-significant characters in raw prose text (not in code blocks):
+//   `{` / `}`  — JSX expression braces; need backslash escape
+//   `<` not starting a real tag — JSX would treat <FOO> or <1foo> as a
+//     component name and try to render it. Real HTML tags are lowercase
+//     (<a>, <p>, ...) so we only escape `<` when followed by something
+//     that isn't a-z — i.e. uppercase ASCII, digit, `_`, `*`, etc. — or
+//     when it's at end of string. Exception: `</` (closing tag) starts
+//     with lowercase or uppercase; we leave it.
 function mdxText(s: string): string {
-  return s.replace(/\{/g, "\\{").replace(/\}/g, "\\}");
+  return s
+    .replace(/\{/g, "\\{")
+    .replace(/\}/g, "\\}")
+    .replace(/<(?=[^a-z/!?])/g, "&lt;");
 }
 
 function write(filePath: string, content: string) {
@@ -120,7 +173,7 @@ function guideToMdx(guide: Guide): string {
   sections.push(frontmatter({
     title: guide.title,
     description: guide.description,
-    icon: "book-open",
+    icon: iconForPage("guide", guide.id) ?? "book-open",
   }));
   sections.push("");
 
@@ -227,12 +280,14 @@ function contentBlockToMdx(block: ContentBlock): string {
 
     case "table": {
       // MDX cell content needs `|` escaped (markdown table syntax) and `<`
-      // escaped when it isn't starting a JSX tag — otherwise content like
-      // "<100ms" tries to parse as a tag with name `1`.
+      // escaped when it isn't starting a real lowercase HTML tag.
+      // Lowercase letters keep meaning (<a>, <em>, ...); uppercase letters
+      // and digits would otherwise be parsed as JSX components (<FOO>, <1>)
+      // and break the build.
       const escapeCell = (cell: string) =>
         cell
           .replace(/\|/g, "\\|")
-          .replace(/<(?=[^a-zA-Z_/!?])/g, "&lt;");
+          .replace(/<(?=[^a-z/!?])/g, "&lt;");
       const lines: string[] = [];
       lines.push("| " + block.headers.map(escapeCell).join(" | ") + " |");
       lines.push("| " + block.headers.map(() => "---").join(" | ") + " |");
@@ -253,6 +308,7 @@ function conceptToMdx(concept: ConceptPage): string {
   sections.push(frontmatter({
     title: concept.title,
     description: concept.description,
+    icon: iconForPage("concept", concept.id),
   }));
   sections.push("");
 
@@ -320,6 +376,7 @@ function referenceToMdx(ref: ReferenceSection): string {
   sections.push(frontmatter({
     title: ref.title,
     description: ref.description,
+    icon: iconForPage("reference", ref.id),
   }));
   sections.push("");
 

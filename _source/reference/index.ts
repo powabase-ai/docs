@@ -6,6 +6,7 @@ import { contextHandlersReference } from "./context-handlers";
 import { copilotReference } from "./copilot";
 import { knowledgeBasesReference } from "./knowledge-bases";
 import { orchestrationsReference } from "./orchestrations";
+import { postgrestReference } from "./postgrest";
 import { sessionsReference } from "./sessions";
 import { sourcesReference } from "./sources";
 import { toolsReference } from "./tools";
@@ -21,6 +22,7 @@ export const ALL_REFERENCES: ReferenceSection[] = [
   copilotReference,
   toolsReference,
   contextHandlersReference,
+  postgrestReference,
   authStorageReference,
 ];
 
