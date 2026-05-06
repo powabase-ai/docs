@@ -220,6 +220,10 @@ curl -X PUT '{BASE_URL}/api/copilot/settings/model' -H "apikey: {API_KEY}" -H "A
 
 ## Error Responses
 
-| Status | Code | Description |
-| --- | --- | --- |
-| 404 | `session_not_found` | No copilot session exists with the given ID |
+Copilot routes return `{"error": "<message>"}`.
+
+| Status | Description |
+| --- | --- |
+| 400 | Missing required field (`workflow_id` on POST/GET, `message` on chat, `pre_snapshot` on snapshot, `model` on settings PUT) |
+| 400 | Settings PUT: `model` value fails registry validation (must be one of the allowed copilot model options) |
+| 404 | No workflow or copilot session exists with the given ID |

@@ -1,0 +1,174 @@
+---
+title: "AI Provider Keys"
+description: "Store, validate, and rotate per-project credentials for OpenAI, Anthropic, Google, and OpenRouter."
+icon: "key"
+---
+
+Each project stores its own set of model-provider API keys (OpenAI, Anthropic, Google, OpenRouter). Keys are encrypted at rest and decrypted only when an agent, workflow, or indexing job needs them. Stored keys are returned masked — the full secret is never echoed back.
+
+When you set a key, the platform calls the provider to validate it. Soft failures (provider down, transient network issue) still store the key with `is_valid: false`; hard failures (provider rejects the credential) reject the request without storing anything.
+
+## Common Patterns
+
+Configure keys once after creating a project, then let agents and indexing jobs pick them up automatically. Use the batch PUT endpoint when wiring keys from a setup script. Use the `/validate` endpoint to test a key before storing it (e.g. in an admin UI).
+
+### GET /api/ai-provider-keys
+
+List all configured provider keys. Each entry includes `id`, `provider`, `masked_key` (the only representation of the secret ever returned by the API), `is_valid`, `last_validated_at`, `created_at`, and `updated_at`.
+
+<CodeGroup>
+
+```python Python
+response = requests.get(f"{BASE_URL}/api/ai-provider-keys", headers=headers)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/ai-provider-keys`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/ai-provider-keys' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/ai-provider-keys
+
+Upsert a single provider key. Returns 201 on insert, 200 on update.
+
+<ParamField body="provider" type="string" required>
+One of: `openai`, `anthropic`, `google`, `openrouter`.
+</ParamField>
+
+<ParamField body="api_key" type="string" required>
+The provider's raw API key. Validated against the provider before storage.
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{ "provider": "openai", "api_key": "sk-..." }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/ai-provider-keys", headers=headers, json={"provider": "openai", "api_key": "sk-..."})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/ai-provider-keys`, { method: "POST", headers, body: JSON.stringify({ provider: "openai", api_key: "sk-..." }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/ai-provider-keys' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"provider": "openai", "api_key": "sk-..."}'
+```
+
+</CodeGroup>
+
+### PUT /api/ai-provider-keys
+
+Batch upsert. Pass any subset of providers. Null or empty values are no-ops (won't clear existing keys — use DELETE for that). On any hard-fail validation, the entire batch is rolled back.
+
+<RequestExample>
+
+```json Request
+{
+  "openai": "sk-...",
+  "anthropic": "sk-ant-...",
+  "google": null,
+  "openrouter": ""
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.put(f"{BASE_URL}/api/ai-provider-keys", headers=headers, json={"openai": "sk-...", "anthropic": "sk-ant-..."})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/ai-provider-keys`, { method: "PUT", headers, body: JSON.stringify({ openai: "sk-...", anthropic: "sk-ant-..." }) });
+```
+
+```bash cURL
+curl -X PUT '{BASE_URL}/api/ai-provider-keys' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"openai": "sk-...", "anthropic": "sk-ant-..."}'
+```
+
+</CodeGroup>
+
+### DELETE /api/ai-provider-keys/{provider}
+
+Remove a stored key. Returns 204 with no body.
+
+<ParamField path="provider" type="string" required>
+One of: `openai`, `anthropic`, `google`, `openrouter`.
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.delete(f"{BASE_URL}/api/ai-provider-keys/openai", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/ai-provider-keys/openai`, { method: "DELETE", headers });
+```
+
+```bash cURL
+curl -X DELETE '{BASE_URL}/api/ai-provider-keys/openai' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/ai-provider-keys/validate
+
+Validate a key against the provider without storing it. Returns `{ "is_valid": true }` on success, or `{ "is_valid": false, "error": "..." }` with the provider's rejection reason.
+
+<ParamField body="provider" type="string" required>
+One of: `openai`, `anthropic`, `google`, `openrouter`.
+</ParamField>
+
+<ParamField body="api_key" type="string" required>
+The key to test.
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{ "provider": "openai", "api_key": "sk-..." }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+result = requests.post(f"{BASE_URL}/api/ai-provider-keys/validate", headers=headers, json={"provider": "openai", "api_key": "sk-..."}).json()
+if not result["is_valid"]:
+    print("Rejected:", result.get("error"))
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/ai-provider-keys/validate`, { method: "POST", headers, body: JSON.stringify({ provider: "openai", api_key: "sk-..." }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/ai-provider-keys/validate' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"provider": "openai", "api_key": "sk-..."}'
+```
+
+</CodeGroup>
+
+## Error Responses
+
+Errors return `{"error": "<message>"}`; validation failures additionally include a `fields` map with the per-provider rejection reason.
+
+| Status | Description |
+| --- | --- |
+| 400 | `provider` is not one of the four supported values |
+| 400 | Provider rejected the key (hard fail). Response body: `{"error": "Validation failed", "fields": {"<provider>": "<reason>"}}` |
+| 401 | Missing or invalid auth headers |

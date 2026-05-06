@@ -640,6 +640,30 @@ curl -N -X POST '{BASE_URL}/api/agents/{id}/run/stream' -H "apikey: {API_KEY}" -
 
 </CodeGroup>
 
+### GET /api/agents/runs/{run_id}
+
+Fetch a single agent run by `run_id`, independent of session context. Returns: `id`, `run_id`, `session_id`, `parent_orchestration_run_id`, `parent_workflow_execution_id`, `status`, `input_messages`, `output_messages`, `content`, `usage`, `retrieved_context`, `error`, `started_at`, `completed_at`, `steps`, `events`, `tool_calls`, `reasoning_steps`, and `created_at`. The parent fields are `null` for top-level runs; `session_id` is `null` for delegated or workflow-block runs.
+
+For runs that belong to a session, ownership is enforced — the caller must own the session (or be using a service-role key). To avoid leaking existence, ownership failures are returned as 404, not 403.
+
+<ParamField path="run_id" type="string" required>Run ID</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.get(f"{BASE_URL}/api/agents/runs/{run_id}", headers=headers)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/agents/runs/${runId}`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/agents/runs/{run_id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
 ### POST /api/agents/runs/{run_id}/approve
 
 Approve or deny a pending tool call (human-in-the-loop).
@@ -674,8 +698,13 @@ curl -X POST '{BASE_URL}/api/agents/runs/{run_id}/approve' -H "apikey: {API_KEY}
 
 ## Error Responses
 
-| Status | Code | Description |
-| --- | --- | --- |
-| 400 | `invalid_config` | Invalid agent configuration (e.g., unsupported model, invalid temperature) |
-| 404 | `agent_not_found` | No agent exists with the given ID |
-| 409 | `tool_conflict` | The tool is already assigned to this agent |
+Agent routes return `{"error": "<message>"}`.
+
+| Status | Description |
+| --- | --- |
+| 400 | Missing or invalid required field (e.g. `name`, `tool_type`/`tool_name`, `knowledge_base_id`, MCP server `name`/`url`, hook `event`/`type`/`config`) |
+| 400 | Invalid tool-config schema (e.g. `schemas` is not a dict, or contains a system schema or invalid table names) |
+| 404 | No agent, tool/KB/MCP/hook assignment, or run exists with the given ID |
+| 404 | `/run` or `/run/stream`: the supplied `session_id` is not owned by the caller (returned as 404 to avoid leaking existence) |
+| 409 | Knowledge base already assigned to this agent |
+| 409 | An MCP server with this name already exists for this agent |

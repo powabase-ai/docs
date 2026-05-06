@@ -1,0 +1,137 @@
+---
+title: "Settings"
+description: "Read and override per-project configuration values managed through a typed registry."
+icon: "sliders"
+---
+
+Project Settings expose a typed registry of configuration knobs (extraction defaults, copilot behavior, model selection, etc.). The registry defines each setting's default; user overrides are stored per-project and merged at read time. Secret-typed settings are returned with a mask placeholder — sending that placeholder back is treated as "no change".
+
+Setting keys come from the registry as-is — most use `UPPER_SNAKE_CASE` (e.g. `EXTRACTION_DEFAULT_METHOD`, `COPILOT_TEMPERATURE`), with a few historical lowercase keys (e.g. `copilot_model`). All values are persisted as strings, so when sending bools or numbers, stringify them (`"true"`, `"0.7"`).
+
+Categories defined by the registry: `copilot`, `agents`, `tools`, `knowledge-indexing`, `knowledge-retrieval`, `compaction`, `sources`.
+
+## Common Patterns
+
+Use GET to discover the full set of settings (with their defaults, current values, types, and category metadata). Use PUT for bulk updates from a settings UI. Use DELETE on a key to revert a single override; use `reset-category` to revert an entire group at once.
+
+### GET /api/settings
+
+Return every setting in the registry with its default value, current override (if any), category, type, and (for secret settings) a masked representation. Category metadata accompanies the response so a UI can render labels and grouping.
+
+<CodeGroup>
+
+```python Python
+response = requests.get(f"{BASE_URL}/api/settings", headers=headers)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/settings`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/settings' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### PUT /api/settings
+
+Bulk-update overrides. The body is `{ "settings": { key: value, ... } }`. Each value is validated against its registry definition; on any failure the whole request is rejected with per-key errors and nothing is written.
+
+For secret settings, sending back the mask placeholder unchanged is silently skipped (so a UI can round-trip the full settings object without leaking or clobbering secrets).
+
+<RequestExample>
+
+```json Request
+{
+  "settings": {
+    "EXTRACTION_DEFAULT_METHOD": "mistral",
+    "COPILOT_TEMPERATURE": "0.5"
+  }
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.put(f"{BASE_URL}/api/settings", headers=headers, json={"settings": {"EXTRACTION_DEFAULT_METHOD": "mistral"}})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/settings`, { method: "PUT", headers, body: JSON.stringify({ settings: { EXTRACTION_DEFAULT_METHOD: "mistral" } }) });
+```
+
+```bash cURL
+curl -X PUT '{BASE_URL}/api/settings' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"settings": {"EXTRACTION_DEFAULT_METHOD": "mistral"}}'
+```
+
+</CodeGroup>
+
+### DELETE /api/settings/{key}
+
+Remove a single override, reverting that setting to its registry default. Returns the key and the default value (empty string for secret-typed settings).
+
+<ParamField path="key" type="string" required>
+A registry key. Unknown keys return 404.
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.delete(f"{BASE_URL}/api/settings/EXTRACTION_DEFAULT_METHOD", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/settings/EXTRACTION_DEFAULT_METHOD`, { method: "DELETE", headers });
+```
+
+```bash cURL
+curl -X DELETE '{BASE_URL}/api/settings/EXTRACTION_DEFAULT_METHOD' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/settings/reset-category
+
+Remove every override in a category at once. Returns the list of keys that were reset.
+
+<ParamField body="category" type="string" required>
+One of the registry categories: `copilot`, `agents`, `tools`, `knowledge-indexing`, `knowledge-retrieval`, `compaction`, `sources`. Unknown categories return 400.
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{ "category": "copilot" }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/settings/reset-category", headers=headers, json={"category": "copilot"})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/settings/reset-category`, { method: "POST", headers, body: JSON.stringify({ category: "copilot" }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/settings/reset-category' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"category": "copilot"}'
+```
+
+</CodeGroup>
+
+## Error Responses
+
+Settings routes return `{"error": "<message>"}` (PUT additionally includes `details` with per-key errors). The codes below are the documentation labels we use for each failure mode.
+
+| Status | Description |
+| --- | --- |
+| 400 | One or more setting values failed registry validation; PUT response includes a `details` map of per-key errors |
+| 400 | The given category is not in the registry (`reset-category`) |
+| 400 | No settings provided (PUT body has empty `settings` object) |
+| 404 | The given key is not in the registry (DELETE) |

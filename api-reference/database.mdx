@@ -1,0 +1,208 @@
+---
+title: "Database (Authenticated proxy)"
+description: "Auth-required CRUD over your project's public schema, plus a table introspection endpoint."
+icon: "database"
+---
+
+The `/api/database/*` endpoints are a thin auth-required proxy over PostgREST, scoped to your project's `public` schema. They use the same operators and conventions as PostgREST under the hood, but every call requires a valid Powabase auth token (no anon-key access).
+
+System schemas (`ai`, `auth`, `storage`, `pg_catalog`, `information_schema`, etc.) are blocked at this layer — those are managed via dedicated routes (`/api/agents`, `/api/knowledge-bases`, ...).
+
+When you need the full PostgREST query language (filter operators, embedded relations, ordering, RPC calls), use the [PostgREST endpoints](/api-reference/postgrest) instead. Use this proxy when you want a single auth model across all platform calls and don't need the full PostgREST surface.
+
+## Common Patterns
+
+Discover tables with `GET /tables`, then read or mutate rows by primary key. The `/openapi` endpoint returns the project's full PostgREST OpenAPI spec — useful for UIs that render an API reference for user-defined tables.
+
+### GET /api/database/tables
+
+List tables in the schema (only `public` is currently allowed). Returns `{ "tables": ["users", "orders", ...] }`.
+
+<ParamField query="schema" type="string">
+Defaults to `public`. Any other value returns 400.
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/database/tables", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/database/tables`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/database/tables' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### GET /api/database/tables/{table}
+
+List rows from a table via PostgREST. Supports `limit` (default 50) and `offset` query parameters.
+
+<ParamField path="table" type="string" required>
+Table name in the public schema. Must match `^[A-Za-z_][A-Za-z0-9_]*$`.
+</ParamField>
+
+<ParamField query="limit" type="integer">Defaults to 50.</ParamField>
+<ParamField query="offset" type="integer">Defaults to 0.</ParamField>
+<ParamField query="schema" type="string">Defaults to `public`.</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/database/tables/users?limit=20", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/database/tables/users?limit=20`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/database/tables/users?limit=20' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### GET /api/database/tables/{table}/{row_id}
+
+Fetch a single row by `id`. Returns the row as a JSON object (uses PostgREST's `Accept: application/vnd.pgrst.object+json`).
+
+<ParamField path="table" type="string" required>Table name</ParamField>
+<ParamField path="row_id" type="string" required>Row primary key</ParamField>
+<ParamField query="schema" type="string">Defaults to `public`.</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/database/tables/users/{user_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/database/tables/users/${userId}`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/database/tables/users/{user_id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/database/tables/{table}
+
+Insert a row. The body is forwarded to PostgREST with `Prefer: return=representation`, so the response contains the inserted row.
+
+<ParamField path="table" type="string" required>Table name</ParamField>
+
+<RequestExample>
+
+```json Request
+{ "email": "ana@acme.io", "role": "admin" }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/database/tables/users", headers=headers, json={"email": "ana@acme.io"})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/database/tables/users`, { method: "POST", headers, body: JSON.stringify({ email: "ana@acme.io" }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/database/tables/users' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"email": "ana@acme.io"}'
+```
+
+</CodeGroup>
+
+### PATCH /api/database/tables/{table}/{row_id}
+
+Update a row by `id`. Returns the updated row.
+
+<ParamField path="table" type="string" required>Table name</ParamField>
+<ParamField path="row_id" type="string" required>Row primary key</ParamField>
+
+<RequestExample>
+
+```json Request
+{ "role": "viewer" }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.patch(f"{BASE_URL}/api/database/tables/users/{user_id}", headers=headers, json={"role": "viewer"})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/database/tables/users/${userId}`, { method: "PATCH", headers, body: JSON.stringify({ role: "viewer" }) });
+```
+
+```bash cURL
+curl -X PATCH '{BASE_URL}/api/database/tables/users/{user_id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"role": "viewer"}'
+```
+
+</CodeGroup>
+
+### DELETE /api/database/tables/{table}/{row_id}
+
+Delete a row by `id`.
+
+<ParamField path="table" type="string" required>Table name</ParamField>
+<ParamField path="row_id" type="string" required>Row primary key</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.delete(f"{BASE_URL}/api/database/tables/users/{user_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/database/tables/users/${userId}`, { method: "DELETE", headers });
+```
+
+```bash cURL
+curl -X DELETE '{BASE_URL}/api/database/tables/users/{user_id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### GET /api/database/openapi
+
+Return the project's full PostgREST OpenAPI/Swagger spec. The frontend uses this to render an API reference for user-defined tables; you can use it to drive a settings UI or to introspect the schema programmatically.
+
+<CodeGroup>
+
+```python Python
+spec = requests.get(f"{BASE_URL}/api/database/openapi", headers=headers).json()
+```
+
+```typescript TypeScript
+const spec = await fetch(`${BASE_URL}/api/database/openapi`, { headers }).then(r => r.json());
+```
+
+```bash cURL
+curl '{BASE_URL}/api/database/openapi' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+## Error Responses
+
+Errors from this proxy return `{"error": "<message>"}`. Errors from the upstream PostgREST/Postgres are forwarded verbatim with their original status code.
+
+| Status | Description |
+| --- | --- |
+| 400 | Table name failed validation (must match `^[A-Za-z_][A-Za-z0-9_]*$`) |
+| 400 | Schema is not `public` (only `public` is exposed via this proxy) |
+| 401 | Missing or invalid auth headers |
+| 500 | `GET /tables` failed against `information_schema` |
+| 502 | PostgREST connection failed (network error, gateway unreachable) |
+| 4xx/5xx | Forwarded from PostgREST (e.g. constraint violation, RLS denial) |

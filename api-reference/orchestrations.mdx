@@ -304,9 +304,155 @@ curl '{BASE_URL}/api/orchestrations/runs/{run_id}' -H "apikey: {API_KEY}" -H "Au
 
 </CodeGroup>
 
+## Hooks
+
+Orchestration hooks fire at lifecycle events (e.g. `before_run`, `after_run`) and can call out to webhooks or other handler types. Hooks fire in `position` order; setting `enabled: false` keeps the row but skips execution.
+
+### POST /api/orchestrations/{id}/hooks
+
+Add a hook.
+
+<ParamField path="id" type="string" required>Orchestration ID</ParamField>
+
+<ParamField body="event" type="string" required>Lifecycle event name (e.g. `before_run`, `after_run`).</ParamField>
+<ParamField body="type" type="string" required>Hook handler type (e.g. `webhook`).</ParamField>
+<ParamField body="config" type="object" required>Handler-specific configuration (for `webhook` type, includes `url`).</ParamField>
+<ParamField body="matcher" type="object">Optional condition narrowing when the hook fires.</ParamField>
+<ParamField body="enabled" type="boolean">Defaults to `true`.</ParamField>
+<ParamField body="position" type="integer">Execution order within the event. Defaults to `0`.</ParamField>
+
+<RequestExample>
+
+```json Request
+{
+  "event": "after_run",
+  "type": "webhook",
+  "config": { "url": "https://example.com/orch-hook" },
+  "enabled": true,
+  "position": 0
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/orchestrations/{orch_id}/hooks", headers=headers, json={"event": "after_run", "type": "webhook", "config": {"url": "https://example.com/hook"}})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}/hooks`, { method: "POST", headers, body: JSON.stringify({ event: "after_run", type: "webhook", config: { url: "https://example.com/hook" } }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/orchestrations/{id}/hooks' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"event": "after_run", "type": "webhook", "config": {"url": "..."}}'
+```
+
+</CodeGroup>
+
+### GET /api/orchestrations/{id}/hooks
+
+List hooks for the orchestration, ordered by `position`.
+
+<ParamField path="id" type="string" required>Orchestration ID</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/orchestrations/{orch_id}/hooks", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}/hooks`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/orchestrations/{id}/hooks' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### DELETE /api/orchestrations/{id}/hooks/{hook_id}
+
+Remove a hook.
+
+<ParamField path="id" type="string" required>Orchestration ID</ParamField>
+<ParamField path="hook_id" type="string" required>Hook ID</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.delete(f"{BASE_URL}/api/orchestrations/{orch_id}/hooks/{hook_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}/hooks/${hookId}`, { method: "DELETE", headers });
+```
+
+```bash cURL
+curl -X DELETE '{BASE_URL}/api/orchestrations/{id}/hooks/{hook_id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+## Sessions
+
+Session-level reads on orchestrations. The streaming `/run/stream` endpoint returns a `session_id` you can use here to fetch history.
+
+### GET /api/orchestrations/{id}/sessions
+
+List the most recent 100 sessions for an orchestration. Each entry includes `session_id`, `run_count`, `first_message`, `last_activity_at`, and `created_at`.
+
+<ParamField path="id" type="string" required>Orchestration ID</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/orchestrations/{orch_id}/sessions", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}/sessions`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/orchestrations/{id}/sessions' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### GET /api/orchestrations/{id}/sessions/{session_id}/messages
+
+Assembled messages for a session. Each assistant message carries per-run reasoning replay metadata (`reasoning_requested`, `reasoning_duration_ms`, `reasoning`, `events`) so a chat UI can re-render the original "Thought for X.Xs" pill on refresh. Tool calls are attached per-message via `tool_calls`. The legacy top-level `events` field is preserved for older clients.
+
+<ParamField path="id" type="string" required>Orchestration ID</ParamField>
+<ParamField path="session_id" type="string" required>Session ID</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/orchestrations/{orch_id}/sessions/{session_id}/messages", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}/sessions/${sessionId}/messages`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/orchestrations/{id}/sessions/{session_id}/messages' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
 ## Error Responses
 
-| Status | Code | Description |
-| --- | --- | --- |
-| 400 | `no_entities` | The orchestration has no entity agents — add at least one before running |
-| 404 | `orchestration_not_found` | No orchestration exists with the given ID |
+Orchestration routes return `{"error": "<message>"}` (no structured error code field).
+
+| Status | Description |
+| --- | --- |
+| 400 | The orchestration has no entity agents — add at least one before running |
+| 400 | Hook POST is missing one of `event`, `type`, or `config` |
+| 404 | No orchestration exists with the given ID |
+| 404 | No hook exists with the given ID for this orchestration |
+| 404 | No orchestration session with the given ID |

@@ -400,8 +400,17 @@ curl -X DELETE '{BASE_URL}/api/sources/{id}' \
 
 ## Error Responses
 
-| Status | Code | Description |
-| --- | --- | --- |
-| 400 | `invalid_file` | The uploaded file type is not supported or the file is corrupted |
-| 404 | `source_not_found` | No source exists with the given ID |
-| 413 | `file_too_large` | The uploaded file exceeds the maximum allowed size |
+Source routes return `{"error": "<message>"}`.
+
+| Status | Description |
+| --- | --- |
+| 400 | Upload missing the `file` form field, no filename, or invalid `metadata` JSON |
+| 400 | Upload or `/import-from-storage`: unsupported file extension (allowed: `.pdf`, `.txt`, `.md`, `.docx`, `.xlsx`, `.xls`, `.pptx`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.tiff`) |
+| 400 | Upload, `/import-from-storage`, or `/reextract`: invalid `extraction_model` (must be one of the configured PDF extraction methods) |
+| 400 | `/import-from-storage`: missing `bucket` or `path` |
+| 400 | `/import-url`: missing/invalid `mode` (`urls`/`crawl`/`sitemap`), missing or empty URL list, invalid sitemap URL, or no URLs found in sitemap |
+| 400 | PATCH: no body or no valid fields to update |
+| 400 | `/page-texts`: invalid `page` query (must be an integer ≥ 1); `/derivatives/{type}/download`: invalid `index` query |
+| 404 | No source exists with the given ID; referenced file not found in storage (`/import-from-storage`); requested page or derivative does not exist; no file/derivative available for download |
+| 409 | `/cancel`: extraction is not in a cancellable state (must be `pending` or `extracting`) |
+| 500 | Upload, import, extraction, page download, or derivative download failed — body contains the underlying error message |

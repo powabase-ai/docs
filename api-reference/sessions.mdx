@@ -82,6 +82,57 @@ curl '{BASE_URL}/api/sessions/{id}/runs' -H "apikey: {API_KEY}" -H "Authorizatio
 
 </CodeGroup>
 
+### GET /api/sessions/{id}/runs/{run_id}/retrieved-context
+
+Get the retrieved context (knowledge-base chunks fetched during retrieval) for a single run within a session. Useful for debugging RAG behavior — you can see exactly which chunks the agent saw before generating a given turn, separate from the assembled `/messages` view.
+
+<ParamField path="id" type="string" required>Session ID</ParamField>
+<ParamField path="run_id" type="string" required>Run ID (the `run_id` of an `agent_run` belonging to this session)</ParamField>
+
+<ResponseExample>
+
+```json Response
+{
+  "session_id": "sess_abc",
+  "run_id": "run_xyz",
+  "retrieved_context": [
+    { "_type": "retrieval_diagnostics", "...": "..." },
+    {
+      "id": "chunk-uuid",
+      "text": "...",
+      "score": 0.84,
+      "retrieval_score": 0.71,
+      "reranker_score": 0.84,
+      "source_id": "src-uuid",
+      "source_name": "Q3-2025.pdf",
+      "knowledge_base_id": "kb-uuid",
+      "kb_name": "Finance docs",
+      "indexing_strategy": "chunk_embed",
+      "meta": {},
+      "included_in_context": true
+    }
+  ]
+}
+```
+
+</ResponseExample>
+
+<CodeGroup>
+
+```python Python
+response = requests.get(f"{BASE_URL}/api/sessions/{session_id}/runs/{run_id}/retrieved-context", headers=headers)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/sessions/${sessionId}/runs/${runId}/retrieved-context`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/sessions/{id}/runs/{run_id}/retrieved-context' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
 ### DELETE /api/sessions/{id}
 
 Delete a session and all its runs.
@@ -108,6 +159,9 @@ curl -X DELETE '{BASE_URL}/api/sessions/{id}' -H "apikey: {API_KEY}" -H "Authori
 
 ## Error Responses
 
-| Status | Code | Description |
-| --- | --- | --- |
-| 404 | `session_not_found` | No session exists with the given ID |
+Errors return `{"error": "<message>"}`.
+
+| Status | Description |
+| --- | --- |
+| 404 | No session exists with the given ID |
+| 404 | The given run does not exist within this session (`/runs/{run_id}/retrieved-context`) |

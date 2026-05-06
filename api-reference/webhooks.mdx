@@ -1,0 +1,116 @@
+---
+title: "Webhooks"
+description: "Trigger deployed workflows from external systems via signed HTTP calls."
+icon: "webhook"
+---
+
+Webhooks let external systems (Stripe, GitHub, form submissions, internal services) trigger a deployed workflow over HTTP. The webhook ID and secret are minted when you arm a workflow for webhook execution — see the [workflow guide](/guides/workflows-programmatic) for the full deploy + arm flow.
+
+The trigger endpoint is **unauthenticated by design** (no `apikey` / `Authorization: Bearer {API_KEY}` headers needed). Authentication is per-webhook: the secret token returned by the arm step must be presented either in an `Authorization: Bearer <secret>` header or as a `?token=<secret>` query parameter.
+
+## Common Patterns
+
+A workflow's webhook lives in one of two states:
+
+- **Deployed** — the webhook is permanently active and accepts unlimited calls.
+- **Armed for single use** — the webhook accepts exactly one call within the arm window; after firing, you must re-arm. This is useful for one-shot integrations (testing, manual triggers) where you don't want a long-lived endpoint.
+
+The trigger endpoint behaves identically in both modes. The difference is only in how the workflow was prepared.
+
+### POST /api/webhooks/{webhook_id}
+
+Trigger a workflow. The request body becomes the workflow's input variables. Returns the execution outcome synchronously (the workflow runs inline with a 5-minute timeout).
+
+<ParamField path="webhook_id" type="string" required>
+The webhook ID returned when the workflow was armed/deployed. Must be a valid UUID.
+</ParamField>
+
+<ParamField header="Authorization" type="string">
+`Bearer <webhook_secret>` — preferred over the query-param form.
+</ParamField>
+
+<ParamField query="token" type="string">
+Webhook secret. Use this when you can't set headers (e.g., a webhook source that only supports a URL).
+</ParamField>
+
+<RequestExample>
+
+```json Body
+{
+  "customer_email": "user@example.com",
+  "amount_cents": 4900
+}
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200 — success
+{
+  "execution_id": "exec-uuid",
+  "status": "completed",
+  "output": { "summary": "..." }
+}
+```
+
+```json 504 — timeout
+{
+  "error": "Execution timed out after 300s",
+  "code": "execution_timeout",
+  "execution_id": "exec-uuid"
+}
+```
+
+</ResponseExample>
+
+<CodeGroup>
+
+```python Python
+# Header auth (recommended)
+response = requests.post(
+    f"{BASE_URL}/api/webhooks/{webhook_id}",
+    headers={"Authorization": f"Bearer {webhook_secret}", "Content-Type": "application/json"},
+    json={"customer_email": "user@example.com"},
+)
+
+# Or query-param auth (when headers aren't an option)
+response = requests.post(
+    f"{BASE_URL}/api/webhooks/{webhook_id}?token={webhook_secret}",
+    json={"customer_email": "user@example.com"},
+)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/webhooks/${webhookId}`, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${webhookSecret}`, "Content-Type": "application/json" },
+  body: JSON.stringify({ customer_email: "user@example.com" }),
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/webhooks/{webhook_id}' \
+  -H "Authorization: Bearer {webhook_secret}" \
+  -H "Content-Type: application/json" \
+  -d '{"customer_email": "user@example.com"}'
+```
+
+</CodeGroup>
+
+<Note>
+The trigger endpoint executes the workflow inline and returns the final output. For long-running workflows that exceed the 5-minute synchronous limit, design the workflow to acknowledge the request quickly and continue work asynchronously (e.g. dispatch via a `general_api` block to a background processor).
+</Note>
+
+## Error Responses
+
+Errors return `{"error": "<message>", "error_code": "<UPPER_SNAKE_CODE>"}`. The 401 responses additionally omit `error_code` (they're a plain `{"error": "Unauthorized"}`).
+
+| Status | `error_code` | Description |
+| --- | --- | --- |
+| 400 | `VALIDATION_ERROR` | `webhook_id` is not a valid UUID |
+| 401 | — | Missing or incorrect webhook secret |
+| 403 | — | Webhook is not active (workflow not deployed and no live arm token) |
+| 404 | `WORKFLOW_NOT_FOUND` | No workflow has a webhook block with this ID |
+| 500 | `EXECUTION_FAILED` | The workflow ran but raised an error. The `execution_id` is included for debugging |
+| 504 | `EXECUTION_TIMEOUT` | The workflow exceeded the 5-minute synchronous limit |
