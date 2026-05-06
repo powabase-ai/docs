@@ -101,6 +101,10 @@ curl '{BASE_URL}/api/context-handlers/{id}' -H "apikey: {API_KEY}" -H "Authoriza
 
 ## Error Responses
 
-| Status | Code | Description |
-| --- | --- | --- |
-| 400 | `invalid_config` | Invalid knowledge base configuration (e.g., missing knowledge_base_id or invalid top_k) |
+Context-handler routes return `{"error": "<message>"}`.
+
+| Status | Description |
+| --- | --- |
+| 400 | `query` is required (POST), or `knowledge_bases` is required and must be non-empty (POST) |
+| 404 | No context handler exists with the given ID |
+| 500 | Retrieval failed during handler creation — body contains the underlying error message |

@@ -58,11 +58,15 @@
               "api-reference/sessions",
               "api-reference/orchestrations",
               "api-reference/workflows",
+              "api-reference/webhooks",
               "api-reference/copilot",
               "api-reference/tools",
               "api-reference/context-handlers",
+              "api-reference/database",
               "api-reference/postgrest",
-              "api-reference/auth-storage"
+              "api-reference/auth-storage",
+              "api-reference/ai-provider-keys",
+              "api-reference/settings"
             ]
           }
         ]

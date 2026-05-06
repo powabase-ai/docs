@@ -165,26 +165,198 @@ curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/sources' -H "apikey: {API_KEY}
 
 </CodeGroup>
 
-### POST /api/knowledge-bases/{id}/reindex
+### POST /api/knowledge-bases/{id}/sources/{indexed_source_id}/cancel
 
-Reindex all sources in the knowledge base.
+Cancel an in-progress indexing task. Only `pending` and `indexing` rows can be cancelled — anything already `indexed`, `failed`, or `cancelled` returns 409. Returns 404 if no `indexed_sources` row matches the given pair.
 
 <ParamField path="id" type="string" required>
 KB ID
 </ParamField>
 
+<ParamField path="indexed_source_id" type="string" required>
+The `indexed_sources.id` returned when the source was added (not the source UUID itself).
+</ParamField>
+
 <CodeGroup>
 
 ```python Python
-response = requests.post(f"{BASE_URL}/api/knowledge-bases/{kb_id}/reindex", headers=headers)
+response = requests.post(f"{BASE_URL}/api/knowledge-bases/{kb_id}/sources/{indexed_source_id}/cancel", headers=headers)
 ```
 
 ```typescript TypeScript
-await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/reindex`, { method: "POST", headers });
+await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/sources/${indexedSourceId}/cancel`, { method: "POST", headers });
 ```
 
 ```bash cURL
-curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/reindex' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/sources/{indexed_source_id}/cancel' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/knowledge-bases/{id}/reindex
+
+Re-index sources in the knowledge base. The body is optional — empty body re-indexes every source. Pass `indexed_source_ids` to re-index a specific subset, or `failed_only: true` to retry only sources currently in `failed` status.
+
+<ParamField path="id" type="string" required>
+KB ID
+</ParamField>
+
+<ParamField body="indexed_source_ids" type="string[]">
+Restrict to specific `indexed_sources.id` values. If supplied, this wins — `failed_only` is ignored.
+</ParamField>
+
+<ParamField body="failed_only" type="boolean">
+When true (and `indexed_source_ids` is empty), re-index only sources currently in `failed` status. Returns `{"status": "noop"}` if there are none.
+</ParamField>
+
+<RequestExample>
+
+```json Selective
+{ "indexed_source_ids": ["uuid-1", "uuid-2"] }
+```
+
+```json Failed only
+{ "failed_only": true }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+# Re-index everything
+requests.post(f"{BASE_URL}/api/knowledge-bases/{kb_id}/reindex", headers=headers)
+
+# Retry only failed sources
+requests.post(f"{BASE_URL}/api/knowledge-bases/{kb_id}/reindex", headers=headers, json={"failed_only": True})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/reindex`, { method: "POST", headers, body: JSON.stringify({ failed_only: true }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/reindex' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"failed_only": true}'
+```
+
+</CodeGroup>
+
+### POST /api/knowledge-bases/{id}/items
+
+Fetch the indexed content items (chunks, nodes, or extracted JSON) for one or more source documents. The response shape depends on the KB's `indexing_config.strategy` — every item carries `id`, `source_id`, `text`, and `meta`, plus strategy-specific extras.
+
+This is the right endpoint when you want to enumerate everything the platform produced from a source — for export, debugging, or to consume Doc2JSON `extracted_json` directly without going through retrieval.
+
+<ParamField path="id" type="string" required>
+KB ID
+</ParamField>
+
+<ParamField body="source_ids" type="string[]" required>
+Non-empty list of source UUIDs (`sources.id`). Items from sources that were never added to this KB return zero rows for that ID rather than an error.
+</ParamField>
+
+<ParamField body="limit" type="integer">
+Max items to return. Default 1000, capped at 10000.
+</ParamField>
+
+<ParamField body="offset" type="integer">
+Pagination offset. Default 0.
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{
+  "source_ids": ["src-uuid-1", "src-uuid-2"],
+  "limit": 1000,
+  "offset": 0
+}
+```
+
+</RequestExample>
+
+The `text` field is the embeddable representation of the item (full chunk text for `chunk_embed`, node body for `page_index`/`graph_index`, document summary for `full_document`/`doc2json`). Strategy-specific extras:
+
+| Strategy | Source table | `text` is | Extra fields |
+| --- | --- | --- | --- |
+| `chunk_embed` | `ai.chunks` | full chunk text | `chunk_index`, `start_char`, `end_char`, `tokens` |
+| `page_index` | `ai.page_index_nodes` | node text | `node_id`, `title`, `depth`, `parent_node_id` |
+| `graph_index` | `ai.graph_index_nodes` | node text | `node_id`, `title`, `depth`, `parent_node_id` |
+| `full_document` | `ai.full_documents` | document summary | `full_text_path` |
+| `doc2json` | `ai.doc2json_documents` | document summary | `extracted_json` |
+
+<ResponseExample>
+
+```json Doc2JSON response
+{
+  "items": [
+    {
+      "id": "doc-uuid",
+      "source_id": "src-uuid-1",
+      "text": "Q3 2025 financials summary...",
+      "meta": { "page_count": 42 },
+      "extracted_json": {
+        "revenue_usd": 12345678,
+        "fiscal_period": "Q3-2025",
+        "key_risks": ["supply chain", "fx"]
+      }
+    }
+  ],
+  "total": 1,
+  "strategy": "doc2json",
+  "source_ids": ["src-uuid-1"]
+}
+```
+
+```json chunk_embed response
+{
+  "items": [
+    {
+      "id": "chunk-uuid",
+      "source_id": "src-uuid-1",
+      "text": "Lorem ipsum...",
+      "meta": {},
+      "chunk_index": 0,
+      "start_char": 0,
+      "end_char": 487,
+      "tokens": 112
+    }
+  ],
+  "total": 348,
+  "strategy": "chunk_embed",
+  "source_ids": ["src-uuid-1"]
+}
+```
+
+</ResponseExample>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/api/knowledge-bases/{kb_id}/items",
+    headers=headers,
+    json={"source_ids": [source_id], "limit": 1000},
+)
+data = response.json()
+for item in data["items"]:
+    if data["strategy"] == "doc2json":
+        print(item["extracted_json"])
+    else:
+        print(item["text"])
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/items`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ source_ids: [sourceId], limit: 1000 }),
+});
+const data = await res.json();
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/items' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"source_ids": ["src-uuid"], "limit": 1000}'
 ```
 
 </CodeGroup>
@@ -227,10 +399,243 @@ curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/search' -H "apikey: {API_KEY}"
 
 </CodeGroup>
 
+## Metadata Enrichment
+
+Metadata enrichment runs an LLM over each indexed item to extract structured fields (text, boolean, number, enum) into a per-KB metadata table. The enriched values can then be used as filters in the `/search` `filter_metadata` parameter. PUT triggers re-enrichment only when something material changes (see the endpoint notes below).
+
+### PUT /api/knowledge-bases/{id}/enrichment
+
+Create or replace the enrichment config. Re-enrichment behavior depends on what changed:
+
+- **Changes to `fields` or `llm_model`** — drop the metadata table, recreate it, and re-enrich every item from scratch. Returns 409 if a run is already in progress.
+- **Toggle of `use_multimodal`** — keep the table, but re-enrich because results differ with/without images. Returns 409 if a run is in progress.
+- **`max_tokens`-only change** — lightweight update; no re-enrichment.
+- **Identical body** — no-op.
+
+The response body is `{ "config": {...}, "re_enrichment_triggered": <bool> }`.
+
+<ParamField path="id" type="string" required>KB ID</ParamField>
+
+<ParamField body="fields" type="object[]" required>
+Field definitions. Each: `{ name, description, type: "text"|"boolean"|"number"|"enum", enum_values?: string[] }`. `name` must be SQL-safe (alphanumeric + underscores, starts with a letter) and not in the reserved set (`id`, `item_id`, `item_type`, `enriched_at`, `_enrichment_error`). `enum` types require `enum_values` with at least 2 entries.
+</ParamField>
+
+<ParamField body="llm_model" type="string">Model identifier (e.g. `gpt-4o`).</ParamField>
+<ParamField body="max_tokens" type="integer">Max tokens per enrichment call.</ParamField>
+<ParamField body="use_multimodal" type="boolean">When true, the enricher sees page images alongside text.</ParamField>
+
+<RequestExample>
+
+```json Request
+{
+  "fields": [
+    { "name": "topic", "description": "Main topic of the chunk", "type": "text" },
+    { "name": "is_legal", "description": "True if discusses legal matters", "type": "boolean" },
+    { "name": "severity", "description": "Risk level", "type": "enum", "enum_values": ["low", "medium", "high"] }
+  ],
+  "llm_model": "gpt-4o",
+  "max_tokens": 500,
+  "use_multimodal": false
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.put(f"{BASE_URL}/api/knowledge-bases/{kb_id}/enrichment", headers=headers, json={"fields": [...], "llm_model": "gpt-4o"})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/enrichment`, { method: "PUT", headers, body: JSON.stringify({ fields: [...], llm_model: "gpt-4o" }) });
+```
+
+```bash cURL
+curl -X PUT '{BASE_URL}/api/knowledge-bases/{id}/enrichment' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"fields": [{"name": "topic", "description": "Main topic", "type": "text"}], "llm_model": "gpt-4o"}'
+```
+
+</CodeGroup>
+
+### GET /api/knowledge-bases/{id}/enrichment
+
+Get the current enrichment config and run status. Returns `{"config": null}` if no config exists. The `config` includes `status` (`idle`, `enriching`, `completed`, `completed_with_errors`, `failed`), `enriched_count`, `total_count`, and the dynamic `metadata_table_name`.
+
+<ParamField path="id" type="string" required>KB ID</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/knowledge-bases/{kb_id}/enrichment", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/enrichment`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/knowledge-bases/{id}/enrichment' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### DELETE /api/knowledge-bases/{id}/enrichment
+
+Remove the enrichment config and drop its metadata table. Returns 404 if no enrichment config exists, or 409 if a run is in progress.
+
+<ParamField path="id" type="string" required>KB ID</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.delete(f"{BASE_URL}/api/knowledge-bases/{kb_id}/enrichment", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/enrichment`, { method: "DELETE", headers });
+```
+
+```bash cURL
+curl -X DELETE '{BASE_URL}/api/knowledge-bases/{id}/enrichment' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/knowledge-bases/{id}/enrichment/run
+
+Manually trigger enrichment. With `incremental: true` only items missing metadata are processed; with `retry_failed: true` items previously marked failed are retried.
+
+<ParamField path="id" type="string" required>KB ID</ParamField>
+<ParamField body="incremental" type="boolean">Skip items that already have metadata.</ParamField>
+<ParamField body="retry_failed" type="boolean">Re-enrich items currently marked failed.</ParamField>
+
+<RequestExample>
+
+```json Request
+{ "incremental": true, "retry_failed": false }
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/knowledge-bases/{kb_id}/enrichment/run", headers=headers, json={"incremental": True})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/enrichment/run`, { method: "POST", headers, body: JSON.stringify({ incremental: true }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/enrichment/run' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"incremental": true}'
+```
+
+</CodeGroup>
+
+### GET /api/knowledge-bases/{id}/enrichment/results
+
+Fetch enriched metadata for specific items. Pass a comma-separated `item_ids` query parameter. Returns per-item field values plus `item_errors` for any items that failed enrichment.
+
+<ParamField path="id" type="string" required>KB ID</ParamField>
+
+<ParamField query="item_ids" type="string" required>
+Comma-separated item UUIDs (chunk/node IDs from `/items`).
+</ParamField>
+
+<ResponseExample>
+
+```json Response
+{
+  "results": {
+    "chunk-uuid-1": { "topic": "billing", "is_legal": false, "severity": "low" }
+  },
+  "fields": [...],
+  "item_errors": {
+    "chunk-uuid-2": "LLM returned invalid JSON"
+  }
+}
+```
+
+</ResponseExample>
+
+<CodeGroup>
+
+```python Python
+ids = ",".join([chunk_a, chunk_b])
+requests.get(f"{BASE_URL}/api/knowledge-bases/{kb_id}/enrichment/results?item_ids={ids}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/enrichment/results?item_ids=${ids}`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/knowledge-bases/{id}/enrichment/results?item_ids=uuid1,uuid2' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+## Graph-index re-enrichment
+
+Specific to KBs whose `indexing_config.strategy` is `graph_index`. These endpoints re-run reference enrichment (Stages 2+3) without a full reindex.
+
+### POST /api/knowledge-bases/{id}/graph-enrichment/run
+
+Re-run graph reference enrichment. Optionally limit to a single `indexed_source_id`, or set `retry_failed: true` to retry only the previously-failed references. Returns 400 if the KB strategy is not `graph_index`.
+
+<ParamField path="id" type="string" required>KB ID</ParamField>
+<ParamField body="indexed_source_id" type="string">Limit to a single source's references.</ParamField>
+<ParamField body="retry_failed" type="boolean">Retry only previously-failed references.</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.post(f"{BASE_URL}/api/knowledge-bases/{kb_id}/graph-enrichment/run", headers=headers, json={"retry_failed": True})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/graph-enrichment/run`, { method: "POST", headers, body: JSON.stringify({ retry_failed: true }) });
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/graph-enrichment/run' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"retry_failed": true}'
+```
+
+</CodeGroup>
+
+### GET /api/knowledge-bases/{id}/graph-enrichment/errors
+
+Per-source enrichment error counts. Useful for surfacing which sources need retry. Returns 400 if the KB is not `graph_index`.
+
+<ParamField path="id" type="string" required>KB ID</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/api/knowledge-bases/{kb_id}/graph-enrichment/errors", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/graph-enrichment/errors`, { headers });
+```
+
+```bash cURL
+curl '{BASE_URL}/api/knowledge-bases/{id}/graph-enrichment/errors' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
 ## Error Responses
 
-| Status | Code | Description |
-| --- | --- | --- |
-| 400 | `invalid_config` | Invalid chunking or embedding configuration |
-| 404 | `kb_not_found` | No knowledge base exists with the given ID |
-| 409 | `already_indexing` | The knowledge base is already being indexed — wait for completion before reindexing |
+KB routes return `{"error": "<message>"}` (no structured error code field).
+
+| Status | Description |
+| --- | --- |
+| 400 | Invalid chunking, embedding, or enrichment field configuration |
+| 400 | Endpoint requires a specific `indexing_config.strategy` (e.g. graph-enrichment endpoints require `graph_index`) |
+| 404 | No knowledge base or indexed source exists with the given ID |
+| 404 | No enrichment config exists (DELETE `/enrichment`, GET `/enrichment/results`) |
+| 409 | Indexing for this source has already finished or been cancelled (`/sources/{id}/cancel`) |
+| 409 | Cannot update or delete enrichment config while a run is active |
+| 503 | Failed to dispatch the indexing task (worker unavailable) |

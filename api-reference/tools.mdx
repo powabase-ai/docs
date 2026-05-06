@@ -156,7 +156,9 @@ curl -X DELETE '{BASE_URL}/api/tools/{id}' -H "apikey: {API_KEY}" -H "Authorizat
 
 ## Error Responses
 
-| Status | Code | Description |
-| --- | --- | --- |
-| 400 | `invalid_schema` | The tool's input_schema is not valid JSON Schema |
-| 404 | `tool_not_found` | No tool exists with the given ID |
+Tool routes return `{"error": "<message>"}`.
+
+| Status | Description |
+| --- | --- |
+| 400 | Missing required field (`name`, `description`, `type`, or `input_schema`) on POST |
+| 404 | No tool exists with the given ID |

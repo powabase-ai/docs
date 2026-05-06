@@ -158,57 +158,76 @@ curl -X POST '{BASE_URL}/api/workflows/{wf_id}/execute' \
 
 <Step title="Deploy with webhook">
 
-Deploy the workflow to make it externally triggerable via webhook. First deploy, then arm for a single execution.
+Two activation modes:
 
-**Endpoint:** `POST /api/workflows/{id}/deploy + POST /api/workflows/{id}/arm`
+- **Deploy** (`POST /api/workflows/{id}/deploy`) — sets `state = "deployed"`. The webhook accepts unlimited calls until you `undeploy`.
+- **Arm** (`POST /api/workflows/{id}/arm`) — leaves `state = "internal"` but opens a 10-minute window during which the webhook accepts exactly one call. After it fires (or expires), you must arm again.
+
+Use deploy for production integrations; use arm for one-shot tests.
+
+The `webhook_id` and `webhook_secret` are properties of the **webhook block** itself, stored in `block.config`. The studio editor mints them client-side when you drag in a webhook block. To retrieve them programmatically, fetch the workflow and pull them from the block's config.
+
+<Note>
+If you create the webhook block via API instead of the UI (`PUT /api/workflows/{id}/graph`), you must mint both `webhook_id` and `webhook_secret` yourself and include them in the block's `config`. The server does not generate them. `webhook_id` MUST be a valid UUID — the trigger endpoint validates it and returns 400 otherwise. `webhook_secret` can be any non-empty string (the studio editor uses `crypto.randomUUID()` for both). A webhook block with no secret is silently un-triggerable (the trigger endpoint will return 401).
+</Note>
 
 <CodeGroup>
 
 ```python Python
-# Deploy
+# Deploy (or arm) the workflow
 requests.post(f"{BASE_URL}/api/workflows/{wf_id}/deploy", headers=headers)
+# OR: requests.post(f"{BASE_URL}/api/workflows/{wf_id}/arm", headers=headers)
 
-# Arm for webhook trigger
-arm_response = requests.post(f"{BASE_URL}/api/workflows/{wf_id}/arm", headers=headers)
-webhook_info = arm_response.json()
-print(f"Webhook ID: {webhook_info['webhook_id']}")
-print(f"Secret: {webhook_info['secret']}")
+# Look up webhook credentials from the saved graph (assumes one webhook block)
+wf = requests.get(f"{BASE_URL}/api/workflows/{wf_id}", headers=headers).json()
+webhook_block = next(b for b in wf["blocks"] if b["type"] == "webhook")
+webhook_id = webhook_block["config"]["webhook_id"]
+webhook_secret = webhook_block["config"]["webhook_secret"]
 ```
 
 ```typescript TypeScript
-// Deploy
+// Deploy (or arm) the workflow
 await fetch(`${BASE_URL}/api/workflows/${wfId}/deploy`, { method: "POST", headers });
 
-// Arm for webhook trigger
-const armRes = await fetch(`${BASE_URL}/api/workflows/${wfId}/arm`, { method: "POST", headers });
-const webhookInfo = await armRes.json();
-console.log("Webhook ID:", webhookInfo.webhook_id);
+// Look up webhook credentials from the saved graph (assumes one webhook block)
+const wf = await fetch(`${BASE_URL}/api/workflows/${wfId}`, { headers }).then(r => r.json());
+const webhookBlock = wf.blocks.find((b: { type: string }) => b.type === "webhook");
+const webhookId = webhookBlock.config.webhook_id;
+const webhookSecret = webhookBlock.config.webhook_secret;
 ```
 
 ```bash cURL
-# Deploy
+# Deploy (or arm)
 curl -X POST '{BASE_URL}/api/workflows/{wf_id}/deploy' \
   -H "apikey: {API_KEY}" \
   -H "Authorization: Bearer {API_KEY}"
 
-# Arm
-curl -X POST '{BASE_URL}/api/workflows/{wf_id}/arm' \
+# Read graph and pull webhook_id / webhook_secret from the block whose type=="webhook"
+curl '{BASE_URL}/api/workflows/{wf_id}' \
   -H "apikey: {API_KEY}" \
   -H "Authorization: Bearer {API_KEY}"
 ```
 
 </CodeGroup>
 
+<Note>
+The deploy endpoint returns `{"ok": true, "state": "deployed"}` and arm returns `{"ok": true, "armed_until": "<iso-timestamp>"}` — neither response contains the webhook credentials.
+</Note>
+
 </Step>
 
 <Step title="Trigger externally">
 
-Call the webhook endpoint from any external system. No API key needed — uses the secret from the arm step.
+Call the webhook endpoint from any external system. No platform API key is needed — auth is per-webhook via the secret, sent either as a Bearer header (preferred) or a `?token=` query param. The request body becomes the workflow's input variables directly.
+
+<Note>
+The query param is a fallback only when no `Authorization: Bearer ...` header is present. If you send an `Authorization` header that starts with `Bearer ` but has an empty value (e.g. an env var that didn't expand), the request is rejected as 401 — the `?token=` value is NOT consulted in that case. Use one auth mechanism or the other, not both.
+</Note>
 
 **Endpoint:** `POST /api/webhooks/{webhook_id}`
 
 <Note>
-Webhooks are unauthenticated but validated by secret. After one trigger, you must re-arm the workflow for the next execution.
+If the workflow is `deployed`, the webhook accepts unlimited calls. If only armed, the webhook accepts exactly one call within the 10-minute window — re-arm to fire it again.
 </Note>
 
 <CodeGroup>
@@ -216,10 +235,8 @@ Webhooks are unauthenticated but validated by secret. After one trigger, you mus
 ```python Python
 response = requests.post(
     f"{BASE_URL}/api/webhooks/{webhook_id}",
-    json={
-        "secret": webhook_secret,
-        "input": {"text": "Document to summarize..."},
-    },
+    headers={"Authorization": f"Bearer {webhook_secret}", "Content-Type": "application/json"},
+    json={"text": "Document to summarize..."},
 )
 print(response.json())
 ```
@@ -227,19 +244,20 @@ print(response.json())
 ```typescript TypeScript
 const response = await fetch(`${BASE_URL}/api/webhooks/${webhookId}`, {
   method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    secret: webhookSecret,
-    input: { text: "Document to summarize..." },
-  }),
+  headers: {
+    Authorization: `Bearer ${webhookSecret}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({ text: "Document to summarize..." }),
 });
 console.log(await response.json());
 ```
 
 ```bash cURL
 curl -X POST '{BASE_URL}/api/webhooks/{webhook_id}' \
+  -H "Authorization: Bearer {webhook_secret}" \
   -H "Content-Type: application/json" \
-  -d '{"secret": "{webhook_secret}", "input": {"text": "Document to summarize..."}}'
+  -d '{"text": "Document to summarize..."}'
 ```
 
 </CodeGroup>

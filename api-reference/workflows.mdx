@@ -369,8 +369,18 @@ curl '{BASE_URL}/api/workflows/{id}/executions/{eid}/logs' -H "apikey: {API_KEY}
 
 ## Error Responses
 
-| Status | Code | Description |
+Workflow routes return one of two body shapes:
+
+- Plain `{"error": "<message>"}` — list/create/patch/delete and the deploy/undeploy/arm endpoints.
+- Structured `{"error": "<message>", "error_code": "<UPPER_SNAKE_CODE>"}` (via the shared `error_response` helper) — `GET /workflows/{id}`, `PUT /workflows/{id}/graph`, and the synchronous `/execute` endpoint.
+
+Streaming endpoints (`/execute/stream`) return HTTP 200 and emit errors as SSE `data: {"type": "error", ...}` events; only the timeout event includes `error_code` (`EXECUTION_TIMEOUT`).
+
+| Status | `error_code` | Description |
 | --- | --- | --- |
-| 400 | `invalid_graph` | The workflow graph is invalid (e.g., cycles, disconnected blocks, missing required config) |
-| 404 | `workflow_not_found` | No workflow exists with the given ID |
-| 409 | `already_deployed` | The workflow is already deployed — undeploy first to make changes |
+| 400 | — | Missing required field (e.g. `name`, no fields to update, no JSON body) |
+| 400 | `VALIDATION_ERROR` | Graph save: each block needs `id`/`type`, each edge needs `source`/`target`, block types must be in the engine registry, and edges must reference blocks in the same graph |
+| 404 | `WORKFLOW_NOT_FOUND` | No workflow exists with the given ID (`GET /workflows/{id}`, `PUT /graph`, `POST /execute`) |
+| 404 | — | No workflow or execution exists with the given ID (other endpoints) |
+| 504 | `EXECUTION_TIMEOUT` | Synchronous `/execute` exceeded its timeout |
+| 500 | `EXECUTION_FAILED` | Synchronous `/execute` raised an error |
