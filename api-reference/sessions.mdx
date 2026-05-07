@@ -163,5 +163,5 @@ Errors return `{"error": "<message>"}`.
 
 | Status | Description |
 | --- | --- |
-| 404 | No session exists with the given ID |
+| 404 | No session exists with the given ID, or the session is owned by another user (returned as 404 to avoid leaking existence) |
 | 404 | The given run does not exist within this session (`/runs/{run_id}/retrieved-context`) |
