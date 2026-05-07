@@ -33,6 +33,10 @@ The webhook ID returned when the workflow was armed/deployed. Must be a valid UU
 Webhook secret. Use this when you can't set headers (e.g., a webhook source that only supports a URL).
 </ParamField>
 
+<Note>
+Use one auth mechanism or the other (Bearer header OR `?token=` query). The server checks the header with `auth_header.lower().startswith("bearer ")` (note the trailing space): if your `Authorization` header is exactly `Bearer ` (trailing space, no token) — what `Bearer ${secret || ""}` produces when `secret` is falsy — the server reads an empty token and returns 401 without consulting `?token=`. `Bearer` with no trailing space falls through to the query param.
+</Note>
+
 <RequestExample>
 
 ```json Body

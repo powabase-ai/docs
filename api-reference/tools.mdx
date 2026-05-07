@@ -32,7 +32,31 @@ curl '{BASE_URL}/api/tools' -H "apikey: {API_KEY}" -H "Authorization: Bearer {AP
 
 ### POST /api/tools
 
-Create a custom tool (HTTP endpoint with JSON schema).
+Create a custom tool. Required: `name`, `description`, `type`, `input_schema`. The route also accepts an optional `config` object — for HTTP-callable tools, the runtime reads `config.endpoint`, `config.method` (default `POST`), `config.headers`, and `config.timeout_seconds` when an agent invokes the tool.
+
+<ParamField body="name" type="string" required>
+Display name; agents see this when deciding to call the tool.
+</ParamField>
+
+<ParamField body="description" type="string" required>
+Free-text description; the LLM uses it to decide when to call the tool.
+</ParamField>
+
+<ParamField body="type" type="string" required>
+Free-form tag (≤50 chars). Stored verbatim; not used by runtime dispatch. Pick something descriptive (e.g. `http`).
+</ParamField>
+
+<ParamField body="input_schema" type="object" required>
+JSON Schema for the tool's arguments. Not validated at create-time; passed straight through.
+</ParamField>
+
+<ParamField body="config" type="object">
+Tool-specific config. For custom HTTP tools, set `{ endpoint, method?, headers?, timeout_seconds? }` here — that's where the runtime reads them.
+</ParamField>
+
+<Note>
+Top-level `endpoint_url` / `method` / `headers` are silently dropped at create-time — only `name`, `description`, `type`, `input_schema`, and `config` are persisted. `type` is stored as a free-form `String(50)`; the runtime does NOT switch on it. Agent-tool dispatch uses the assignment's own `tool_type` (`builtin` vs `custom`), not the Tool's `type` field.
+</Note>
 
 <RequestExample>
 
@@ -40,14 +64,15 @@ Create a custom tool (HTTP endpoint with JSON schema).
 {
   "name": "weather_lookup",
   "description": "Get current weather for a city",
-  "endpoint_url": "https://api.weather.com/v1/current",
-  "method": "GET",
+  "type": "http",
   "input_schema": {
     "type": "object",
-    "properties": {
-      "city": { "type": "string" }
-    },
+    "properties": { "city": { "type": "string" } },
     "required": ["city"]
+  },
+  "config": {
+    "endpoint": "https://api.weather.com/v1/current",
+    "method": "GET"
   }
 }
 ```
@@ -60,9 +85,9 @@ Create a custom tool (HTTP endpoint with JSON schema).
 response = requests.post(f"{BASE_URL}/api/tools", headers=headers, json={
     "name": "weather_lookup",
     "description": "Get current weather",
-    "endpoint_url": "https://api.weather.com/v1/current",
-    "method": "GET",
+    "type": "http",
     "input_schema": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]},
+    "config": {"endpoint": "https://api.weather.com/v1/current", "method": "GET"},
 })
 ```
 
@@ -70,14 +95,14 @@ response = requests.post(f"{BASE_URL}/api/tools", headers=headers, json={
 const res = await fetch(`${BASE_URL}/api/tools`, { method: "POST", headers, body: JSON.stringify({
   name: "weather_lookup",
   description: "Get current weather",
-  endpoint_url: "https://api.weather.com/v1/current",
-  method: "GET",
+  type: "http",
   input_schema: { type: "object", properties: { city: { type: "string" } }, required: ["city"] },
+  config: { endpoint: "https://api.weather.com/v1/current", method: "GET" },
 }) });
 ```
 
 ```bash cURL
-curl -X POST '{BASE_URL}/api/tools' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"name": "weather_lookup", ...}'
+curl -X POST '{BASE_URL}/api/tools' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"name": "weather_lookup", "description": "...", "type": "http", "input_schema": {"type": "object"}, "config": {"endpoint": "https://api.weather.com/v1/current"}}'
 ```
 
 </CodeGroup>
