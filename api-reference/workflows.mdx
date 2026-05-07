@@ -267,10 +267,18 @@ Execute the workflow synchronously.
 Workflow ID
 </ParamField>
 
+<ParamField body="variables" type="object">
+Map of input variable names → values. Defaults to `{}` when omitted.
+</ParamField>
+
+<Note>
+`variables` is the canonical key. The route also accepts `input` as a legacy alias (`data.get("variables", data.get("input", {}))`) — prefer `variables` in new code.
+</Note>
+
 <RequestExample>
 
 ```json Request
-{ "input": { "text": "..." } }
+{ "variables": { "text": "..." } }
 ```
 
 </RequestExample>
@@ -278,39 +286,43 @@ Workflow ID
 <CodeGroup>
 
 ```python Python
-requests.post(f"{BASE_URL}/api/workflows/{wf_id}/execute", headers=headers, json={"input": {"text": "..."}})
+requests.post(f"{BASE_URL}/api/workflows/{wf_id}/execute", headers=headers, json={"variables": {"text": "..."}})
 ```
 
 ```typescript TypeScript
-await fetch(`${BASE_URL}/api/workflows/${wfId}/execute`, { method: "POST", headers, body: JSON.stringify({ input: { text: "..." } }) });
+await fetch(`${BASE_URL}/api/workflows/${wfId}/execute`, { method: "POST", headers, body: JSON.stringify({ variables: { text: "..." } }) });
 ```
 
 ```bash cURL
-curl -X POST '{BASE_URL}/api/workflows/{id}/execute' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"input": {"text": "..."}}'
+curl -X POST '{BASE_URL}/api/workflows/{id}/execute' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"variables": {"text": "..."}}'
 ```
 
 </CodeGroup>
 
 ### POST /api/workflows/{id}/execute/stream
 
-Execute with streaming SSE.
+Execute with streaming SSE. Same body shape as `/execute` — pass `variables` (canonical) or `input` (legacy alias).
 
 <ParamField path="id" type="string" required>
 Workflow ID
 </ParamField>
 
+<ParamField body="variables" type="object">
+Map of input variable names → values. Defaults to `{}` when omitted.
+</ParamField>
+
 <CodeGroup>
 
 ```python Python
-requests.post(f"{BASE_URL}/api/workflows/{wf_id}/execute/stream", headers=headers, json={"input": {"text": "..."}}, stream=True)
+requests.post(f"{BASE_URL}/api/workflows/{wf_id}/execute/stream", headers=headers, json={"variables": {"text": "..."}}, stream=True)
 ```
 
 ```typescript TypeScript
-await fetch(`${BASE_URL}/api/workflows/${wfId}/execute/stream`, { method: "POST", headers, body: JSON.stringify({ input: { text: "..." } }) });
+await fetch(`${BASE_URL}/api/workflows/${wfId}/execute/stream`, { method: "POST", headers, body: JSON.stringify({ variables: { text: "..." } }) });
 ```
 
 ```bash cURL
-curl -N -X POST '{BASE_URL}/api/workflows/{id}/execute/stream' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"input": {"text": "..."}}'
+curl -N -X POST '{BASE_URL}/api/workflows/{id}/execute/stream' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"variables": {"text": "..."}}'
 ```
 
 </CodeGroup>
