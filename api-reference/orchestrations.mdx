@@ -142,10 +142,38 @@ Add an agent as an entity.
 Orchestration ID
 </ParamField>
 
+<ParamField body="entity_type" type="string" required>
+Use `"agent"`. The route accepts any string ≤50 chars, but the orchestrator's execution path only invokes entities where `entity_type === "agent"` — other values are stored but silently skipped at run time.
+</ParamField>
+
+<ParamField body="entity_ref_id" type="string" required>
+UUID of the agent to add.
+</ParamField>
+
+<ParamField body="role_description" type="string">
+Free-text role hint shown to the coordinator when delegating. Replaces the prior `role` field used in older docs examples.
+</ParamField>
+
+<ParamField body="config" type="object">
+Per-entity overrides; defaults to `{}`.
+</ParamField>
+
+<ParamField body="position" type="integer">
+Sort order in list responses; defaults to `0`.
+</ParamField>
+
+<Note>
+The route returns 400 if either `entity_type` or `entity_ref_id` is missing. List/PUT responses key off `entity_ref_id` and `role_description`, so any client trying to round-trip will see the same field names.
+</Note>
+
 <RequestExample>
 
 ```json Request
-{ "agent_id": "uuid", "role": "Handles billing" }
+{
+  "entity_type": "agent",
+  "entity_ref_id": "agent-uuid",
+  "role_description": "Handles billing"
+}
 ```
 
 </RequestExample>
@@ -153,15 +181,15 @@ Orchestration ID
 <CodeGroup>
 
 ```python Python
-requests.post(f"{BASE_URL}/api/orchestrations/{orch_id}/entities", headers=headers, json={"agent_id": agent_id, "role": "Handles billing"})
+requests.post(f"{BASE_URL}/api/orchestrations/{orch_id}/entities", headers=headers, json={"entity_type": "agent", "entity_ref_id": agent_id, "role_description": "Handles billing"})
 ```
 
 ```typescript TypeScript
-await fetch(`${BASE_URL}/api/orchestrations/${orchId}/entities`, { method: "POST", headers, body: JSON.stringify({ agent_id: agentId, role: "Handles billing" }) });
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}/entities`, { method: "POST", headers, body: JSON.stringify({ entity_type: "agent", entity_ref_id: agentId, role_description: "Handles billing" }) });
 ```
 
 ```bash cURL
-curl -X POST '{BASE_URL}/api/orchestrations/{id}/entities' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"agent_id": "uuid", "role": "Handles billing"}'
+curl -X POST '{BASE_URL}/api/orchestrations/{id}/entities' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"entity_type": "agent", "entity_ref_id": "agent-uuid", "role_description": "Handles billing"}'
 ```
 
 </CodeGroup>
@@ -192,7 +220,7 @@ curl '{BASE_URL}/api/orchestrations/{id}/entities' -H "apikey: {API_KEY}" -H "Au
 
 ### PUT /api/orchestrations/{id}/entities/{eid}
 
-Update an entity's role or config.
+Update an entity. Only `role_description`, `config`, and `position` are writable — any other top-level keys are silently ignored. `entity_type` and `entity_ref_id` are not updatable; create a new entity instead.
 
 <ParamField path="id" type="string" required>
 Orchestration ID
@@ -202,18 +230,38 @@ Orchestration ID
 Entity ID
 </ParamField>
 
+<ParamField body="role_description" type="string">
+Free-text role hint shown to the coordinator when delegating.
+</ParamField>
+
+<ParamField body="config" type="object">
+Per-entity overrides.
+</ParamField>
+
+<ParamField body="position" type="integer">
+Sort order in list responses.
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{ "role_description": "Updated role" }
+```
+
+</RequestExample>
+
 <CodeGroup>
 
 ```python Python
-requests.put(f"{BASE_URL}/api/orchestrations/{orch_id}/entities/{entity_id}", headers=headers, json={"role": "Updated role"})
+requests.put(f"{BASE_URL}/api/orchestrations/{orch_id}/entities/{entity_id}", headers=headers, json={"role_description": "Updated role"})
 ```
 
 ```typescript TypeScript
-await fetch(`${BASE_URL}/api/orchestrations/${orchId}/entities/${entityId}`, { method: "PUT", headers, body: JSON.stringify({ role: "Updated" }) });
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}/entities/${entityId}`, { method: "PUT", headers, body: JSON.stringify({ role_description: "Updated role" }) });
 ```
 
 ```bash cURL
-curl -X PUT '{BASE_URL}/api/orchestrations/{id}/entities/{eid}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"role": "Updated"}'
+curl -X PUT '{BASE_URL}/api/orchestrations/{id}/entities/{eid}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"role_description": "Updated role"}'
 ```
 
 </CodeGroup>
