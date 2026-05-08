@@ -95,5 +95,15 @@
       "source": "/",
       "destination": "/concepts/platform-overview"
     }
-  ]
+  ],
+  "thumbnails": {
+    "appearance": "dark",
+    "background": "/images/project_dashboard.png"
+  },
+  "styling": {
+    "latex": true
+  },
+  "icons": {
+    "library": "fontawesome"
+  }
 }

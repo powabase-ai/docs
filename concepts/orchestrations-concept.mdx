@@ -12,16 +12,16 @@ An Orchestration is a container that groups multiple agents (entities) and runs 
 
 | Strategy | Pattern | How It Works | Best For |
 | --- | --- | --- | --- |
-| supervisor | Coordinator delegates | A coordinator agent reasons about the user's message and delegates subtasks to entity agents by calling delegate_to_{name} tools. The coordinator synthesizes entity responses into a final answer. | Multi-domain support (billing + tech + sales), complex routing, dynamic task decomposition |
+| supervisor | Coordinator delegates | Multi-domain support (billing \+ tech \+ sales), complex routing, dynamic task decomposition |  |
 | sequential | Pipeline | Entity agents run in order (sorted by position). Each agent receives the previous agent's output as its input. The final agent's output is the orchestration result. | Multi-stage processing: extract → analyze → summarize → format |
-| parallel | Fan-out + merge | All entity agents run concurrently on the same input. If multiple agents produce results, a merge agent (gpt-4.1-mini) combines them into a single coherent response. | Independent analysis from multiple perspectives, parallel research tasks |
+| parallel | Fan-out \+ merge | All entity agents run concurrently on the same input. If multiple agents produce results, a merge agent (gpt-4.1-mini) combines them into a single coherent response. | Independent analysis from multiple perspectives, parallel research tasks |
 
 ### Supervisor Strategy
 
-The Supervisor strategy creates a coordinator agent that has access to a delegation tool for each entity agent. When a user message arrives, the coordinator reasons about which entity should handle it and calls the appropriate delegate_to_\{name\} tool with a task description. The entity agent runs with its own tools and knowledge bases (up to 10 ReAct steps by default) and returns its result. The coordinator can delegate to multiple entities in sequence or use the results from one delegation to inform the next. The coordinator's own ReAct loop runs for up to 25 steps.
+The Supervisor strategy creates a coordinator agent that has access to a delegation tool for each entity agent. When a user message arrives, the coordinator reasons about which entity should handle it and calls the appropriate delegate\_to\_{name} tool with a task description. The entity agent runs with its own tools and knowledge bases (up to 10 ReAct steps by default) and returns its result. The coordinator can delegate to multiple entities in sequence or use the results from one delegation to inform the next. The coordinator's own ReAct loop runs for up to 25 steps.
 
 <Frame caption="Supervisor strategy: coordinator delegates to specialized agents">
-  <img src="/diagrams/orchestration-flow.svg" alt="Orchestration flow: User → Coordinator → delegates to Agent A and Agent B → results merge → Coordinator synthesizes → Final Response." />
+  ![Orchestration flow: User → Coordinator → delegates to Agent A and Agent B → results merge → Coordinator synthesizes → Final Response.](/diagrams/orchestration-flow.svg)
 </Frame>
 
 Each delegation creates a child execution context with an incremented depth (max depth: 3, preventing infinite recursive delegation). The child context gets a budget allocation from the parent's remaining token budget. Entity agents share the parent's abort signal, so cancelling the orchestration cancels all active entity runs.
@@ -33,9 +33,9 @@ The coordinator's system prompt is auto-generated from the entity role descripti
 The Sequential strategy runs entity agents one after another in position order. The first agent receives the user's message as input. Each subsequent agent receives the previous agent's output as its input. If any agent in the chain fails, the entire orchestration fails immediately. This is ideal for multi-stage processing pipelines where each stage transforms or enriches the data.
 
 <Tip>
-**Example: Document processing pipeline**
+  **Example: Document processing pipeline**
 
-Agent 1 (Extractor): extracts key facts from a document. Agent 2 (Analyzer): identifies risks and opportunities from the extracted facts. Agent 3 (Writer): produces a formatted executive summary from the analysis.
+  Agent 1 (Extractor): extracts key facts from a document. Agent 2 (Analyzer): identifies risks and opportunities from the extracted facts. Agent 3 (Writer): produces a formatted executive summary from the analysis.
 </Tip>
 
 ### Parallel Strategy
@@ -44,7 +44,7 @@ The Parallel strategy runs all entity agents concurrently on the same input usin
 
 ## Entity Configuration
 
-Each entity in an orchestration has a role description and optional configuration. The role description is critical for the Supervisor strategy — it tells the coordinator what the entity specializes in. For Sequential and Parallel, the role is descriptive metadata. Entity config can override max_steps (default 10) to control how many ReAct iterations the entity agent runs.
+Each entity in an orchestration has a role description and optional configuration. The role description is critical for the Supervisor strategy — it tells the coordinator what the entity specializes in. For Sequential and Parallel, the role is descriptive metadata. Entity config can override max\_steps (default 10) to control how many ReAct iterations the entity agent runs.
 
 <CodeGroup>
 
@@ -135,12 +135,12 @@ Orchestration streaming exposes the full execution flow via SSE. For the Supervi
 
 | Event | Description |
 | --- | --- |
-| start | Orchestration run started — includes run_id and session_id |
-| orchestration_started | Execution has begun with the configured strategy |
-| delegation_started | Supervisor: coordinator is delegating a task to an entity agent |
-| delegation_completed | Supervisor: entity agent finished its subtask |
-| sequential_step | Sequential: an agent in the pipeline has started/completed |
-| tool_call / tool_result | An entity agent is calling/receiving a tool |
+| start | Orchestration run started — includes run\_id and session\_id |
+| orchestration\_started | Execution has begun with the configured strategy |
+| delegation\_started | Supervisor: coordinator is delegating a task to an entity agent |
+| delegation\_completed | Supervisor: entity agent finished its subtask |
+| sequential\_step | Sequential: an agent in the pipeline has started/completed |
+| tool\_call / tool\_result | An entity agent is calling/receiving a tool |
 | chunk | Text chunk from the final response |
 | complete | Orchestration run finished — includes content, usage, steps |
 | error | An error occurred during execution |
@@ -157,21 +157,19 @@ Orchestration streaming exposes the full execution flow via SSE. For the Supervi
 ## Next Steps
 
 <CardGroup cols={2}>
+  <Card title="Orchestration Guide" href="/guides/orchestration">
+    Create an orchestration and run it step by step.
+  </Card>
 
-<Card title="Orchestration Guide" href="/guides/orchestration">
-Create an orchestration and run it step by step.
-</Card>
+  <Card title="Agents & Tools" href="/concepts/agents-tools">
+    Understand the ReAct loop and tool system that powers each entity.
+  </Card>
 
-<Card title="Agents & Tools" href="/concepts/agents-tools">
-Understand the ReAct loop and tool system that powers each entity.
-</Card>
+  <Card title="Workflows" href="/concepts/workflows-concept">
+    For deterministic multi-step pipelines, use workflows instead.
+  </Card>
 
-<Card title="Workflows" href="/concepts/workflows-concept">
-For deterministic multi-step pipelines, use workflows instead.
-</Card>
-
-<Card title="Orchestrations API Reference" href="/api-reference/orchestrations">
-Full endpoint documentation.
-</Card>
-
+  <Card title="Orchestrations API Reference" href="/api-reference/orchestrations">
+    Full endpoint documentation.
+  </Card>
 </CardGroup>
