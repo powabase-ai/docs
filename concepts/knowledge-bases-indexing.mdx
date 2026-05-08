@@ -1,6 +1,6 @@
 ---
 title: "Knowledge Bases & Indexing"
-description: "The platform's Context Engineering suite turns raw documents into intelligent, searchable knowledge. Choose from four indexing strategies and four retrieval algorithms to build the right pipeline for your use case — from simple vector search to LLM-driven document reasoning."
+description: "The platform's Context Engineering suite turns raw documents into intelligent, searchable knowledge. Choose from five indexing strategies and four retrieval algorithms to build the right pipeline for your use case — from simple vector search to LLM-driven document reasoning."
 icon: "database"
 ---
 
@@ -10,10 +10,10 @@ A Knowledge Base (KB) is a container that holds one or more sources and makes th
 
 ## Indexing Pipeline
 
-The indexing pipeline runs automatically when you add a source to a knowledge base. What happens during indexing depends on the strategy: ChunkEmbed splits text and generates embeddings, PageIndex builds a hierarchical tree with LLM-generated summaries, GraphIndex extends PageIndex with cross-reference detection and node embeddings, and Doc2JSON extracts structured fields. You can reindex at any time to reprocess with different settings.
+The indexing pipeline runs automatically when you add a source to a knowledge base. What happens during indexing depends on the strategy: ChunkEmbed splits text and generates embeddings, Full Document generates one summary per document and returns the entire text on match, PageIndex builds a hierarchical tree with LLM-generated summaries, GraphIndex extends PageIndex with cross-reference detection and node embeddings, and Doc2JSON extracts structured fields. You can reindex at any time to reprocess with different settings.
 
 <Frame caption="Indexing pipeline: from source text to searchable knowledge">
-  <img src="/diagrams/indexing-pipeline.svg" alt="Indexing pipeline: Source page texts → Indexing Strategy (ChunkEmbed, PageIndex, GraphIndex, or Doc2JSON) → Storage (pgvector chunks, tree nodes, or structured JSON)." />
+  <img src="/diagrams/indexing-pipeline.svg" alt="Indexing pipeline: Source page texts → Indexing Strategy (ChunkEmbed, Full Document, PageIndex, GraphIndex, or Doc2JSON) → Storage (pgvector chunks, document summaries, tree nodes, or structured JSON)." />
 </Frame>
 
 ## Indexing Strategies
@@ -23,6 +23,7 @@ The indexing strategy controls how source content is processed and stored. Each 
 | Strategy | Best For | Cost | Indexing Speed | Retrieval Speed | Compatible Retrieval |
 | --- | --- | --- | --- | --- | --- |
 | ChunkEmbed | General RAG, most documents | Low (embedding only) | Fast | Fast | Vector, Hybrid, Full-text |
+| Full Document | Whole-document retrieval, small/medium collections | Low (one summary LLM call per document) | Fast | Fast | Vector, Hybrid, Full-text (search on summary) |
 | PageIndex | Long structured PDFs, complex docs | Medium–High (many LLM calls) | Slow (many LLM calls) | Slow (LLM at query time) | Tree Search only |
 | GraphIndex | Cross-referenced documents | High (PageIndex + enrichment + embedding) | Slow (PageIndex + enrichment + embedding) | Fast (vector/hybrid, no LLM) | Vector, Hybrid, Full-text + graph expansion |
 | Doc2JSON | Structured field extraction | Medium (LLM per window) | Medium (LLM per window) | Fast | Vector on summary |
@@ -94,6 +95,82 @@ curl -X POST '{BASE_URL}/api/knowledge-bases' \
       "overlap": 100,
       "embedding_model": "text-embedding-3-small"
     }
+  }'
+```
+
+</CodeGroup>
+
+### Full Document
+
+Full Document treats every source as a single retrievable unit. At indexing time, the platform makes one LLM call to generate a comprehensive summary of the document, embeds the summary, and stores the original full text in object storage with its path recorded in the database. A BM25 sparse index is also built over the summaries, so vector, full-text, and hybrid search are all supported. At query time, search runs against the summaries — but each match returns the **entire original document text**, not a chunk or section.
+
+This makes Full Document the right choice when you want the agent to reason over whole documents rather than fragments — short legal cases, individual articles, policy memos, research papers, or any collection where each document is a self-contained unit small enough to fit in the agent's context window. Indexing is cheap (one LLM summary per document, no chunking work) and retrieval is fast (no LLM calls at query time, just standard vector or BM25 lookups).
+
+<Note>
+**Default top_k is 3**
+
+Because each result is a whole document — typically much larger than a single chunk — the default top_k is 3 instead of the usual 5. Tune this based on your average document size and the agent's context budget. Returning two or three documents is usually plenty; returning ten can easily exceed available context.
+</Note>
+
+<Warning>
+**Summarisation truncates very long inputs**
+
+The summary LLM call sees only the first ~32,000 tokens of the document. For longer documents, content beyond that point is captured in the stored full text (which is still returned on a match) but is not represented in the summary used for retrieval. If your documents routinely exceed 32K tokens of unique content per topic, ChunkEmbed or PageIndex will give better retrieval coverage.
+</Warning>
+
+<CodeGroup>
+
+```python Python
+# Create a KB with Full Document for whole-document retrieval
+response = requests.post(
+    f"{BASE_URL}/api/knowledge-bases",
+    headers=headers,
+    json={
+        "name": "Case Law",
+        "indexing_config": {
+            "strategy": "full_document",
+            "summary_model": "gpt-5-mini",
+            "embedding_model": "text-embedding-3-small",
+        },
+        "retrieval_config": {
+            "method": "hybrid",
+            "top_k": 3,
+        },
+    },
+)
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/knowledge-bases`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    name: "Case Law",
+    indexing_config: {
+      strategy: "full_document",
+      summary_model: "gpt-5-mini",
+      embedding_model: "text-embedding-3-small",
+    },
+    retrieval_config: {
+      method: "hybrid",
+      top_k: 3,
+    },
+  }),
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/knowledge-bases' \
+  -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Case Law",
+    "indexing_config": {
+      "strategy": "full_document",
+      "summary_model": "gpt-5-mini",
+      "embedding_model": "text-embedding-3-small"
+    },
+    "retrieval_config": {"method": "hybrid", "top_k": 3}
   }'
 ```
 
@@ -544,6 +621,7 @@ When you reindex a knowledge base, all existing chunks, tree nodes, or extracted
 | Use Case | Indexing | Retrieval | Notes |
 | --- | --- | --- | --- |
 | General RAG (default) | ChunkEmbed (2000 tokens, 50 overlap) | Hybrid Search | Works for most documents. Add a reranker for higher precision. |
+| Whole-document retrieval | Full Document | Hybrid Search (top_k=3) | Each match returns the entire document text. Best for collections of short, self-contained documents — case law, articles, memos. |
 | Long structured PDFs | PageIndex | Tree Search | Compliance, legal, technical specs. Higher cost but superior structure-aware retrieval. |
 | Cross-referenced documents | GraphIndex | Hybrid Search | Regulations, standards. Vector/hybrid search over node embeddings with automatic graph expansion of referenced sections. |
 | Keyword-heavy content | ChunkEmbed | Full-Text Search | Logs, code, error messages. BM25 excels at exact matches without embedding cost. |
