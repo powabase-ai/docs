@@ -197,7 +197,7 @@ curl '{BASE_URL}/api/agents/{id}/tools' -H "apikey: {API_KEY}" -H "Authorization
 
 ### PATCH /api/agents/{id}/tools/{assignment_id}
 
-Update tool assignment configuration.
+Update a tool assignment's `config_override`.
 
 <ParamField path="id" type="string" required>
 Agent ID
@@ -207,18 +207,40 @@ Agent ID
 Assignment ID
 </ParamField>
 
+<ParamField body="config_override" type="object" required>
+The full `config_override` object. Tool-specific shape; for database tools include `schemas: { <schema_name>: [<table_name>, ...] }`.
+</ParamField>
+
+<Note>
+The body MUST use the key `config_override`. Passing `config` (or any other top-level key) is a silent no-op — the route returns 200 with the unchanged assignment because the handler only inspects `config_override`. For database tools, `config_override.schemas` is validated: schemas must be a dict, schema names must match `^[a-zA-Z_][a-zA-Z0-9_]{0,63}$`, system schemas (`ai`, `auth`, `storage`, `pg_*`, etc.) are rejected, and each value must be a list of valid table names.
+</Note>
+
+<RequestExample>
+
+```json Request
+{
+  "config_override": {
+    "schemas": {
+      "public": ["users", "orders"]
+    }
+  }
+}
+```
+
+</RequestExample>
+
 <CodeGroup>
 
 ```python Python
-response = requests.patch(f"{BASE_URL}/api/agents/{agent_id}/tools/{assignment_id}", headers=headers, json={"config": {"allowed_schemas": ["public", "ai"]}})
+response = requests.patch(f"{BASE_URL}/api/agents/{agent_id}/tools/{assignment_id}", headers=headers, json={"config_override": {"schemas": {"public": ["users", "orders"]}}})
 ```
 
 ```typescript TypeScript
-await fetch(`${BASE_URL}/api/agents/${agentId}/tools/${assignmentId}`, { method: "PATCH", headers, body: JSON.stringify({ config: { allowed_schemas: ["public", "ai"] } }) });
+await fetch(`${BASE_URL}/api/agents/${agentId}/tools/${assignmentId}`, { method: "PATCH", headers, body: JSON.stringify({ config_override: { schemas: { public: ["users", "orders"] } } }) });
 ```
 
 ```bash cURL
-curl -X PATCH '{BASE_URL}/api/agents/{id}/tools/{assignment_id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"config": {}}'
+curl -X PATCH '{BASE_URL}/api/agents/{id}/tools/{assignment_id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"config_override": {"schemas": {"public": ["users", "orders"]}}}'
 ```
 
 </CodeGroup>
@@ -703,7 +725,7 @@ Agent routes return `{"error": "<message>"}`.
 | Status | Description |
 | --- | --- |
 | 400 | Missing or invalid required field (e.g. `name`, `tool_type`/`tool_name`, `knowledge_base_id`, MCP server `name`/`url`, hook `event`/`type`/`config`) |
-| 400 | Invalid tool-config schema (e.g. `schemas` is not a dict, or contains a system schema or invalid table names) |
+| 400 | Invalid `config_override.schemas` on tool PATCH (e.g. not a dict, contains a system schema, or has invalid table names) |
 | 404 | No agent, tool/KB/MCP/hook assignment, or run exists with the given ID |
 | 404 | `/run` or `/run/stream`: the supplied `session_id` is not owned by the caller (returned as 404 to avoid leaking existence) |
 | 409 | Knowledge base already assigned to this agent |

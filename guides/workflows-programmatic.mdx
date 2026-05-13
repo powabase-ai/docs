@@ -221,7 +221,7 @@ The deploy endpoint returns `{"ok": true, "state": "deployed"}` and arm returns 
 Call the webhook endpoint from any external system. No platform API key is needed — auth is per-webhook via the secret, sent either as a Bearer header (preferred) or a `?token=` query param. The request body becomes the workflow's input variables directly.
 
 <Note>
-The query param is a fallback only when no `Authorization: Bearer ...` header is present. If you send an `Authorization` header that starts with `Bearer ` but has an empty value (e.g. an env var that didn't expand), the request is rejected as 401 — the `?token=` value is NOT consulted in that case. Use one auth mechanism or the other, not both.
+Use one auth mechanism or the other, not both. The server checks the header with `auth_header.lower().startswith("bearer ")` (note the trailing space). If your `Authorization` header is exactly `Bearer ` (trailing space, no token) — what `Bearer ${secret || ""}` produces when `secret` is falsy — the server reads an empty token and 401s without consulting `?token=`. The `?token=` fallback only fires when the header doesn't start with `Bearer `.
 </Note>
 
 **Endpoint:** `POST /api/webhooks/{webhook_id}`
