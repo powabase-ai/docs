@@ -23,6 +23,7 @@ The Context Engineering suite handles the entire RAG pipeline: document ingestio
 | Indexing Strategy | What It Does | Best For |
 | --- | --- | --- |
 | ChunkEmbed | Splits text into overlapping chunks and generates vector embeddings | General RAG — most documents, fastest and cheapest |
+| Full Document | One LLM-generated summary per document; returns the entire text on match | Whole-document retrieval over small/medium collections |
 | PageIndex | Builds a hierarchical document tree with LLM-generated summaries | Long structured PDFs (legal, compliance, specs) |
 | GraphIndex | Extends PageIndex with entity extraction and cross-reference enrichment | Dense cross-referenced documents (regulations, codebases) |
 | Doc2JSON | Extracts structured fields from documents using a user-defined schema | Invoices, forms, resumes — structured data extraction |
