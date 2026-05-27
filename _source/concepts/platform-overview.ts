@@ -215,10 +215,10 @@ export const platformOverviewConcept: ConceptPage = {
           target: { type: "guide", guideId: "quickstart" },
         },
         {
-          title: "Authentication",
-          description: "Set up your API keys and make your first request.",
-          icon: "Key",
-          target: { type: "guide", guideId: "introduction" },
+          title: "Auth & Connection",
+          description: "Open the Connect modal, pick the right key, and make your first request.",
+          icon: "Plug",
+          target: { type: "guide", guideId: "auth-connection" },
         },
         {
           title: "Architecture",

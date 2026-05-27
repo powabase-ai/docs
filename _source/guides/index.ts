@@ -1,9 +1,9 @@
 import type { Guide } from "../types";
 
 import { advancedAgentConfigGuide } from "./advanced-agent-config";
+import { authConnectionGuide } from "./auth-connection";
 import { buildAgentGuide } from "./build-agent";
 import { createKnowledgeBaseGuide } from "./create-knowledge-base";
-import { introductionGuide } from "./introduction";
 import { orchestrationGuide } from "./orchestration";
 import { quickstartGuide } from "./quickstart";
 import { streamingGuide } from "./streaming-guide";
@@ -12,7 +12,7 @@ import { workflowsCopilotGuide } from "./workflows-copilot";
 import { workflowsProgrammaticGuide } from "./workflows-programmatic";
 
 export const ALL_GUIDES: Guide[] = [
-  introductionGuide,
+  authConnectionGuide,
   quickstartGuide,
   uploadDocumentGuide,
   createKnowledgeBaseGuide,

@@ -9,14 +9,14 @@ In this guide you will upload a document, create a knowledge base, index the doc
 <Note>
 **Prerequisites:**
 
-- A project with API keys configured (see Authentication guide)
+- A Powabase project — grab your Project URL and Service Role (Secret) Key from the Connect modal in the Studio (click the Connect button in your project header, or append ?showConnect=true to any project URL). See the Auth & Connection guide for the full walkthrough.
 </Note>
 
 <Steps>
 
 <Step title="Authenticate">
 
-Set up your base URL and authentication headers. Every request to the project API requires the service_role key.
+Set up your base URL and authentication headers. Copy Project URL and Service Role (Secret) Key from the Studio's Connect modal — every /api/* request needs the service role key in both the apikey and Authorization headers.
 
 **Endpoint:** `Headers: apikey + Authorization`
 
@@ -25,8 +25,8 @@ Set up your base URL and authentication headers. Every request to the project AP
 ```python Python
 import requests
 
-BASE_URL = "{BASE_URL}"
-API_KEY = "{API_KEY}"
+BASE_URL = "{BASE_URL}"   # Connect modal -> Project URL
+API_KEY = "{API_KEY}"     # Connect modal -> Service Role (Secret) Key
 
 headers = {
     "apikey": API_KEY,
@@ -36,8 +36,8 @@ headers = {
 ```
 
 ```typescript TypeScript
-const BASE_URL = "{BASE_URL}";
-const API_KEY = "{API_KEY}";
+const BASE_URL = "{BASE_URL}";  // Connect modal -> Project URL
+const API_KEY = "{API_KEY}";    // Connect modal -> Service Role (Secret) Key
 
 const headers = {
   apikey: API_KEY,
@@ -47,7 +47,10 @@ const headers = {
 ```
 
 ```bash cURL
-# Set these variables for the rest of the guide
+# Set these variables for the rest of the guide.
+# Both values come from the Studio's Connect modal:
+#   BASE_URL = Project URL
+#   API_KEY  = Service Role (Secret) Key
 BASE_URL="{BASE_URL}"
 API_KEY="{API_KEY}"
 ```

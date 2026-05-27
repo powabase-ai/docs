@@ -30,13 +30,17 @@ export const architectureConcept: ConceptPage = {
     },
     {
       type: "prose",
-      text: "Every API request requires two headers: an apikey header and a Bearer token in the Authorization header. The service_role key gives full access and bypasses Row Level Security — use it for server-side calls only. The anon key respects RLS policies and is safe for client-side use.",
+      text: "Every API request requires two headers: an apikey header and a Bearer token in the Authorization header, both set to the same key. Powabase ships two keys per project, both surfaced in the Studio's Connect modal: the Service Role (Secret) Key gives full access and bypasses Row Level Security — use it for server-side calls only — and the Anon (Publishable) Key respects RLS policies and is safe to embed in browsers and mobile clients.",
     },
     {
       type: "callout",
       variant: "warning",
-      title: "Never expose the service_role key",
-      text: "The service_role key bypasses all Row Level Security policies. Only use it in server-side code. For client-side applications, use the anon key with appropriate RLS policies.",
+      title: "Never expose the Service Role key",
+      text: "The Service Role (Secret) Key bypasses all Row Level Security policies. Only use it in server-side code. For client-side applications, use the Anon (Publishable) Key with appropriate RLS policies. The Connect modal also exposes JWT Secret and Database URL — both must stay server-side.",
+    },
+    {
+      type: "prose",
+      text: "Both keys live in the Connect modal in the Studio. Click the Connect button in your project header (or append ?showConnect=true to any project URL) to copy the Project URL, Anon (Publishable) Key, Service Role (Secret) Key, JWT Secret, Database URL, and pre-built Postgres connection strings.",
     },
     {
       type: "heading", level: 2, text: "Request Routing", id: "routing",
@@ -69,10 +73,10 @@ export const architectureConcept: ConceptPage = {
       type: "card-grid",
       cards: [
         {
-          title: "Authentication Guide",
-          description: "Set up API keys and make your first request.",
-          icon: "Key",
-          target: { type: "guide", guideId: "introduction" },
+          title: "Auth & Connection",
+          description: "Open the Connect modal, pick the right key, and make your first request.",
+          icon: "Plug",
+          target: { type: "guide", guideId: "auth-connection" },
         },
         {
           title: "Sources & Extraction",

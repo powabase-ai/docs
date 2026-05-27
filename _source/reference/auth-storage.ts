@@ -23,9 +23,9 @@ export const authStorageReference: ReferenceSection = {
   description:
     "Auth user management and storage operations are served by the control-plane proxy, not the per-project service API. Routing is ref-only: /api/platform/auth/{ref}/* and /api/platform/storage/{ref}/*.",
   introduction:
-    "Auth and Storage endpoints are proxied through the control plane to each project's GoTrue (authentication) and Storage (file management) services. Substitute <PLATFORM_URL> with your Studio app's base URL (e.g. http://localhost:3001 in dev) and {ref} with your project ref.",
+    "Auth and Storage endpoints are proxied through the control plane to each project's GoTrue (authentication) and Storage (file management) services. Substitute <PLATFORM_URL> with your Studio app's base URL (e.g. http://localhost:3001 in dev) and {ref} with your project ref. These endpoints use a different auth scheme than the /api/* AI surface: a signed-in user's platform JWT, not the project's Service Role key from the Connect modal.",
   commonPatterns:
-    "For authentication, list users with GET /api/platform/auth/{ref}/users and create them with POST. For storage, list buckets and upload files under /api/platform/storage/{ref}/*. A platform JWT (signed-in user's access token) is required; service-role bypasses are not available through the proxy.",
+    "For authentication, list users with GET /api/platform/auth/{ref}/users and create them with POST. For storage, list buckets and upload files under /api/platform/storage/{ref}/*. A platform JWT (signed-in user's access token) is required; service-role bypasses are not available through the proxy. For client-side GoTrue and Storage calls that talk directly to your project (not through this proxy), use the Anon (Publishable) Key from the Connect modal with RLS / Storage policies.",
   groups: [
     {
       title: "Authentication (via Control Plane)",

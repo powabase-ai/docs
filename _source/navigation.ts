@@ -5,8 +5,8 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Getting Started",
     items: [
       { id: "platform-overview", label: "Platform Overview", icon: "BookOpen", selection: { type: "concept", conceptId: "platform-overview" } },
+      { id: "auth-connection", label: "Auth & Connection", icon: "Plug", selection: { type: "guide", guideId: "auth-connection" } },
       { id: "quickstart", label: "Quickstart", icon: "Rocket", selection: { type: "guide", guideId: "quickstart" } },
-      { id: "introduction", label: "Authentication", icon: "Key", selection: { type: "guide", guideId: "introduction" } },
       { id: "platform-comparison", label: "Platform Comparison", icon: "Shield", selection: { type: "concept", conceptId: "platform-comparison" } },
     ],
   },

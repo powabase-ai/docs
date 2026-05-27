@@ -24,7 +24,7 @@ export const aiCodingAssistantsConcept: ConceptPage = {
       type: "callout",
       variant: "tip",
       title: "Share your project context",
-      text: "Tell your coding assistant: \"I'm building with the Powabase API. My base URL is {BASE_URL} and I'm using the service_role key for authentication. I need to [create a knowledge base / build an agent / set up a workflow].\" This gives the assistant enough context to generate correct code.",
+      text: "Grab your Project URL and Service Role (Secret) Key from the Studio's Connect modal (click the Connect button in your project header), then tell your coding assistant: \"I'm building with the Powabase API. My base URL is {BASE_URL} and I'm using the Service Role key for authentication. I need to [create a knowledge base / build an agent / set up a workflow].\" That's enough context for the assistant to generate correct code.",
     },
 
     {
