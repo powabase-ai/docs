@@ -4,13 +4,20 @@ Mintlify-powered documentation for Powabase, deployed to https://docs.powabase.a
 
 ## Contributing
 
-- Edit MDX files directly under `getting-started/`, `concepts/`, `guides/`, and `api-reference/`.
-- Reference docs and content data is sourced from the platform repo; the conversion script at `scripts/build-from-source.ts` regenerates MDX from the TypeScript data when the platform changes.
+- Edit MDX files directly under `concepts/`, `guides/`, and `api-reference/`.
+- Sidebar order and Mintlify config live in `docs.json` — edit it directly.
+- Diagrams (`diagrams/*.svg`) can be edited by hand, or regenerated from `scripts/build-diagrams.ts` if you're working from the React/TSX sources.
 
 ## Local preview
 
 ```bash
-npx mintlify dev
+npx mint dev
+```
+
+## Check for broken links
+
+```bash
+npx mint broken-links
 ```
 
 ## Deploy
