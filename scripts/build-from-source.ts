@@ -71,6 +71,7 @@ const LUCIDE_TO_FA: Record<string, string> = {
   Wrench: "wrench",
   Layers: "layer-group",
   MessageSquare: "message",
+  Plug: "plug",
 };
 
 function iconForPage(
@@ -120,6 +121,10 @@ function codeGroup(snippets: { python: string; typescript: string; curl: string 
 //     that isn't a-z — i.e. uppercase ASCII, digit, `_`, `*`, etc. — or
 //     when it's at end of string. Exception: `</` (closing tag) starts
 //     with lowercase or uppercase; we leave it.
+//
+// To embed Mintlify components (<Frame>, <Card>, ...) or other raw MDX in
+// a Guide, use the page-level `preface` field instead of `description` /
+// `notes` — `preface` is emitted verbatim without this escaping.
 function mdxText(s: string): string {
   return s
     .replace(/\{/g, "\\{")
@@ -179,6 +184,11 @@ function guideToMdx(guide: Guide): string {
 
   if (guide.introduction) {
     sections.push(mdxText(guide.introduction));
+    sections.push("");
+  }
+
+  if (guide.preface) {
+    sections.push(guide.preface);
     sections.push("");
   }
 

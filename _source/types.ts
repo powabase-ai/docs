@@ -49,6 +49,10 @@ export interface Guide {
   steps: GuideStep[];
   prerequisites?: string[];
   introduction?: string;
+  // Raw MDX rendered between `introduction` and the `<Steps>` block. Unlike
+  // `introduction` / step descriptions, the contents are NOT escaped — author
+  // them as you would write them in an .mdx file (Markdown + JSX components).
+  preface?: string;
   whatNext?: NavCard[];
 }
 
