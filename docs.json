@@ -17,8 +17,8 @@
             "group": "Getting Started",
             "pages": [
               "concepts/platform-overview",
+              "guides/auth-connection",
               "guides/quickstart",
-              "guides/introduction",
               "concepts/platform-comparison"
             ]
           },

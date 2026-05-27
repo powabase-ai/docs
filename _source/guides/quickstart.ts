@@ -7,7 +7,7 @@ export const quickstartGuide: Guide = {
   description:
     "Build an end-to-end RAG agent in 5 minutes — from document upload to a streaming conversation.",
   prerequisites: [
-    "A project with API keys configured (see Authentication guide)",
+    "A Powabase project — grab your Project URL and Service Role (Secret) Key from the Connect modal in the Studio (click the Connect button in your project header, or append ?showConnect=true to any project URL). See the Auth & Connection guide for the full walkthrough.",
   ],
   introduction:
     "In this guide you will upload a document, create a knowledge base, index the document into it, spin up an agent backed by that knowledge base, and run a streaming conversation — all through the REST API. By the end you will have a fully functional RAG agent that can answer questions grounded in your own content.",
@@ -15,28 +15,33 @@ export const quickstartGuide: Guide = {
     {
       title: "Authenticate",
       description:
-        "Set up your base URL and authentication headers. Every request to the project API requires the service_role key.",
+        "Set up your base URL and authentication headers. Copy Project URL and Service Role (Secret) Key from the Studio's Connect modal — every /api/* request needs the service role key in both the apikey and Authorization headers.",
       endpoint: "Headers: apikey + Authorization",
       snippets: {
         python: `import requests
 
-BASE_URL = "{BASE_URL}"
-API_KEY = "{API_KEY}"
+BASE_URL = "{BASE_URL}"   # Connect modal -> Project URL
+API_KEY = "{API_KEY}"     # Connect modal -> Service Role (Secret) Key
 
 headers = {
     "apikey": API_KEY,
     "Authorization": f"Bearer {API_KEY}",
     "Content-Type": "application/json",
 }`,
-        typescript: `const BASE_URL = "{BASE_URL}";
-const API_KEY = "{API_KEY}";
+        typescript: `const BASE_URL = "{BASE_URL}";  // Connect modal -> Project URL
+const API_KEY = "{API_KEY}";    // Connect modal -> Service Role (Secret) Key
 
 const headers = {
   apikey: API_KEY,
   Authorization: \`Bearer \${API_KEY}\`,
   "Content-Type": "application/json",
 };`,
-        curl: `# Set these variables for the rest of the guide\nBASE_URL="{BASE_URL}"\nAPI_KEY="{API_KEY}"`,
+        curl: `# Set these variables for the rest of the guide.
+# Both values come from the Studio's Connect modal:
+#   BASE_URL = Project URL
+#   API_KEY  = Service Role (Secret) Key
+BASE_URL="{BASE_URL}"
+API_KEY="{API_KEY}"`,
       },
     },
     {

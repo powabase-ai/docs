@@ -14,9 +14,9 @@ export const postgrestReference: ReferenceSection = {
   description:
     "Direct REST access to your project's public schema. PostgREST exposes every table and view in the public schema as a REST endpoint with rich filtering, ordering, pagination, and embedded relations.",
   introduction:
-    "Each project has its own Postgres database. The `ai` schema is managed by Powabase (sources, knowledge bases, agents, sessions, and so on). The `public` schema is yours — create tables, define relationships, add indexes, and PostgREST will expose them automatically at /rest/v1/{table}. PostgREST honours Row Level Security: anon keys respect RLS policies; service-role keys bypass them. Use service-role server-side only.",
+    "Each project has its own Postgres database. The `ai` schema is managed by Powabase (sources, knowledge bases, agents, sessions, and so on). The `public` schema is yours — create tables, define relationships, add indexes, and PostgREST will expose them automatically at /rest/v1/{table}. PostgREST honours Row Level Security: the Anon (Publishable) Key respects RLS policies, the Service Role (Secret) Key bypasses them — use the service role server-side only. Both keys, plus the Project URL, are in the Studio's Connect modal — click the Connect button in your project header (or append ?showConnect=true to any project URL).",
   commonPatterns:
-    "Read with GET /rest/v1/{table} and a select= query parameter. Insert with POST and a JSON body. Update with PATCH and a filter. Delete with DELETE and a filter. Embed related tables with select=*,other(*). Filter operators (eq, gt, lt, like, in, is, ...) follow PostgREST conventions. Always include both apikey and Authorization: Bearer headers.",
+    "Read with GET /rest/v1/{table} and a select= query parameter. Insert with POST and a JSON body. Update with PATCH and a filter. Delete with DELETE and a filter. Embed related tables with select=*,other(*). Filter operators (eq, gt, lt, like, in, is, ...) follow PostgREST conventions. Always include both apikey and Authorization: Bearer headers, both set to the same key — sending only one returns 401.",
   groups: [
     {
       title: "Reading rows",
