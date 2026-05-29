@@ -121,6 +121,19 @@
             ]
           },
           {
+            "group": "Operations",
+            "pages": [
+              "concepts/billing-model",
+              "concepts/rate-limits"
+            ]
+          },
+          {
+            "group": "AI + BaaS Cookbook",
+            "pages": [
+              "guides/baas-ai-cookbook"
+            ]
+          },
+          {
             "group": "Admin proxies",
             "pages": [
               "api-reference/auth-storage"

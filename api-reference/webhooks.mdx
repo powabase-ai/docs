@@ -106,6 +106,27 @@ curl -X POST '{BASE_URL}/api/webhooks/{webhook_id}' \
 The trigger endpoint executes the workflow inline and returns the final output. For long-running workflows that exceed the 5-minute synchronous limit, design the workflow to acknowledge the request quickly and continue work asynchronously (e.g. dispatch via a `general_api` block to a background processor).
 </Note>
 
+## Security model
+
+A short list of what the trigger endpoint does and doesn't do, since webhook security is the kind of thing where unstated assumptions get exploited.
+
+**What it does:**
+
+- **Verifies the secret via constant-time comparison.** `hmac.compare_digest` on the server side prevents timing-attack style secret guessing.
+- **Validates the secret BEFORE the deploy-or-arm state gate.** An invalid secret cannot consume the single-use arm slot — bad requests don't accidentally disarm a workflow before legitimate ones can fire.
+- **Atomic single-use disarm.** For armed (single-use) workflows, the platform issues a `RETURNING id` UPDATE that disarms in the same statement. Only the first of N concurrent requests with a valid secret wins; the rest see `webhook_armed_until = NULL` and return `403`.
+
+**What it does NOT do:**
+
+- **No HMAC of the request body.** The webhook secret authenticates the *caller*, not the request. A man-in-the-middle who can read the URL or `Authorization` header can replay the request with any body. **For sensitive triggers, use TLS termination at your network boundary and a trusted client.** Don't rely on the webhook itself to prove the body was authored by the upstream system.
+- **No timestamp / nonce / replay-window protection.** The secret doesn't expire and isn't tied to a specific request. An attacker who captures one valid request can replay it forever (until you rotate the secret).
+- **No retry / redelivery.** A failed trigger is gone — the trigger endpoint is fire-and-forget from the upstream's perspective. If you need at-least-once delivery semantics, configure your upstream system's own retry policy.
+- **No request idempotency.** Two identical calls (same body, same time) trigger two executions. Pair with workflow logic that's idempotent if you need that.
+
+**The 10-minute arm TTL is the closest thing to a replay window.** A captured request to an armed (vs deployed) webhook has at most 10 minutes from arming to be replayed. Deployed webhooks have no such window.
+
+For upstream systems that support body signatures (Stripe, GitHub, etc.), do the signature check on your end inside the workflow's first block (a `code` block validating the signature, branching to `response` on failure). The platform won't do it for you.
+
 ## Error Responses
 
 Errors return `{"error": "<message>", "error_code": "<UPPER_SNAKE_CODE>"}`. The 401 responses additionally omit `error_code` (they're a plain `{"error": "Unauthorized"}`).
