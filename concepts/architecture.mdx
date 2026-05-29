@@ -8,13 +8,17 @@ icon: "server"
 
 The platform uses a two-tier architecture. A single shared Control Plane manages organizations, projects, users, and authentication. It provisions a fully isolated Data Plane for each project — including its own Postgres database, API gateway, auth service, storage, and AI service.
 
-<Frame caption="Request flow from browser through control plane to per-project stack">
-  <img src="/diagrams/architecture-overview.svg" alt="Architecture diagram: Browser → Next.js Frontend → Control Plane API → Per-Project Stack (Kong API Gateway, GoTrue Auth, PostgREST, Project Service, Postgres with pgvector). The control plane manages routing and authentication while each project gets a fully isolated stack." />
+<Frame caption="Two tiers — a shared control plane for management, and per-project data planes for runtime traffic">
+  <img src="/diagrams/architecture-overview.svg" alt="Architecture diagram: Browser → Next.js Frontend → Control Plane API for management; runtime requests go Browser → Per-Project Kong → Per-Project Stack (GoTrue Auth, PostgREST, Project Service, Postgres with pgvector, Storage, Realtime). The control plane provisions and manages projects but is not in the data-plane path for runtime traffic." />
 </Frame>
 
 ## Per-Project Isolation
 
-Each project gets its own complete infrastructure stack. This means one project's data, users, and configuration are completely separate from another's. Projects can't see each other's databases, storage buckets, or API keys. This isolation is enforced at the infrastructure level — each project runs its own Postgres instance, its own auth service, and its own AI service worker.
+Each project gets its own complete infrastructure stack in its own Kubernetes namespace (`project-{ref}`). One project's data, users, and configuration are fully separate from another's — projects can't see each other's databases, storage buckets, or API keys. Isolation is enforced at three layers:
+
+- **Compute:** each project runs its own Postgres StatefulSet (defaults: 400m CPU, 1Gi memory, 10Gi gp3 storage — overridable per project), its own GoTrue auth pod, its own Storage and Realtime pods, and its own Project Service worker.
+- **Network:** a `project-isolation` NetworkPolicy on the namespace allows ingress only from `shared-services` (where Kong and PgBouncer live) and `control-plane` (the management tier). Cross-project pod-to-pod traffic is blocked.
+- **Storage:** the Storage API is configured with a per-project S3 prefix; even though buckets share an underlying S3 backend, projects can only access object paths under their own prefix.
 
 ## API Authentication
 
@@ -32,16 +36,20 @@ Both keys live in the Connect modal in the Studio. Click the Connect button in y
 
 When you make an API call to your project URL (`<ref>.p.powabase.ai`), the request hits the per-project Kong gateway directly — the control plane is **not** in the data-plane path. Kong matches the project hostname and routes `/api/*` paths to the Project Service (AI features), `/auth/v1/*` to GoTrue (authentication), `/rest/v1/*` to PostgREST (direct database access), `/storage/v1/*` to the Storage API, and `/realtime/v1/*` to the Realtime service.
 
+The wildcard ALB ingress that fronts every project sits in front of Kong with an **idle timeout of 900 seconds** — long enough that agent and workflow SSE streams (which can run for minutes) won't get cut by an intermediary. CORS is permissive by default at the Kong layer (`origins: ["*"]`, `credentials: true`), so browsers can call any project URL directly with the Anon (Publishable) Key without you wiring up an allowlist. If you need a narrower posture for compliance, the gateway config is customizable on self-hosted deployments.
+
 ## Database Schemas
 
-Each project database has four schemas. The ai schema is managed by the platform and stores all AI-related data. The public schema is yours to use for application data. The auth and storage schemas are managed by GoTrue and the Storage API respectively.
+Each project database has four user-visible schemas. The `ai` schema is managed by the platform and stores all AI-related data. The `public` schema is yours to use for application data. The `auth` and `storage` schemas are managed by GoTrue and the Storage API respectively.
 
-| Schema | Owner | Purpose |
-| --- | --- | --- |
-| ai | Platform | Sources, knowledge bases, chunks, embeddings, agents, sessions, runs, workflows |
-| public | You | Your application tables, accessible via PostgREST |
-| auth | GoTrue | User accounts, sessions, tokens |
-| storage | Storage API | File metadata, bucket configuration |
+| Schema | Owner | Purpose | PostgREST exposed? |
+| --- | --- | --- | --- |
+| `public` | You | Your application tables | Yes |
+| `ai` | Platform | Sources, knowledge bases, chunks, embeddings, agents, sessions, runs, workflows | Yes (read+write under RLS) |
+| `storage` | Storage API | File metadata, bucket configuration | Yes |
+| `auth` | GoTrue | User accounts, sessions, tokens | No (use the Auth API) |
+
+PostgREST is configured to expose `public`, `ai`, `storage`, and `graphql_public` schemas. That means you can query, filter, and (with the right RLS posture) write to `ai.*` tables directly via `/rest/v1/*` — useful for custom dashboards over agent runs, bulk operations on sources, or any case where the typed `/api/*` endpoints don't cover what you need. Treat `ai.*` writes carefully: the platform's own services assume the schema's invariants, so prefer the typed endpoints for state-changing operations on agent / KB / workflow tables.
 
 ## Next Steps
 
