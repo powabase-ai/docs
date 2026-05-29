@@ -113,6 +113,14 @@
             ]
           },
           {
+            "group": "Realtime",
+            "pages": [
+              "concepts/realtime",
+              "guides/realtime-subscriptions",
+              "api-reference/realtime"
+            ]
+          },
+          {
             "group": "Admin proxies",
             "pages": [
               "api-reference/auth-storage"

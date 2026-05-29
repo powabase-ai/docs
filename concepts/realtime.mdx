@@ -1,0 +1,158 @@
+---
+title: "Realtime model"
+description: "Three channel types — Broadcast for ephemeral messages, Presence for online-state sync, Postgres Changes for table change streams. How auth, RLS, and the per-project tenancy fit together."
+icon: "satellite-dish"
+---
+
+Powabase Realtime is Supabase Realtime v2.65.3 mounted at `/realtime/v1/` (WebSocket) and `/realtime/v1/api` (REST) on your project URL. It's a long-lived bidirectional channel service that lets clients subscribe to events from three sources: messages broadcast by other clients, presence state of who's online, and row-level changes from your Postgres database.
+
+This page covers the conceptual model — the three channel types, how they compose with auth and RLS, and the Powabase-specific gotchas around tenancy and the publication setup. For the API surface and WebSocket protocol, see [Realtime Reference](/api-reference/realtime). For worked examples, see [Realtime subscriptions](/guides/realtime-subscriptions).
+
+## The three channel types
+
+Realtime exposes three independent subscription primitives, all multiplexed over a single WebSocket connection. A channel can use one, two, or all three at once.
+
+**Broadcast** — clients send messages to a named channel, and everyone subscribed to that channel receives them. No persistence; if a client isn't connected, they miss the message. Use this for cursor positions, live-cursor selections, typing indicators, anything where the latest state matters and history doesn't.
+
+**Presence** — each client publishes its own "I'm here" state to a channel, and every other client sees the aggregate. Internally it's tracked through `track`/`untrack` operations and reconciled across the cluster. Use this for "who's online right now," collaborator avatars on a shared document, etc.
+
+**Postgres Changes** — Realtime subscribes to the project's logical replication slot and forwards row changes (INSERT, UPDATE, DELETE) matching the client's filter to the channel. Filters can target a schema, table, column equality, and event type. Use this for "live update the UI when this table changes" patterns without polling.
+
+All three are addressed by **channel name** — an arbitrary string the client chooses (e.g., `room:42`, `cursors:doc-abc`, `db:public:orders`). Channels with the same name share state across all connected clients.
+
+## Auth model
+
+Realtime authenticates the WebSocket connection with the project's JWT — exactly like the rest of the BaaS surface. The client sends `apikey` and `Authorization` query parameters at WebSocket handshake time:
+
+```
+wss://{ref}.p.powabase.ai/realtime/v1/websocket?apikey=<ANON_OR_USER_TOKEN>&vsn=1.0.0
+```
+
+If the token is the Anon Key, the connection's database role is `anon`. If it's a signed-in user's access token, the role is `authenticated`. Service Role tokens get `service_role`. The same role mapping you've already met in [RLS Model](/concepts/rls-model) and [Auth model](/concepts/auth-model).
+
+After the connection is up, each channel subscription can be either **public** or **private**:
+
+- **Public channels** — anyone connected with a valid Anon or user token can subscribe. No RLS check.
+- **Private channels** — joining the channel requires a passing RLS policy on the `realtime.messages` table. The standard pattern is `CREATE POLICY ... ON realtime.messages FOR SELECT TO authenticated USING (<your check>)`. Without a passing policy, the join request returns an error and the channel never opens.
+
+You opt into private mode when subscribing — the client signals `config: { private: true }` in the join payload. Public is the default.
+
+For Postgres Changes specifically: the filtering is **server-side after the policy check**. RLS on the underlying table (e.g., `public.orders`) also applies — Realtime won't forward a row change unless the client has a passing SELECT policy for that row. So a private channel with a postgres_changes config gives you per-user filtering essentially for free, as long as your RLS posture on the table is right.
+
+## The Powabase-specific gotchas
+
+Two things Powabase does differently from a vanilla Supabase deployment, both of which surface as opaque failures if you don't know about them.
+
+### Kong preserves the Host header
+
+Realtime is multi-tenant at the image level (one Realtime process can serve multiple projects, identified by the hostname). On Powabase, every project gets its own Realtime pod, but the image still parses tenant_id from the Host header — and if Kong rewrites Host to the upstream service name (`realtime.svc.cluster.local`), Realtime looks up tenant "realtime", doesn't find it, and returns **`403 TenantNotFound`** on every WS upgrade.
+
+Powabase's Kong config sets `preserve_host: True` on both the WS and REST routes to prevent this. You don't need to do anything — it's handled at the platform layer. The reason to mention it: if you ever see `403 TenantNotFound` from a self-hosted Realtime deployment, this is what's wrong.
+
+### Logical replication slot setup
+
+Postgres Changes works by tailing the project's WAL through logical replication. By default, Powabase projects ship **without** a `supabase_realtime` publication configured — postgres_changes subscriptions will succeed but you won't receive any events until you create the publication and add tables to it:
+
+```sql
+-- Enable Realtime for specific tables
+CREATE PUBLICATION supabase_realtime FOR TABLE
+  public.orders,
+  public.messages,
+  public.cursors;
+
+-- Or all tables in a schema
+CREATE PUBLICATION supabase_realtime FOR ALL TABLES IN SCHEMA public;
+```
+
+After this, INSERT/UPDATE/DELETE on those tables are streamed to Realtime, which forwards them to subscribed clients. To stop replicating a table:
+
+```sql
+ALTER PUBLICATION supabase_realtime DROP TABLE public.orders;
+```
+
+If you don't see postgres_changes events arriving, this is the first thing to check. The publication is project-wide; you only need to set it up once.
+
+## realtime.send() and realtime.broadcast_changes()
+
+The Realtime image installs two SQL functions in the `realtime` schema that let your Postgres code emit messages to channels server-side. Useful for "broadcast a notification when this row changes" patterns where the trigger logic lives in the database, not the application.
+
+**`realtime.send(payload jsonb, event text, topic text, private bool default false)`** — sends a custom message to the given topic (channel name). All clients subscribed to that channel receive it as a broadcast event. The `private` flag controls whether the receiving channel needs to be subscribed as private.
+
+**`realtime.broadcast_changes(topic text, event text, op text, table text, schema text, new record, old record, level text)`** — a wrapper for "broadcast this row change as a structured event," typically called from a trigger function. The `level` parameter is the channel-private level (it defaults to private, so you need RLS on `realtime.messages` for the trigger to actually deliver).
+
+A worked trigger example:
+
+```sql
+CREATE OR REPLACE FUNCTION broadcast_order_change()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  PERFORM realtime.broadcast_changes(
+    topic    => 'orders:' || COALESCE(NEW.user_id::text, OLD.user_id::text),
+    event    => TG_OP,
+    op       => TG_OP,
+    table    => 'orders',
+    schema   => 'public',
+    new      => NEW,
+    old      => OLD,
+    level    => 'topic'
+  );
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+CREATE TRIGGER orders_realtime
+  AFTER INSERT OR UPDATE OR DELETE ON public.orders
+  FOR EACH ROW EXECUTE FUNCTION broadcast_order_change();
+```
+
+Each user subscribes to their own `orders:<user_id>` channel and gets only their own changes. This is more efficient than postgres_changes when you have many users and don't want every client filtering through every row change.
+
+## When to use which
+
+A rough decision tree for picking the right channel type:
+
+| Use case | Channel type |
+|---|---|
+| Live cursor positions, drag previews, typing indicators | Broadcast |
+| "Who's currently viewing this page" sidebar | Presence |
+| Live-updating list when database changes | Postgres Changes |
+| Server-pushed notifications based on business logic | `realtime.send()` from a trigger |
+| Chat / messaging where history matters | **Don't use Realtime** — write to a table and use Postgres Changes + REST history fetch |
+
+Broadcast and Presence are ephemeral; Postgres Changes is durable (the underlying rows persist). The "use case" question is essentially "do I need history?" — yes → write to the database and subscribe; no → broadcast.
+
+## What Realtime is *not* good for
+
+A few things to be explicit about:
+
+- **Pub/sub for backend services.** Realtime's WebSocket is designed for thousands of browser clients, not hundreds of backend services holding persistent connections. For service-to-service eventing, use Postgres `LISTEN`/`NOTIFY` (note: not over the PgBouncer pooler — see [Connection pooling](/guides/connection-pooling)) or a dedicated message broker.
+
+- **Reliable delivery.** Realtime is best-effort. A dropped WebSocket means the messages sent during that window are gone. If you need at-least-once delivery, the broadcast pattern is the wrong fit — write to a durable queue and have subscribers tail it.
+
+- **Strict ordering across channels.** Within a single channel, ordering is preserved. Across channels (or across multiple connections of the same client), ordering is not guaranteed.
+
+- **High-frequency message rates.** Realtime can handle hundreds of messages per second on a channel, but if you're broadcasting raw mouse coordinates at 60Hz, you'll want to throttle client-side or you'll overrun the buffer.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Realtime subscriptions" href="/guides/realtime-subscriptions">
+Three worked patterns: live-updating list, presence cursors, broadcast chat.
+</Card>
+
+<Card title="Realtime Reference" href="/api-reference/realtime">
+WebSocket protocol, channel config shape, REST broadcast endpoint, error codes.
+</Card>
+
+<Card title="RLS Model" href="/concepts/rls-model">
+How the auth layer that gates private channels works.
+</Card>
+
+<Card title="Auth model" href="/concepts/auth-model">
+The JWT-and-role model Realtime shares with the rest of the BaaS surface.
+</Card>
+
+</CardGroup>
