@@ -140,7 +140,7 @@ curl -X POST '{BASE_URL}/api/copilot/sessions/{id}/messages/{mid}/snapshot' -H "
 
 ### POST /api/copilot/sessions/{id}/chat
 
-Send a message and stream the copilot response (SSE).
+Send a message and stream the copilot response (SSE). The copilot runs a ReAct loop with access to a fixed set of tools for inspecting and modifying the workflow.
 
 <ParamField path="id" type="string" required>
 Session ID
@@ -149,19 +149,67 @@ Session ID
 <RequestExample>
 
 ```json Request
-{ "message": "Build a workflow that..." }
+{
+  "message": "Add a step that sends Slack notifications when the run finishes",
+  "workflow_state": { "nodes": [...], "edges": [...] }
+}
 ```
 
 </RequestExample>
 
+| Body field | Type | Notes |
+| --- | --- | --- |
+| `message` | string (required) | User message |
+| `workflow_state` | object | The current editor state (nodes + edges). The copilot needs this so it can reason against the live in-progress workflow, not just the persisted version. The Studio sends it automatically. |
+
+#### SSE event types
+
+The chat stream emits these events (each as `data: <json>` lines):
+
+| Event | Payload | When |
+| --- | --- | --- |
+| `status` | `{ message }` | Human-readable status string ("Thinking...", "Modifying workflow...", etc.) for the UI. Derived from ReAct step + tool name via the platform's status map. |
+| `tool_call` | `{ name, arguments }` | A copilot tool is about to execute |
+| `tool_result` | `{ name, result }` | A copilot tool finished (truncated to readable size) |
+| `content_delta` | `{ delta }` | A token of the copilot's text response |
+| `complete` | `{ message_id, content, workflow_diff }` | Final event. `workflow_diff` is the structured change-set the copilot proposes (added/removed/modified blocks and edges) — pass `message_id` to `/snapshot` to apply it. |
+| `error` | `{ error }` | The copilot failed mid-run |
+
+#### Copilot tools
+
+The copilot has eight tools, exposed via the ReAct loop:
+
+| Tool | Purpose |
+| --- | --- |
+| `modify_workflow` | Add / update / remove blocks and edges in the in-progress workflow. The `workflow_diff` in the `complete` event is the cumulative effect of all `modify_workflow` calls. |
+| `get_block_info` | Look up the schema for a block type (which config fields, defaults, validation) before constructing it |
+| `get_db_schema` | Read the project database's schema (tables, columns, types) so the copilot can build correct SQL for code or general_api blocks |
+| `list_project_assets` | Enumerate existing agents, KBs, orchestrations, workflows the copilot might want to call |
+| `get_asset_details` | Fetch one asset's full config — for agents, the system prompt is truncated to 1000 chars to fit context |
+| `execute_public_sql` | Run a read-only SQL query against the project DB (public schema only) — useful for exploring data before designing a block |
+| `get_workflow_run_logs` | Read past execution logs from this workflow — useful for "the last run failed at step X, fix it" |
+| `manage_project_asset` | Create / update / delete a project asset (agent, KB, etc.) on the copilot's recommendation. Requires user confirmation in the UI before the change persists. |
+
+The copilot itself runs as an agent under platform billing. Its model is configurable via `/api/copilot/settings/model` — defaults to `gpt-5.2`, with options including GPT-5.2, GPT-4.1, o3/o4, and Claude Opus/Sonnet/Haiku 4.x. Only function-calling-capable models are allowed.
+
+Runtime limits: 25 ReAct steps max, temperature 0.7, workflow state truncated at 50,000 chars total (block configs over 2,000 chars get `... [truncated]`).
+
 <CodeGroup>
 
 ```python Python
-requests.post(f"{BASE_URL}/api/copilot/sessions/{session_id}/chat", headers=headers, json={"message": "Build a workflow that..."}, stream=True)
+requests.post(
+    f"{BASE_URL}/api/copilot/sessions/{session_id}/chat",
+    headers=headers,
+    json={"message": "Build a workflow that...", "workflow_state": current_state},
+    stream=True,
+)
 ```
 
 ```typescript TypeScript
-await fetch(`${BASE_URL}/api/copilot/sessions/${sessionId}/chat`, { method: "POST", headers, body: JSON.stringify({ message: "Build a workflow that..." }) });
+await fetch(`${BASE_URL}/api/copilot/sessions/${sessionId}/chat`, {
+  method: "POST", headers,
+  body: JSON.stringify({ message: "Build a workflow that...", workflow_state: currentState }),
+});
 ```
 
 ```bash cURL

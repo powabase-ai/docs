@@ -125,6 +125,97 @@ curl -X POST '{BASE_URL}/api/settings/reset-category' -H "apikey: {API_KEY}" -H 
 
 </CodeGroup>
 
+## Registry keys reference
+
+A high-level map of what's in the registry. The authoritative source for current defaults, types, and validation rules is `GET /api/settings` against your project — these tables tell you what each key controls so you can find the right knob without round-tripping.
+
+### copilot (8 keys)
+
+| Key | Controls |
+| --- | --- |
+| `copilot_model` | LLM used by the workflow copilot (one of `COPILOT_MODEL_OPTIONS`). Default `gpt-5.2`. |
+| `COPILOT_TEMPERATURE` | Sampling temperature for the copilot ReAct loop. Default `0.7`. |
+| `COPILOT_MAX_STEPS` | Max ReAct iterations before the copilot is forced to respond. Default `25`. |
+| `MAX_BLOCK_NAME_LEN` | Block display names truncated to this length before injection into the prompt. |
+| `MAX_CONFIG_VALUE_LEN` | Single config-value truncation cap (e.g., a large system prompt). |
+| `MAX_TOTAL_STATE_LEN` | Hard cap on the total serialized workflow state passed to the copilot. |
+| `MAX_CONFIG_DEPTH` | Recursion depth limit when truncating nested config dicts. |
+| `SYSTEM_PROMPT_TRUNCATE` | Char limit when the copilot fetches an agent's system prompt via `get_asset_details`. |
+
+### agents (3 keys)
+
+| Key | Controls |
+| --- | --- |
+| `AGENT_DEFAULT_MODEL` | Model used when an agent row has no model set. |
+| `DEFAULT_MAX_CONTEXT_TOKENS` | Context token budget for RAG retrievals when not overridden per request. |
+| `DELEGATE_MAX_STEPS` | ReAct step cap for sub-agent (delegate tool) runs. |
+
+### tools (12 keys)
+
+| Key | Controls |
+| --- | --- |
+| `CUSTOM_TOOL_TIMEOUT` | HTTP timeout for Custom Tool calls. Default `30`. |
+| `MCP_TOOL_TIMEOUT` | Timeout for MCP `tools/call` requests. Default `30`. |
+| `MAX_TOOL_OUTPUT_LENGTH` | Custom Tool response char cap. Default `10000`. |
+| `DEFAULT_MAX_RESULT_CHARS` | Outer truncation cap applied after tool execution. Default `50000`. |
+| `EXA_API_KEY` | Required for `web_search` builtin. Secret. |
+| `FIRECRAWL_API_KEY` | Required for `web_scrape` builtin. Secret. |
+| `FIRECRAWL_API_BASE` | Override the Firecrawl endpoint (self-hosted Firecrawl). |
+| `VISION_MODEL` | Model used for `web_scrape include_images: true`. Default `gpt-4.1-mini`. |
+| `WEB_SCRAPE_MAX_CHARS` | Per-page char cap for `web_scrape`. Default `200000`. |
+| `WEB_SCRAPE_MAX_IMAGES` | Image-analysis count limit per scrape. |
+| `VISION_TIMEOUT` | Per-image vision call timeout. |
+| `VISION_MAX_WORKERS` | Concurrent vision-call worker pool. |
+
+### knowledge-indexing (41 keys)
+
+Covers chunking, embedding model selection, PageIndex tree-search params, GraphIndex enrichment, Doc2JSON extraction, full-document strategy, and BM25 indexing. Key families:
+
+- **Chunk-embed strategy**: `CHUNK_EMBED_DEFAULT_CHUNK_SIZE`, `CHUNK_EMBED_DEFAULT_OVERLAP`, `CHUNK_EMBED_EMBEDDING_MODEL`
+- **PageIndex strategy** (16 keys): `PAGEINDEX_INDEXING_MODEL`, `PAGEINDEX_LLM_MAX_CONCURRENT`, `PAGEINDEX_TOC_*`, `PAGEINDEX_MAX_*`, `PAGEINDEX_MIN_*`, `PAGEINDEX_SUMMARY_TOKEN_THRESHOLD`, `PAGEINDEX_DOC_DESCRIPTION_MAX_TOKENS`
+- **GraphIndex strategy** (8 keys): `GRAPHINDEX_INDEXING_MODEL`, `GRAPHINDEX_ENRICHMENT_MODEL`, `GRAPHINDEX_EMBEDDING_MODEL`, `GRAPHINDEX_ENRICHMENT_MAX_*`
+- **Full-document strategy** (4 keys): `FULLDOC_SUMMARY_MODEL`, `FULLDOC_EMBEDDING_MODEL`, `FULLDOC_SUMMARY_INPUT_CHARS`, `FULLDOC_SUMMARY_MAX_TOKENS`
+- **Doc2JSON strategy** (8 keys): `DOC2JSON_*` for window size, overlap, extraction model, image use, retries
+- **Cross-cutting**: `EXTRACTION_DEFAULT_METHOD` (`mistral`/`paddleocr`/`lighton`/`opendataloader`/`fitz`/`pdfplumber`/`auto`), `EMBEDDING_MAX_TOKENS_PER_BATCH`, `BM25_AUTO_INDEXING`
+
+### knowledge-retrieval (19 keys)
+
+| Key | Controls |
+| --- | --- |
+| `KB_DEFAULT_TOP_K` | Default `top_k` for KB search when not specified per request. |
+| `KB_DEFAULT_MAX_CONTEXT_TOKENS` | Default context token budget for retrieval. |
+| `DEFAULT_IMAGE_DELIVERY` | How images are returned in multimodal retrieval. |
+| `HYBRID_DEFAULT_VECTOR_WEIGHT` | Vector vs. sparse weight in hybrid search. |
+| `RERANKER_DEFAULT_MODEL` | Default reranker (Cohere/Jina/Voyage/ZeroEntropy). |
+| `RERANKER_CANDIDATE_COUNT` | Number of candidates fetched before reranking. |
+| `QUERY_ENRICHMENT_DEFAULT_MODEL` | Model used to rewrite/expand user queries before retrieval. |
+| `QUERY_ENRICHMENT_TEMPERATURE` | Sampling temperature for query enrichment. |
+| `METADATA_ENRICHMENT_*` (7 keys) | LLM model, max tokens, concurrency, batch size, retry, image, char limits for chunk metadata enrichment. |
+| `PAGEINDEX_RETRIEVAL_MODEL` | Retrieval-time model for PageIndex tree search. |
+| `MAX_SEARCH_WORKERS` | Concurrent retrieval worker pool. |
+| `DROPPED_ITEM_TEXT_LIMIT` | Char limit when logging dropped retrieval items for debugging. |
+
+### compaction (5 keys)
+
+| Key | Controls |
+| --- | --- |
+| `DEFAULT_COMPACTION_MODEL` | LLM used to summarize older session messages when context grows past budget. |
+| `COMPACTION_KEEP_LAST_N` | Number of most recent messages preserved verbatim. |
+| `CHARS_PER_TOKEN` | Heuristic char→token ratio used in budget calculations. |
+| `COMPACTION_MAX_OUTPUT_TOKENS` | Output cap for the compaction summary. |
+| `COMPACTION_BUFFER` | Token buffer kept free after compaction. |
+
+### sources (4 keys)
+
+| Key | Controls |
+| --- | --- |
+| `URL_IMPORT_MAX_PAGES` | Hard cap on pages crawled when adding a URL source with crawl enabled. |
+| `URL_IMPORT_MAX_IMAGES_PER_PAGE` | Per-page image-extraction cap. |
+| `URL_IMPORT_CRAWL_MAX_DEPTH` | Max link-following depth for crawl. |
+| `URL_IMPORT_IMAGE_MAX_SIZE_MB` | Per-image size limit before skip. |
+
+There are 92 registered keys total. `GET /api/settings` is the authoritative live view.
+
 ## Error Responses
 
 Settings routes return `{"error": "<message>"}` (PUT additionally includes `details` with per-key errors). The codes below are the documentation labels we use for each failure mode.

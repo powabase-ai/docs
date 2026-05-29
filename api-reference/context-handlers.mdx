@@ -8,7 +8,7 @@ Context handlers provide standalone RAG retrieval without requiring an agent. Se
 
 ## Common Patterns
 
-Execute a context handler with POST /api/context-handlers, providing a query and an array of knowledge_base_configs (each specifying a knowledge_base_id and optional top_k). The response includes the retrieved chunks ranked by relevance, which you can inject into your own LLM prompts.
+Execute a context handler with POST /api/context-handlers, providing a query and an array of knowledge_bases (each specifying a knowledge_base_id and optional top_k). The response includes the retrieved chunks ranked by relevance, which you can inject into your own LLM prompts.
 
 ### GET /api/context-handlers
 
@@ -39,7 +39,7 @@ Create and execute a context handler — retrieves relevant chunks from one or m
 ```json Request
 {
   "query": "How to get started?",
-  "knowledge_base_configs": [
+  "knowledge_bases": [
     { "id": "kb-uuid", "top_k": 5 }
   ],
   "max_context_tokens": 8000
@@ -53,7 +53,7 @@ Create and execute a context handler — retrieves relevant chunks from one or m
 ```python Python
 response = requests.post(f"{BASE_URL}/api/context-handlers", headers=headers, json={
     "query": "How to get started?",
-    "knowledge_base_configs": [{"id": kb_id, "top_k": 5}],
+    "knowledge_bases": [{"id": kb_id, "top_k": 5}],
     "max_context_tokens": 8000,
 })
 ```
@@ -63,17 +63,21 @@ const res = await fetch(`${BASE_URL}/api/context-handlers`, {
   method: "POST", headers,
   body: JSON.stringify({
     query: "How to get started?",
-    knowledge_base_configs: [{ id: kbId, top_k: 5 }],
+    knowledge_bases: [{ id: kbId, top_k: 5 }],
     max_context_tokens: 8000,
   }),
 });
 ```
 
 ```bash cURL
-curl -X POST '{BASE_URL}/api/context-handlers' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"query": "How to get started?", "knowledge_base_configs": [{"id": "kb-uuid", "top_k": 5}]}'
+curl -X POST '{BASE_URL}/api/context-handlers' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"query": "How to get started?", "knowledge_bases": [{"id": "kb-uuid", "top_k": 5}]}'
 ```
 
 </CodeGroup>
+
+<Note>
+Request body uses `knowledge_bases`; the response payload carries it back as `knowledge_base_configs`. The response also includes a `metadata` object (with `query_enrichment`: the rewritten / expanded queries the platform actually issued) and `errors` (per-KB partial failures, if any).
+</Note>
 
 ### GET /api/context-handlers/{id}
 

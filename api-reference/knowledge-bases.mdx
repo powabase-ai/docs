@@ -512,7 +512,7 @@ curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/items' -H "apikey: {API_KEY}" 
 
 ### POST /api/knowledge-bases/{id}/search
 
-Run a search against the knowledge base. Supports vector_search (semantic, default), full_text (BM25 keyword), and hybrid (RRF fusion) via retrieval_method. Optional filter_metadata narrows results to chunks whose metadata matches; similarity_threshold sets a minimum vector score (0–1).
+Run a search against the knowledge base.
 
 <ParamField path="id" type="string" required>
 KB ID
@@ -525,12 +525,24 @@ KB ID
   "query": "search text",
   "top_k": 5,
   "retrieval_method": "hybrid",
-  "filter_metadata": { "source_id": "..." },
-  "similarity_threshold": 0.3
+  "filter_metadata": { "topic": "billing" },
+  "similarity_threshold": 0.3,
+  "source_ids": ["src-uuid-1", "src-uuid-2"]
 }
 ```
 
 </RequestExample>
+
+| Body field | Type | Notes |
+| --- | --- | --- |
+| `query` | string (required) | Natural-language search query |
+| `top_k` | int | Number of results to return. Default `5` (or `KB_DEFAULT_TOP_K` setting) |
+| `retrieval_method` | string | `vector_search` / `full_text` / `hybrid` / `tree_search`. Omit to use the KB's configured default — the response carries `retrieval_method: "auto"` to indicate this. |
+| `similarity_threshold` | float | Minimum vector score (0–1). Items below this are filtered out. Default `0.0`. |
+| `filter_metadata` | object | Narrow to chunks whose enrichment-metadata fields match. Keys are field names from the KB's enrichment config (see `/enrichment`); values can be scalars or `{ "op": "...", "value": ... }` shapes. |
+| `source_ids` | array of UUIDs | Restrict to chunks from this set of sources only. Useful for "search inside one specific document." |
+
+Per-request overrides for retrieval tuning are also accepted: `vector_weight` (hybrid only), `context_mode` (e.g. surrounding-chunks context), `ts_language` (full-text language for stemming), reranker fields. These override the KB's stored `retrieval_config` for this one request only.
 
 <CodeGroup>
 
@@ -771,6 +783,40 @@ await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/graph-enrichment/errors`, {
 
 ```bash cURL
 curl '{BASE_URL}/api/knowledge-bases/{id}/graph-enrichment/errors' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+## Discoverable defaults
+
+### GET /api/config/kb-defaults
+
+Returns the platform's KB-creation defaults so a UI or self-service KB-creation flow can present valid options without hardcoding them. The Studio's KB-create wizard uses this exact endpoint.
+
+Returns:
+- `strategies` — map of strategy name → `{ label, compatible_retrievers, retriever_labels, default_retrieval_method, supports_reranker, default_indexing_config, default_retrieval_config }`. The strategies are the indexing strategies described in [Knowledge bases & indexing](/concepts/knowledge-bases-indexing).
+- `reranker` — `{ default_model, candidate_count, options }`. `options` is the list of supported reranker models (Cohere v3, Jina v2, Voyage 2.5, ZeroEntropy zerank-2, etc.).
+- `query_enrichment` — `{ model }` (the model used to rewrite/expand user queries).
+- `enrichment` — `{ model, max_tokens }` (the LLM used for chunk metadata enrichment).
+- `hybrid_vector_weight` — default weight for hybrid search (vector vs. sparse contribution).
+- `extraction` — `{ default_method, fallback_chain, options }`. `options` lists every supported extraction method (mistral, paddleocr, lighton, opendataloader, fitz, pdfplumber, plus `auto`) with a one-line description of each.
+
+This is the single source of truth for what's selectable when creating or reconfiguring a KB — if the platform adds a new strategy, reranker, or extraction method, it shows up here without any docs update.
+
+<CodeGroup>
+
+```python Python
+defaults = requests.get(f"{BASE_URL}/api/config/kb-defaults", headers=headers).json()
+print(list(defaults["strategies"].keys()))
+print([opt["value"] for opt in defaults["extraction"]["options"]])
+```
+
+```typescript TypeScript
+const defaults = await fetch(`${BASE_URL}/api/config/kb-defaults`, { headers }).then(r => r.json());
+```
+
+```bash cURL
+curl '{BASE_URL}/api/config/kb-defaults' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
 ```
 
 </CodeGroup>

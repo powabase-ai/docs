@@ -104,6 +104,18 @@ If you've stored a BYOK key but it can't be decrypted (encryption-key rotation g
 
 This is rare. If you see it consistently, re-upsert the affected key with `POST /api/ai-provider-keys`.
 
+## Recoupable vs. platform-paid LLM calls
+
+When you bring your own provider key (BYOK), the platform's billing model needs to distinguish "the user paid the upstream LLM provider directly" from "the platform paid the upstream LLM provider with its own key." The platform doesn't recoup the latter from the user's credit balance for the model token cost itself — those calls come out of the platform's own envelope (the AI-on-us flow).
+
+Internally, this is gated by a per-call "recoupable" flag:
+
+- **User-facing LLM calls** (agent runs, workflow agent blocks, orchestration coordinator / entity runs, copilot chat) are wrapped in `recoupable_llm_call()`. When the project has a BYOK key for the provider, the platform skips the `llm_call` charge (the user already paid upstream). When the project does NOT have a BYOK key, the platform charges normally (the platform paid upstream and recoups via the user's balance).
+
+- **Platform-internal LLM calls** (metadata enrichment, indexing-time model calls, query enrichment, reranker calls) are NOT wrapped — these are always charged against the user's balance because the platform always uses its env key for them, regardless of whether the project also has a BYOK key for the same provider.
+
+The practical implication: configuring a BYOK key for a provider you use heavily in agent runs reduces your credit-balance burn for that provider's token cost. It does not reduce other platform-internal token costs (those still consume credits).
+
 ## Idempotency keys
 
 Every `post_charge` carries an idempotency key derived from the operation's identifying fields. Specifically:

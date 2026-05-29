@@ -8,9 +8,9 @@ A Powabase project's Postgres comes with a set of extensions preloaded for the p
 
 For the broader concept of schemas, see [Schemas](/concepts/schemas). For pgvector specifically, see [User-managed pgvector](/guides/user-pgvector). For pg_net via the DB-webhook pattern, see [DB webhooks](/guides/db-webhooks).
 
-## Preloaded by Powabase
+## Preloaded in every project
 
-These extensions are created at project provision time. You don't need to `CREATE EXTENSION` them — they're already available.
+These extensions are available at project provision time without `CREATE EXTENSION`. Powabase's own init scripts add `vector` and `pg_net`; the others come from the upstream `supabase/postgres:15.8.1.085` image's default init.
 
 | Extension | Schema | What it does |
 |---|---|---|

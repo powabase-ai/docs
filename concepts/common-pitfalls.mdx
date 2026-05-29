@@ -14,9 +14,11 @@ If you're hitting something here, the right move is to read the linked source-of
 
 The Service Role Key bypasses RLS. Don't embed it in browsers, mobile apps, or anything else that ships to user devices. If you've accidentally shipped it, rotate it from the Studio and treat any data accessed during the leak window as compromised. See [Auth model](/concepts/auth-model).
 
-### `Authorization` header with `Bearer ` (trailing space) returns 401 silently
+### `Authorization` header with `Bearer ` (trailing space) returns 401 silently — webhook routes
 
-Several routes check `auth_header.lower().startswith("bearer ")` (with a trailing space) and pull the token by slicing from index 7. If your client constructs `Authorization: Bearer ${token ?? ""}` and `token` is undefined, you send literally `"Bearer "` and get an empty string as the token. Returns 401 with no useful error. **Fix:** guard the construction so you don't send a Bearer header when the token is missing.
+The **webhook trigger route** (`POST /api/webhooks/{id}`) checks `auth_header.lower().startswith("bearer ")` (with a trailing space) and pulls the token by slicing from index 7. If your client constructs `Authorization: Bearer ${token ?? ""}` and `token` is undefined, you send literally `"Bearer "` and get an empty string as the token. Returns 401 with no useful error. **Fix:** guard the construction so you don't send a Bearer header when the token is missing; or pass the secret via `?token=...` query parameter instead.
+
+The general `/api/*` auth path uses `auth_header.split()` and is whitespace-tolerant — a `Bearer ` there returns 401 "Authorization header required" rather than a confusing empty-token failure.
 
 ### "I'm sending the access token but getting `unauthorized`"
 
@@ -169,6 +171,47 @@ See [Glossary](/concepts/glossary).
 - Agent hook: lifecycle callback (PreToolUse, approval, etc.).
 - Database trigger: Postgres function fired on row changes.
 - GoTrue hook: auth-layer extension point (not exposed on Powabase per-project today).
+
+## Debugging a failed run
+
+When an agent run, workflow execution, or orchestration finishes with `status: failed`, the pieces you need are spread across several endpoints. Here's the order to check them in:
+
+### Step 1: get the run record
+
+`GET /api/agents/runs/{run_id}` returns the full run: `status`, `error`, `usage`, `events` (every SSE event that was persisted), `tool_calls`, `reasoning_steps`, `retrieved_context`, `input_messages`, `output_messages`. The `error` field is the highest-signal place to start.
+
+### Step 2: scan the events array for the first non-success event
+
+The `events` array preserves the order of execution. The first event with a failure shape (`type: "error"`, `type: "tool_error"`, etc.) is usually the actual cause; everything after it is symptom.
+
+Common shapes:
+
+| Symptom in `events` / `error` | Probable cause |
+| --- | --- |
+| `"insufficient_credits"` with `balance: 0` | Free-tier cap hit. The 402 from `check_balance_or_503`. Top up or grant the project credits. |
+| `"billing service unreachable"` | 503 from `check_balance_or_503` (fail-closed). The billing service is down — retry. |
+| `"Missing API Key"` or `"provider_key_decrypt_failed"` | The agent's model has neither a BYOK key nor a platform env key. Set a key in Settings → LLM Provider Keys. |
+| `"Exa API key not configured"` | `web_search` tool called without `EXA_API_KEY` setting. Set in Studio → Settings → Tools. |
+| `"Sandbox is not configured"` | `code_execute` called but `CODE_SANDBOX_URL` env not set on the platform. Operator issue. |
+| `"Doom loop detected"` | The agent called the same tool with the same args 3 times in a row. Usually means the LLM is misreading the tool's response. Inspect the tool's `result` in `tool_calls`. |
+| `"Output truncated"` after 3 retries | LLM hit max_tokens repeatedly and continuation prompts didn't help. Increase max_tokens or shorten the system prompt. |
+| Empty `output_messages` but `status: completed` | Often means a multimodal context was sent to a non-multimodal model. Check the model's capabilities. |
+
+### Step 3: for retrieval issues, get the retrieved context
+
+`GET /api/sessions/{session_id}/runs/{run_id}/retrieved-context` returns what context was injected into the LLM call. If the agent's answer is "I don't know," compare this to what you expected — empty or wrong-source context here is the root cause.
+
+### Step 4: for workflow runs, get the per-block logs
+
+`GET /api/workflows/{id}/executions/{execution_id}/logs` returns the per-block logs for a workflow execution — a failed `general_api` block's response body lives here, as do code-block stderr lines.
+
+### Step 5: rate limit?
+
+If the failure is on the 22nd+ workflow execution within a minute, you've hit the in-memory rate limit (20/min per user). Wait 60 seconds or pace your calls. The error is `"Rate limit exceeded"`.
+
+### Step 6: still stuck?
+
+The Studio's run-detail view renders all the above on one page and is usually faster than stitching the API calls yourself. For platform issues (suspected bug, weird state), file a support ticket with the run_id — the platform team can read the same data plus the internal logs.
 
 ## Next steps
 

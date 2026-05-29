@@ -214,7 +214,19 @@ The full `config_override` object. Tool-specific shape; for database tools inclu
 </ParamField>
 
 <Note>
-The body MUST use the key `config_override`. Passing `config` (or any other top-level key) is a silent no-op — the route returns 200 with the unchanged assignment because the handler only inspects `config_override`. For database tools, `config_override.schemas` is validated: schemas must be a dict, schema names must match `^[a-zA-Z_][a-zA-Z0-9_]{0,63}$`, system schemas (`ai`, `auth`, `storage`, `pg_*`, etc.) are rejected, and each value must be a list of valid table names.
+The body MUST use the key `config_override`. Passing `config` (or any other top-level key) is a silent no-op — the route returns 200 with the unchanged assignment because the handler only inspects `config_override`.
+
+**How `config_override` works per tool type:**
+
+- **Database tools (`database_query`, `database_write`)** — `config_override.schemas: { <schema>: [<table>, ...] }` controls which tables the agent can read/write. Schemas must be a dict, schema names must match `^[a-zA-Z_][a-zA-Z0-9_]{0,63}$`, system schemas (`ai`, `auth`, `storage`, `pg_*`, etc.) are rejected, and each value must be a list of valid table names.
+
+- **All other builtin tools (`web_search`, `web_scrape`, `http_request`, `code_execute`, `storage_read`, `storage_write`)** — any key in `config_override` whose name matches a parameter in the tool's `input_schema` is **force-injected into every call's arguments**. Keys not in the schema are silently dropped (no error, no warning). For example, setting `config_override: { "max_results": 3, "include_domains": ["example.com"] }` on a `web_search` assignment locks every search the agent does to 3 results from `example.com`.
+
+  This is how you constrain a tool without changing what the agent is told about it — the LLM still sees the full schema, but its requested values for those keys are overridden.
+
+- **Custom tools** — `config_override` is not used. Custom-tool behavior is controlled via the `Tool` row's own `config` (endpoint, method, headers) at create time.
+
+- **MCP tools** — `config_override` is not used. MCP-tool behavior is controlled via the `AgentMcpServer` row's `headers` and `enabled` flag.
 </Note>
 
 <RequestExample>
@@ -585,7 +597,9 @@ curl '{BASE_URL}/api/agents/{id}/sessions' -H "apikey: {API_KEY}" -H "Authorizat
 
 ### POST /api/agents/{id}/run
 
-Run agent synchronously (no tools, no streaming). Returns full response.
+Run agent synchronously, returning the full response as JSON. No streaming, no tools, no ReAct loop — a single LLM call against the conversation context. Useful for simple question-answering. If you need tool use, use `/run/stream`.
+
+The endpoint accepts the **same context-selection surface** as `/run/stream`: you can attach ad-hoc retrieval (`knowledge_bases`), a pre-built context (`context_handler_id`), a raw context string (`context_override`), or by-reference items (`context_items`). Only **one** context source may be provided per request — sending more than one returns 400.
 
 <ParamField path="id" type="string" required>
 Agent ID
@@ -594,10 +608,29 @@ Agent ID
 <RequestExample>
 
 ```json Request
-{ "message": "Hello" }
+{
+  "message": "Hello",
+  "session_id": "optional-session-uuid",
+  "knowledge_bases": [{ "id": "kb-uuid", "top_k": 5 }],
+  "max_context_tokens": 8000,
+  "citations_enabled": false
+}
 ```
 
 </RequestExample>
+
+| Body field | Type | Notes |
+| --- | --- | --- |
+| `message` | string (required) | User input |
+| `session_id` | string | Reuse a session for multi-turn. Omit to start a fresh session — `session_id` is returned. |
+| `knowledge_bases` | array | Ad-hoc retrieval: `[{ id, top_k?, similarity_threshold?, filter_metadata?, retrieval_method? }]` |
+| `context_handler_id` | string | Use a pre-built context handler (see [Context Handlers](/api-reference/context-handlers)) |
+| `context_override` | string | Raw context string injected verbatim — skips retrieval |
+| `context_items` | array | By-reference items: `[{ id, ... }]` or by-value items with `text` |
+| `max_context_tokens` | int | Truncate retrieved context to this token budget (default from agent settings or platform default) |
+| `citations_enabled` | bool | Append a citation instruction and parse `[1]`-style refs from the response (default `false`) |
+| `temperature` | float | Per-run override; falls back to agent setting |
+| `response_format` | object | LiteLLM-compatible JSON-schema for structured output |
 
 <CodeGroup>
 
@@ -619,6 +652,8 @@ curl -X POST '{BASE_URL}/api/agents/{id}/run' -H "apikey: {API_KEY}" -H "Authori
 
 Run agent with streaming SSE. Supports tools, ReAct loop, and multi-turn via session_id. SSE event types include start, chunk, tool_call, tool_result, reasoning, reasoning_summary, and complete; the reasoning events surface the model's internal thought stream when reasoning is enabled. Set reasoning_requested=true to request reasoning output for this run.
 
+The streaming endpoint accepts the **same context-selection surface** as `/run` above (`knowledge_bases` / `context_handler_id` / `context_override` / `context_items`, mutually exclusive), plus all the same `max_context_tokens`, `citations_enabled`, `temperature`, and `response_format` fields. See [Streaming](/concepts/streaming-patterns) for the full SSE event catalog.
+
 <ParamField path="id" type="string" required>
 Agent ID
 </ParamField>
@@ -629,7 +664,8 @@ Agent ID
 {
   "message": "Hello",
   "session_id": "optional-session-uuid",
-  "reasoning_requested": false
+  "reasoning_requested": false,
+  "knowledge_bases": [{ "id": "kb-uuid", "top_k": 5 }]
 }
 ```
 
