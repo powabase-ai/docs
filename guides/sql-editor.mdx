@@ -1,0 +1,95 @@
+---
+title: "Studio SQL Editor"
+description: "Run ad-hoc SQL in the Studio against your project's Postgres — what it's good for, what it's not, the role it runs as, and how to save snippets."
+icon: "code"
+---
+
+The Studio at [app.powabase.ai](https://app.powabase.ai) includes a SQL Editor that lets you run queries against your project's Postgres without spinning up a `psql` session. It connects through the same pooler URL the Connect modal shows, so the same transaction-mode constraints apply.
+
+For the conceptual model behind direct SQL, see [Direct Postgres patterns](/guides/direct-postgres). For migrations specifically, see [Migrations](/guides/migrations).
+
+## Where it is
+
+In the Studio, under your project: **SQL Editor** in the left sidebar. You'll see a query pane, a results pane, and a list of saved snippets.
+
+## What it's good for
+
+- **One-off queries** during development — "what rows does this query return?", "did my migration actually apply?"
+- **Inspecting schema** — `\d` doesn't work but `SELECT * FROM information_schema.tables WHERE table_schema = 'public'` does.
+- **Manual data fixes** — patching a few rows after a migration bug, removing test data.
+- **Testing RLS policies** before deploying — combine with the `SET LOCAL ROLE` pattern from [RLS Testing](/guides/rls-testing) to simulate a specific role.
+- **Saved snippets** — frequently-used queries (usage reports, debugging selectors) tucked into the sidebar so you don't retype them.
+
+## What it's not for
+
+- **Long-running migrations.** The editor times out at the pooler-level statement timeout (30 seconds on the `authenticator` role; higher as `supabase_admin` but still bounded). For long migrations, use a `.sql` file + `psql` from your laptop or CI.
+- **Production hot-fix workflow.** Running ad-hoc SQL in production is what mistakes are made of. Use it for inspection; gate writes behind your normal migration flow.
+- **Application traffic.** This is a Studio-internal tool, not an HTTP API. Don't try to drive it programmatically — it has no documented endpoint contract.
+
+## The role you run as
+
+The SQL Editor runs queries as the project's `postgres` superuser by default, which means **RLS is bypassed for editor queries**. This is why "I tested it in the SQL editor and it worked, but my app gets denied" is a common confusing moment — your app connects as `anon` or `authenticated`, and RLS applies there.
+
+To test as `anon` or `authenticated`, wrap your test in a transaction and `SET LOCAL ROLE`:
+
+```sql
+BEGIN;
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claims =
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}'::jsonb;
+
+SELECT * FROM public.posts;  -- This now applies your RLS policies
+
+ROLLBACK;
+```
+
+The `ROLLBACK` undoes the `SET LOCAL` changes. The pattern is the same as the [RLS Testing](/guides/rls-testing) recipes; the editor is just a different surface for running them.
+
+## Snippets
+
+Click "New snippet" (or save the current query) and the Studio persists it under your account. Snippets are scoped per user — your team won't see them unless you share the snippet URL.
+
+A few snippets worth saving for any project:
+
+```sql
+-- Active sessions on your Postgres right now
+SELECT pid, usename, query, state, query_start
+FROM pg_stat_activity
+WHERE state != 'idle'
+  AND backend_type = 'client backend'
+ORDER BY query_start;
+
+-- Table sizes (your largest tables first)
+SELECT schemaname, relname, pg_size_pretty(pg_relation_size(relid)) AS size
+FROM pg_stat_user_tables
+WHERE schemaname IN ('public', 'ai')
+ORDER BY pg_relation_size(relid) DESC
+LIMIT 20;
+
+-- Indexes on a table
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'public' AND tablename = 'your_table';
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Direct Postgres patterns" href="/guides/direct-postgres">
+psql equivalents for everything the editor does, plus things it can't.
+</Card>
+
+<Card title="RLS Testing" href="/guides/rls-testing">
+The SET LOCAL ROLE pattern in detail.
+</Card>
+
+<Card title="Schemas concept" href="/concepts/schemas">
+The five schemas you'll see in pg_namespace and what each contains.
+</Card>
+
+<Card title="Migrations" href="/guides/migrations">
+Move from one-off editor queries to versioned migrations.
+</Card>
+
+</CardGroup>

@@ -74,22 +74,28 @@
           {
             "group": "Database",
             "pages": [
+              "concepts/schemas",
               "concepts/ai-schema-postgrest",
               "guides/ai-schema-recipes",
               "guides/connection-pooling",
               "guides/direct-postgres",
+              "guides/sql-editor",
               "guides/migrations",
+              "guides/user-pgvector",
+              "guides/db-webhooks",
               "guides/orm-prisma",
               "guides/orm-drizzle",
               "guides/orm-sqlalchemy",
               "guides/orm-typeorm",
-              "api-reference/database"
+              "api-reference/database",
+              "api-reference/extensions"
             ]
           },
           {
             "group": "PostgREST",
             "pages": [
-              "api-reference/postgrest"
+              "api-reference/postgrest",
+              "guides/postgrest-advanced"
             ]
           },
           {
@@ -130,7 +136,9 @@
             "group": "Operations",
             "pages": [
               "concepts/billing-model",
-              "concepts/rate-limits"
+              "concepts/rate-limits",
+              "concepts/observability",
+              "concepts/backups-and-dr"
             ]
           },
           {
@@ -143,6 +151,17 @@
             "group": "Admin proxies",
             "pages": [
               "api-reference/auth-storage"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "concepts/api-conventions",
+              "concepts/api-access",
+              "concepts/glossary",
+              "concepts/common-pitfalls",
+              "guides/migrating-from-supabase",
+              "guides/self-host-enterprise"
             ]
           }
         ]

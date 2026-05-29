@@ -1,0 +1,93 @@
+---
+title: "Self-host (enterprise)"
+description: "Self-hosting Powabase is an enterprise offering — what gets deployed, how it differs from managed cloud, and how to engage. Not a publicly self-serve product."
+icon: "server"
+---
+
+Powabase is available for self-hosting as part of the enterprise offering. This isn't a publicly self-serve product — the deployment is Kubernetes-based, the operations posture is "you run it, we support you," and the engagement model is direct with the platform team rather than docs-driven self-service.
+
+This page exists to position the option and pre-answer common questions; it does not ship the deploy runbook. If you're considering self-host, the next step is a conversation with sales — they'll route you to the platform team for the deploy walkthrough.
+
+## Who self-host is for
+
+A few profiles that map to "self-host is the right answer":
+
+- **Regulated industries** where data residency in customer-controlled infrastructure is non-negotiable.
+- **Air-gapped or restricted networks** where data can't leave the customer's perimeter.
+- **High-volume workloads** where per-project credit-based billing doesn't align with the org's procurement model.
+- **Customers who want longer backup retention windows or point-in-time recovery** beyond managed cloud defaults.
+- **Customers building Powabase-aware tooling** that needs deeper integration than the API surface provides.
+
+For most teams building applications on Powabase, **managed cloud is the right answer** — the operational overhead of self-hosting Kubernetes infrastructure typically outweighs the control benefits. Self-host is for organizations that have a specific reason and the platform-engineering capacity to operate the cluster.
+
+## What gets deployed
+
+The Powabase self-host stack is a Kubernetes deployment, packaged as a set of Helm charts:
+
+- **`project-stack`** — the per-project resources (one Postgres StatefulSet, one GoTrue deployment, one Storage API deployment, one Realtime deployment, one project-api deployment, the Kong gateway). Provisioned once per project in its own namespace.
+- **`shared-services`** — the cluster-wide resources (PgBouncer, imgproxy, the wildcard ALB ingress, monitoring stack). Provisioned once per cluster.
+- **`control-plane`** — the management tier (the Studio backend, project provisioner, billing service connection, GoTrue for the platform's own users). Provisioned once per deployment.
+
+The stack runs on AWS today (EKS) but the Helm charts are not AWS-specific — the dependencies are standard Kubernetes primitives plus AWS Load Balancer Controller for the wildcard ingress. Customers running on GCP / Azure / on-prem have shipped self-host deployments with chart adaptations.
+
+## What differs from managed cloud
+
+Self-host inherits the same code as managed cloud — same versions of GoTrue, PostgREST, Storage, Realtime, the agentic services. Operationally, several things differ:
+
+- **You control backups.** The platform's daily `pg_dump` cronjob is still in the chart, but you point it at your own S3 (or equivalent object storage). Retention, schedule, restore process — all yours.
+- **You control monitoring.** The Prometheus metrics that managed cloud doesn't expose externally are first-class in self-host. Point your existing observability stack (Grafana, Datadog, etc.) at them.
+- **You can tighten Kong CORS.** Managed cloud sets `origins: ["*"]` because it's serving a multi-tenant Studio. Self-host can lock CORS down per-project as needed.
+- **You control which extensions are available.** The Postgres image is yours; if you want `pg_cron` or `postgis` enabled, do it.
+- **Billing isn't part of the deployment.** Credit-based billing is a managed-cloud feature; self-host runs without it. The 402 / 503 paths in the project-service short-circuit when no billing service is configured.
+
+## What stays the same
+
+- **Same APIs.** All the `/api/*`, `/rest/v1/*`, `/auth/v1/*`, `/storage/v1/*`, `/realtime/v1/*` paths work identically.
+- **Same SQL.** PostgreSQL with the same extensions (vector, pg_net, pgcrypto, uuid-ossp, pg_graphql, vault) preloaded the same way.
+- **Same client code.** Your application doesn't change between managed and self-hosted — only the project URL differs.
+
+This is the value of self-host: you get the same product, deployed somewhere you control.
+
+## What's expected of you
+
+Self-hosting is real infrastructure work. The platform-engineering team operating the deployment needs to handle:
+
+- **Kubernetes cluster operations.** Node scaling, version upgrades, certificate rotation, network policy.
+- **Database operations.** Postgres backup configuration, monitoring, version upgrades within the supabase/postgres image line.
+- **Identity provider integration.** SSO via SAML/OIDC against your IdP if you want SSO-protected access to the Studio.
+- **Secret management.** Provider keys, signing keys, database passwords need to live somewhere (AWS Secrets Manager, Vault, etc.) and feed into Helm via External Secrets or equivalent.
+- **Capacity planning.** Per-project StatefulSet sizing, PgBouncer connection budgets, ALB scaling.
+
+The platform team provides the Helm charts, the runbook, and ongoing support — but the customer's platform team is the one actually running the cluster.
+
+## How to engage
+
+The right starting move is a conversation with sales. They'll qualify whether self-host is the right answer for your case, then connect you with the platform team for the deploy walkthrough.
+
+After the initial deploy, ongoing operational support is part of the enterprise contract — software updates, incident response, platform expertise for non-obvious situations.
+
+## Open-source / community edition
+
+There is not currently a publicly-available self-serve self-host. The Helm charts and platform code aren't open-sourced. If that's a hard requirement for your use case, that's a conversation to have during sales — the platform's posture here may evolve.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Architecture" href="/concepts/architecture">
+The infrastructure shape that self-host deploys.
+</Card>
+
+<Card title="Backups and DR" href="/concepts/backups-and-dr">
+Self-host customers get more flexibility here.
+</Card>
+
+<Card title="Observability" href="/concepts/observability">
+What's user-callable in managed cloud vs what's wide-open in self-host.
+</Card>
+
+<Card title="Platform overview" href="/concepts/platform-overview">
+The full surface that self-host preserves.
+</Card>
+
+</CardGroup>
