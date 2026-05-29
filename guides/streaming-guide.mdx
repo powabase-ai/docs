@@ -108,7 +108,7 @@ for line in response.iter_lines():
         print(f"Run started — session: {session_id}, run: {event['run_id']}")
 
     elif etype == "step_started":
-        print(f"Step {event['step_number']} started")
+        print(f"Step {event['step']} started")
 
     elif etype == "chunk":
         full_response.append(event["content"])
@@ -121,7 +121,7 @@ for line in response.iter_lines():
         print(f"[Tool result: {str(event.get('result', ''))[:100]}]")
 
     elif etype == "step_completed":
-        print(f"\nStep {event['step_number']} completed")
+        print(f"\nStep {event['step']} completed")
 
     elif etype == "complete":
         print(f"\n\nRun complete — total tokens: {event.get('usage', {})}")
@@ -148,7 +148,7 @@ while (true) {
         console.log(`Run started — session: ${sessionId}, run: ${event.run_id}`);
         break;
       case "step_started":
-        console.log(`Step ${event.step_number} started`);
+        console.log(`Step ${event.step} started`);
         break;
       case "chunk":
         chunks.push(event.content);
@@ -161,7 +161,7 @@ while (true) {
         console.log(`[Tool result: ${String(event.result ?? "").slice(0, 100)}]`);
         break;
       case "step_completed":
-        console.log(`\nStep ${event.step_number} completed`);
+        console.log(`\nStep ${event.step} completed`);
         break;
       case "complete":
         console.log(`\n\nRun complete — usage: ${JSON.stringify(event.usage ?? {})}`);

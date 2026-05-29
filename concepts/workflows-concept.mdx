@@ -10,14 +10,22 @@ A Workflow is a directed acyclic graph (DAG) of blocks connected by edges. Each 
 
 ## Block Types
 
+The block registry accepts these canonical types (plus the back-compat aliases `function` for `code` and `api_call` for `general_api`):
+
 | Block | Description | Key Config |
 | --- | --- | --- |
-| input | Entry point — accepts user input or webhook payload | Variable name for downstream blocks |
-| output | Exit point — returns the workflow result | Result template with block references |
-| llm | Calls a language model with a prompt template | Model, temperature, system prompt, input references |
-| agent | Runs an existing agent with a message | Agent ID, message template |
-| condition | Branches the flow based on a boolean expression | JavaScript expression evaluated against block outputs |
-| code | Executes custom Python or JavaScript code | Language, source code, input variable mappings |
+| starter | Manual / API trigger — declares the workflow's input variables | None (variables are passed at execution time) |
+| webhook | HTTP trigger — exposes the workflow at `POST /api/webhooks/{webhook_id}` once deployed/armed | `webhook_id` (UUID, you mint it via API or the studio mints it for you), `webhook_secret` |
+| agent | Runs an existing agent with a message | `agent_id`, `message` (template with `{{variables.x}}` interpolation) |
+| orchestration | Delegates to a multi-agent coordinator | `orchestration_id`, `message` |
+| code | Executes custom Python or JavaScript | Language, source, input mappings |
+| condition | Branches the flow based on a boolean expression | Expression evaluated against upstream outputs |
+| split | Parallel fan-out — runs downstream branches concurrently | Branch selection rules |
+| platform_api | Calls a platform resource (KB search, agent run, etc.) | Resource type + parameters |
+| general_api | Calls an external HTTP API | URL, method, headers, body template |
+| response | Returns the workflow result back to the caller | Result template referencing upstream block outputs |
+
+Unknown block types are rejected at `PUT /api/workflows/{id}/graph` with `400 Unknown block type`.
 
 ## Graph Execution
 
@@ -33,12 +41,17 @@ You can build workflows two ways. The programmatic approach uses the PUT /api/wo
 
 ## Deployment & Webhooks
 
-Workflows can be deployed and armed for webhook execution. Once armed, you get a webhook URL and secret. External systems can trigger the workflow by POSTing to the webhook URL. Each arm produces a single-use webhook — after it fires, you need to re-arm for the next execution.
+Workflows expose two activation modes for their webhook block:
+
+- **Deploy** (`POST /api/workflows/{id}/deploy`) — sets `state = "deployed"`. The webhook accepts unlimited calls until you `undeploy`. Use this for production.
+- **Arm** (`POST /api/workflows/{id}/arm`) — leaves `state = "internal"` but opens a 10-minute window during which the webhook accepts exactly one call. After it fires (or expires), you must arm again. Use this for one-shot tests.
+
+The `webhook_id` and `webhook_secret` live in the **webhook block's config** — they're stored on the block when you add it to the graph. The studio editor mints both client-side when you drag in a webhook block. Neither `/deploy` nor `/arm` returns secrets — `/deploy` returns `{"ok": true, "state": "deployed"}` and `/arm` returns `{"ok": true, "armed_until": "<iso8601>"}`. To retrieve credentials programmatically, fetch the workflow with `GET /api/workflows/{id}` and read them from the webhook block's config.
 
 <Tip>
 **Webhook security**
 
-The webhook secret is returned when you arm the workflow. Include it in your webhook payload to verify that the request is legitimate. Each arm generates a new secret.
+Each webhook block has a fixed `webhook_secret` set when the block was created — it does **not** rotate on arm/deploy. External callers include it as a `Bearer` token in the `Authorization` header (preferred) or as a `?token=` query parameter. There is no body-HMAC signature scheme and no replay-window beyond the 10-min arm TTL.
 </Tip>
 
 ## Next Steps

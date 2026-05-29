@@ -55,28 +55,32 @@ curl -X POST '{BASE_URL}/api/workflows' \
 
 <Step title="Define the graph">
 
-Save blocks (processing steps) and edges (connections between them) as a complete graph. Block types include: input, output, llm, agent, condition, code, and more.
+Save blocks (processing steps) and edges (connections between them) as a complete graph. The block registry recognizes these canonical types: `starter`, `agent`, `code`, `condition`, `general_api`, `platform_api`, `response`, `split`, `webhook`, `orchestration` (`function` and `api_call` are accepted as back-compat aliases for `code` and `general_api`). The example below wires a `starter` that injects workflow variables, runs an `agent` block to produce a summary, and returns the agent's output through a `response` block.
 
 **Endpoint:** `PUT /api/workflows/{id}/graph`
 
 <CodeGroup>
 
 ```python Python
+# Assumes an agent already exists. Create one with POST /api/agents
+# if you don't have one yet — see guides/build-agent.
+agent_id = "..."  # existing agent UUID
+
 response = requests.put(
     f"{BASE_URL}/api/workflows/{wf_id}/graph",
     headers=headers,
     json={
         "blocks": [
-            {"id": "input", "type": "input", "config": {}, "position": {"x": 0, "y": 0}},
-            {"id": "summarize", "type": "llm", "config": {
-                "model": "gpt-4o",
-                "prompt": "Summarize the following document:\n\n{{input.text}}",
+            {"id": "start", "type": "starter", "config": {}, "position": {"x": 0, "y": 0}},
+            {"id": "summarize", "type": "agent", "config": {
+                "agent_id": agent_id,
+                "message": "Summarize the following document:\n\n{{variables.text}}",
             }, "position": {"x": 300, "y": 0}},
-            {"id": "output", "type": "output", "config": {}, "position": {"x": 600, "y": 0}},
+            {"id": "out", "type": "response", "config": {}, "position": {"x": 600, "y": 0}},
         ],
         "edges": [
-            {"source": "input", "target": "summarize"},
-            {"source": "summarize", "target": "output"},
+            {"source": "start", "target": "summarize"},
+            {"source": "summarize", "target": "out"},
         ],
     },
 )
@@ -84,21 +88,25 @@ print(response.json())
 ```
 
 ```typescript TypeScript
+// Assumes an agent already exists. Create one with POST /api/agents
+// if you don't have one yet — see guides/build-agent.
+const agentId = "..."; // existing agent UUID
+
 await fetch(`${BASE_URL}/api/workflows/${wfId}/graph`, {
   method: "PUT",
   headers,
   body: JSON.stringify({
     blocks: [
-      { id: "input", type: "input", config: {}, position: { x: 0, y: 0 } },
-      { id: "summarize", type: "llm", config: {
-        model: "gpt-4o",
-        prompt: "Summarize the following document:\n\n{{input.text}}",
+      { id: "start", type: "starter", config: {}, position: { x: 0, y: 0 } },
+      { id: "summarize", type: "agent", config: {
+        agent_id: agentId,
+        message: "Summarize the following document:\n\n{{variables.text}}",
       }, position: { x: 300, y: 0 } },
-      { id: "output", type: "output", config: {}, position: { x: 600, y: 0 } },
+      { id: "out", type: "response", config: {}, position: { x: 600, y: 0 } },
     ],
     edges: [
-      { source: "input", target: "summarize" },
-      { source: "summarize", target: "output" },
+      { source: "start", target: "summarize" },
+      { source: "summarize", target: "out" },
     ],
   }),
 });
@@ -114,6 +122,10 @@ curl -X PUT '{BASE_URL}/api/workflows/{wf_id}/graph' \
 
 </CodeGroup>
 
+<Note>
+Unknown block types are rejected with `400 Unknown block type`. See the [Workflows concept page](/concepts/workflows-concept) for what each block does.
+</Note>
+
 </Step>
 
 <Step title="Execute the workflow">
@@ -128,7 +140,7 @@ Run the workflow with input data. Returns execution results.
 response = requests.post(
     f"{BASE_URL}/api/workflows/{wf_id}/execute",
     headers=headers,
-    json={"input": {"text": "Your document content here..."}},
+    json={"variables": {"text": "Your document content here..."}},
 )
 result = response.json()
 print(result)
@@ -138,7 +150,7 @@ print(result)
 const response = await fetch(`${BASE_URL}/api/workflows/${wfId}/execute`, {
   method: "POST",
   headers,
-  body: JSON.stringify({ input: { text: "Your document content here..." } }),
+  body: JSON.stringify({ variables: { text: "Your document content here..." } }),
 });
 const result = await response.json();
 console.log(result);
@@ -149,7 +161,7 @@ curl -X POST '{BASE_URL}/api/workflows/{wf_id}/execute' \
   -H "apikey: {API_KEY}" \
   -H "Authorization: Bearer {API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"input": {"text": "Your document content here..."}}'
+  -d '{"variables": {"text": "Your document content here..."}}'
 ```
 
 </CodeGroup>

@@ -125,14 +125,19 @@ curl '{BASE_URL}/api/agents' \
 **Response:**
 
 ```json
-[
-  {
-    "id": "uuid-here",
-    "name": "My Agent",
-    "model": "gpt-4o",
-    "created_at": "2026-01-01T00:00:00Z"
-  }
-]
+{
+  "agents": [
+    {
+      "id": "uuid-here",
+      "name": "My Agent",
+      "model": "gpt-4o",
+      "created_at": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0
+}
 ```
 
 </Step>

@@ -198,7 +198,7 @@ You can also build workflows programmatically via PUT /api/workflows/\{id\}/grap
 response = requests.post(
     f"{BASE_URL}/api/workflows/{wf_id}/execute",
     headers=headers,
-    json={"input": {"email": "Congratulations! You've won a free iPhone..."}},
+    json={"variables": {"email": "Congratulations! You've won a free iPhone..."}},
 )
 print(response.json())
 ```
@@ -207,7 +207,7 @@ print(response.json())
 const response = await fetch(`${BASE_URL}/api/workflows/${wfId}/execute`, {
   method: "POST",
   headers,
-  body: JSON.stringify({ input: { email: "Congratulations! You've won a free iPhone..." } }),
+  body: JSON.stringify({ variables: { email: "Congratulations! You've won a free iPhone..." } }),
 });
 console.log(await response.json());
 ```
@@ -217,7 +217,7 @@ curl -X POST '{BASE_URL}/api/workflows/{wf_id}/execute' \
   -H "apikey: {API_KEY}" \
   -H "Authorization: Bearer {API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"input": {"email": "Congratulations! You have won a free iPhone..."}}'
+  -d '{"variables": {"email": "Congratulations! You have won a free iPhone..."}}'
 ```
 
 </CodeGroup>

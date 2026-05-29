@@ -36,15 +36,9 @@ ChunkEmbed pairs with vector search, hybrid search, or full-text search for retr
 
 ### Chunking Strategies
 
-ChunkEmbed supports three chunking strategies that control how text is split into searchable units. The chunking strategy is independent of the embedding model.
+ChunkEmbed uses the **markdown_header** chunker: it splits at Markdown headers (h1–h6), then subdivides each section by length using recursive chunking, and prepends the section header as context to each chunk. This works well across both Markdown-structured documents and unstructured prose (where it falls through to the recursive subdivision step).
 
-| Chunker | How It Works | Best For |
-| --- | --- | --- |
-| markdown_header (default) | Splits at Markdown headers (h1–h6), then subdivides each section by length using recursive chunking. Prepends the section header as context to each chunk. | The platform default — works well for documents with heading structure |
-| recursive | Splits at natural boundaries in order of preference: paragraph breaks, line breaks, sentence endings, then words. Respects document flow. | Unstructured prose, articles, general text without clear heading structure |
-| fixed_size | Splits at fixed token counts with word-boundary snapping. Simple and predictable chunk sizes. | Uniform content like logs, transcripts, or code where structure doesn't matter |
-
-Chunk size and overlap control the tradeoff between precision and context. Smaller chunks (500–1000 tokens) give more precise retrieval but may lose surrounding context. Larger chunks (2000–4000 tokens) preserve context but can dilute relevance. The defaults (2000 tokens, 50 token overlap) work well for most use cases.
+Chunk size and overlap control the tradeoff between precision and context. Smaller chunks (500–1000 tokens) give more precise retrieval but may lose surrounding context. Larger chunks (2000–4000 tokens) preserve context but can dilute relevance. The defaults (2000 tokens, 50 token overlap) work well for most use cases. Tune them via `indexing_config.chunk_size` and `indexing_config.chunk_overlap`.
 
 <CodeGroup>
 
@@ -582,8 +576,8 @@ response = requests.post(
 )
 results = response.json()
 for chunk in results["results"]:
-    print(f"Score: {chunk['similarity']:.3f}")
-    print(chunk["content"][:200])
+    print(f"Score: {chunk['score']:.3f}")
+    print(chunk["text"][:200])
 ```
 
 ```typescript TypeScript
@@ -594,8 +588,8 @@ const res = await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/search`, {
 });
 const { results } = await res.json();
 results.forEach((chunk: any) => {
-  console.log(`Score: ${chunk.similarity.toFixed(3)}`);
-  console.log(chunk.content.slice(0, 200));
+  console.log(`Score: ${chunk.score.toFixed(3)}`);
+  console.log(chunk.text.slice(0, 200));
 });
 ```
 

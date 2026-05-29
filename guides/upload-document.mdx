@@ -61,10 +61,11 @@ curl -X POST '{BASE_URL}/api/sources/upload' \
 ```json
 {
   "id": "source-uuid",
-  "filename": "document.pdf",
-  "content_type": "application/pdf",
+  "name": "document.pdf",
+  "file_type": "application/pdf",
+  "storage_path": "sources-{org}-{project}/{source_id}/document.pdf",
   "extraction_status": "pending",
-  "created_at": "2026-01-01T00:00:00Z"
+  "task_id": "celery-task-uuid"
 }
 ```
 
@@ -125,7 +126,7 @@ curl '{BASE_URL}/api/sources/{source_id}' \
 
 <Step title="View extracted content">
 
-Retrieve the extracted text, organized by page. Each page includes its text content and page number.
+Retrieve the extracted text. `GET /page-texts` returns `{ "page_texts": [string, ...], "count": N }` — `page_texts` is an array of strings, one per page, in order. To fetch a single page, pass `?page=N`, which returns `{ "text": string, "page": N, "count": N }`.
 
 **Endpoint:** `GET /api/sources/{id}/page-texts`
 
@@ -136,9 +137,9 @@ response = requests.get(
     f"{BASE_URL}/api/sources/{source_id}/page-texts",
     headers=headers,
 )
-pages = response.json()
-for page in pages:
-    print(f"Page {page['page']}: {page['text'][:100]}...")
+body = response.json()
+for i, text in enumerate(body["page_texts"], start=1):
+    print(f"Page {i}: {text[:100]}...")
 ```
 
 ```typescript TypeScript
@@ -146,8 +147,10 @@ const res = await fetch(
   `${BASE_URL}/api/sources/${sourceId}/page-texts`,
   { headers },
 );
-const pages = await res.json();
-pages.forEach((p: any) => console.log(`Page ${p.page}: ${p.text.slice(0, 100)}...`));
+const body = await res.json();
+body.page_texts.forEach((text: string, i: number) =>
+  console.log(`Page ${i + 1}: ${text.slice(0, 100)}...`),
+);
 ```
 
 ```bash cURL
