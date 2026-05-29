@@ -1,0 +1,142 @@
+---
+title: "Glossary"
+description: "Disambiguating the terms Powabase uses that overlap with each other or with terms from other platforms — agent sessions vs auth sessions, agent hooks vs DB webhooks, etc."
+icon: "spell-check"
+---
+
+A few terms in the Powabase docs do double duty depending on context. This page disambiguates the ones that come up most. If you've spent any time reading the rest of the docs and wondered "wait, which 'session' are we talking about" — this is the page for that.
+
+## Sessions
+
+**Agent session** (in `ai.agent_sessions`). A multi-turn conversation between a user and a Powabase agent. Holds the message history, context, and per-run state. Created automatically on the first agent run with a session id, persists across runs until explicitly deleted. Owned by `user_id` (the GoTrue JWT's `sub` at creation time) and has its own RLS policies.
+
+**Auth session** (in GoTrue's internal state). A signed-in user's authenticated state, represented client-side as an access token + refresh token. Created by `POST /auth/v1/token?grant_type=password` etc., expires when the refresh token is invalidated. Owned by the user themselves; no direct table you query.
+
+The two are independent. You can have an active auth session and zero agent sessions, or many agent sessions and no current auth session (if you're calling agent runs from a backend with the Service Role key).
+
+## Runs vs executions
+
+**Agent run** (in `ai.agent_runs`). One invocation of a single agent. Has a `run_id`, belongs to a session, includes the LLM steps, tool calls, retrieved context, and final response. Streamed via the SSE protocol at `/api/agents/{id}/run/stream`.
+
+**Workflow execution** (in `ai.workflow_executions`). One execution of a workflow's block graph. Has an `execution_id`, includes per-block logs (`ai.workflow_block_logs`). May contain zero or many agent runs as part of its block sequence.
+
+**Orchestration run** (in `ai.orchestration_runs`). One coordination cycle of a multi-agent orchestration. The supervisor agent runs, decides which entities to delegate to, each entity's invocation may produce its own agent_runs.
+
+All three are "things that happened that you can query for status and logs."
+
+## Webhooks
+
+**Agentic webhook** (the inbound side, `POST /api/webhooks/{webhook_id}`). External systems triggering deployed or armed workflows. Bare-bearer-token auth, no body HMAC. See [Webhooks reference](/api-reference/webhooks).
+
+**Database webhook** (the outbound side, `supabase_functions.http_request()` trigger function). Postgres rows changing and Postgres calling out to some HTTP endpoint via pg_net. See [DB webhooks](/guides/db-webhooks).
+
+They're named identically and easily confused. The agentic kind is "things calling Powabase"; the database kind is "Powabase calling things."
+
+## Hooks
+
+**Agent hook** (in `ai.hooks`). Lifecycle callback on an agent — PreToolUse, PostToolUse, plus the approval flow. Configured at agent-create time, fires during agent runs.
+
+**Database trigger function** ("trigger hook" in some Postgres docs). A function that runs on table changes, via `CREATE TRIGGER`. Sometimes loosely called a "hook." Different mechanism, different surface.
+
+**GoTrue hook** (e.g., `before_user_created`). Auth-layer extension points. Not currently exposed on Powabase's per-project GoTrue (only the control-plane GoTrue has the `block_disposable_email_signups` hook).
+
+## Tools
+
+**Builtin tool** (in code, registered in `tools/builtin.py`). One of the eight tools every agent can be granted: `database_query`, `database_write`, `http_request`, `code_execute`, `storage_read`, `storage_write`, `web_search`, `web_scrape`.
+
+**Custom tool** (in `ai.tools`). A user-defined tool record. Has a `type` field stored as a free-form string (not used by dispatch) and a `config` blob describing how to call it.
+
+**Tool assignment** (in `ai.agent_tools`). The link between an agent and a tool — "this agent can use that tool." Dispatch reads from `agent_tools.tool_type` (which is `'builtin'` or `'custom'`), not from the Tool's own `type` field.
+
+**MCP tool** (discovered at runtime via `tools/list` JSON-RPC). Provided by an MCP server attached to an agent. Namespaced as `mcp__<server>__<tool>` when the agent calls them.
+
+A "tool" in conversation could mean any of these depending on context. When precise: builtin / custom / MCP.
+
+## API key types
+
+**Anon (Publishable) Key**. Long-lived JWT with `role: "anon"`. Safe to embed in browsers. PostgREST treats it as the `anon` Postgres role; RLS policies decide what it can see.
+
+**Service Role (Secret) Key**. Long-lived JWT with `role: "service_role"`. Bypasses RLS. Server-side only.
+
+**User access token**. Short-lived JWT (1 hour) with `role: "authenticated"`. Returned by GoTrue after sign-in. PostgREST treats it as the `authenticated` Postgres role; RLS gates what specifically.
+
+**Refresh token**. Opaque string (not a JWT). Single-use; exchanged at `POST /auth/v1/token?grant_type=refresh_token` for a new access+refresh pair.
+
+**Database URL**. Postgres connection string for direct SQL access via PgBouncer. Authenticates as `supabase_admin`. Full schema ownership.
+
+All five live in the Connect modal in the Studio.
+
+## Schemas (the Postgres kind)
+
+**`public`** schema. Where your application tables live. You own it.
+
+**`ai`** schema. Where the AI surface's state lives. Platform-owned but queryable via PostgREST under RLS. See [Querying the ai schema](/concepts/ai-schema-postgrest).
+
+**`auth`** schema. Where GoTrue's state lives. Platform-owned, not exposed via PostgREST.
+
+**`storage`** schema. Where Storage API metadata lives. Platform-owned, exposed via PostgREST so you can apply RLS to objects.
+
+**`extensions`** schema. Where Postgres extensions install their objects (pg_net, citext, etc.). You own it.
+
+See [Schemas](/concepts/schemas) for the longer treatment.
+
+## Things named "config"
+
+**`indexing_config`** / **`retrieval_config`** (on knowledge bases). Per-KB tuning for the chosen indexing strategy and retrieval method. Strategy-specific shape.
+
+**`config`** (on tools). The dispatch config for a custom tool — endpoint, method, headers, timeout for HTTP tools.
+
+**`config`** (on workflow blocks). The block's parameters — depends on block type (agent_id for agent blocks, code for code blocks, etc.).
+
+**Block config vs block output**. Block config is the static template; block output is the per-execution result that downstream blocks reference.
+
+## Strategies
+
+**Indexing strategy** (`ai.knowledge_bases.indexing_config.strategy`). One of `chunk_embed`, `full_document`, `page_index`, `graph_index`, `doc2json`. Decides how documents become searchable items.
+
+**Retrieval method** (`ai.knowledge_bases.retrieval_config.method`). One of `vector_search`, `full_text`, `hybrid`, `tree_search`. Decides how queries become results. Independent of strategy though some pairings are nonsensical.
+
+**Orchestration strategy** (`ai.orchestrations.strategy`). One of `supervisor`, `sequential`, `parallel`. Decides how the coordinator routes between entity agents.
+
+The word "strategy" is overloaded. Always qualify which.
+
+## Realtime channel types
+
+**Broadcast**. Ephemeral message routing across subscribers. No persistence; clients not connected when a message fires miss it.
+
+**Presence**. Tracked-state sync — each client publishes its own "I'm here" state, everyone sees the aggregate.
+
+**Postgres Changes**. Row-level event stream from the database's logical replication slot. Filtered by schema/table/event/column.
+
+A single channel can use one, two, or all three at once.
+
+## When in doubt
+
+If you see a term in the docs you can't disambiguate from context, the right approach is grep the rest of the docs for it and look at which page it appears on:
+
+- Mentioned in `/concepts/auth-model` → likely auth-side
+- Mentioned in `/concepts/agents-tools` → likely agent-side
+- Mentioned in `/concepts/workflows-concept` → workflow-side
+- Mentioned in `/api-reference/<X>` → the surface that page documents
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Common pitfalls" href="/concepts/common-pitfalls">
+The footguns these terminology disambiguations come up around.
+</Card>
+
+<Card title="Schemas" href="/concepts/schemas">
+The Postgres-side disambiguation in more depth.
+</Card>
+
+<Card title="API conventions" href="/concepts/api-conventions">
+The HTTP-layer naming patterns the API uses.
+</Card>
+
+<Card title="Migrating from Supabase" href="/guides/migrating-from-supabase">
+For users coming from Supabase — what's the same and what's different.
+</Card>
+
+</CardGroup>

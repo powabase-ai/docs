@@ -1,0 +1,239 @@
+---
+title: "PostgREST advanced"
+description: "Beyond basic CRUD — embedded joins, full-text search, JSONB operators, counting, upserts, bulk inserts, and the headers that change response shape."
+icon: "table"
+---
+
+The [PostgREST reference](/api-reference/postgrest) covers filter operators and the basic CRUD shape. This guide picks up where that leaves off — embedded resources, FTS, JSONB selectors, counting, upserts, bulk inserts, and the `Prefer` headers that change how responses come back.
+
+For the framing, see [PostgREST reference](/api-reference/postgrest). For applying these patterns to the AI schema, see [ai-schema recipes](/guides/ai-schema-recipes).
+
+## Embedded resources (joins in one request)
+
+PostgREST infers joins from foreign keys. Use `select=` with a relation name to embed:
+
+```bash
+GET /rest/v1/posts?select=id,title,author:users(email,display_name)
+```
+
+Response:
+
+```json
+[
+  { "id": "p1", "title": "hello", "author": { "email": "alice@example.com", "display_name": "Alice" } }
+]
+```
+
+The `author:users(...)` syntax aliases the embedded `users` row as `author`. The columns inside parens are projected from the joined table.
+
+**Many-to-many:** if `users` has many `posts` via an `author_id` FK, embed in the other direction:
+
+```bash
+GET /rest/v1/users?select=id,email,posts(id,title)
+```
+
+Response is an array per user with a `posts` array of joined rows.
+
+**Filtering on the embed:**
+
+```bash
+GET /rest/v1/users?select=email,posts(title)&posts.published=eq.true
+```
+
+Only published posts come back inside each user's `posts` array. The filter on the embed uses the dotted-path syntax.
+
+**Inner joins** (exclude users with no posts):
+
+```bash
+GET /rest/v1/users?select=email,posts!inner(title)&posts.published=eq.true
+```
+
+The `!inner` modifier makes the embed an INNER JOIN instead of LEFT JOIN.
+
+## Full-text search
+
+PostgREST supports four FTS operators that map to Postgres's text-search functions:
+
+| Operator | Maps to | Use |
+|---|---|---|
+| `fts` | `@@ to_tsquery` | Boolean queries with operators (`&`, `|`, `!`) |
+| `plfts` | `@@ plainto_tsquery` | Treat input as plain text; no operators |
+| `phfts` | `@@ phraseto_tsquery` | Phrase search; word order matters |
+| `wfts` | `@@ websearch_to_tsquery` | Google-style ("foo bar" OR baz) |
+
+```bash
+# Plain-text search across an indexed column
+GET /rest/v1/posts?body=plfts.machine.learning
+
+# Phrase search
+GET /rest/v1/posts?body=phfts.machine.learning
+
+# Web-style with quoted phrases and OR
+GET /rest/v1/posts?body=wfts."machine learning".OR.AI
+```
+
+These require a `tsvector` column or expression index for performance. The bare `body=plfts.foo` form scans every row's text — fine for prototypes, terrible at scale.
+
+## JSONB operators
+
+PostgreSQL's JSONB operators work in filters via PostgREST's syntax:
+
+```bash
+# meta->>'tag' = 'foo'  (text comparison)
+GET /rest/v1/sources?meta->>tag=eq.foo
+
+# meta->'tags' ? 'foo'  (does the array contain 'foo')
+GET /rest/v1/sources?meta->tags=cs.{foo}
+
+# meta @> '{"tag":"foo"}'  (contains)
+GET /rest/v1/sources?meta=cs.{"tag":"foo"}
+
+# meta <@ '{"tag":"foo"}'  (contained by)
+GET /rest/v1/sources?meta=cd.{"tag":"foo"}
+```
+
+The `cs` (contains) and `cd` (contained by) operators work on both JSONB and array columns.
+
+For complex queries (multiple JSONB conditions, indexing strategies), check the [Postgres JSON docs](https://www.postgresql.org/docs/current/functions-json.html) for the operator semantics and create matching GIN indexes (`CREATE INDEX ... USING gin (meta jsonb_path_ops)`).
+
+## Counting
+
+By default, PostgREST returns the matching rows without a total count — counting can be expensive. Opt in via the `Prefer` header:
+
+```bash
+curl '{BASE_URL}/rest/v1/posts?select=*' \
+  -H "Prefer: count=exact" \
+  -H "apikey: <KEY>" -H "Authorization: Bearer <KEY>"
+```
+
+Three count modes:
+
+- **`count=exact`** — runs a separate `COUNT(*)` query. Accurate, slowest. The total comes back in the `Content-Range: 0-9/247` response header.
+- **`count=planned`** — uses Postgres's planner estimate. Fast, imprecise.
+- **`count=estimated`** — runs `COUNT(*)` only if planned > some threshold; planner estimate otherwise.
+
+For paginated UIs, prefer `count=planned` unless the user explicitly asks for an exact total.
+
+## Upserts
+
+POST with `Prefer: resolution=merge-duplicates` does INSERT-or-UPDATE:
+
+```bash
+curl -X POST '{BASE_URL}/rest/v1/users' \
+  -H "Prefer: resolution=merge-duplicates" \
+  -H "Content-Type: application/json" \
+  -H "apikey: <KEY>" -H "Authorization: Bearer <KEY>" \
+  -d '{"email": "alice@example.com", "display_name": "Alice 2.0"}'
+```
+
+If `email` is a unique column and a row already exists with that email, the existing row updates. Otherwise inserts.
+
+For composite conflict columns, use `on_conflict=col1,col2`:
+
+```bash
+POST /rest/v1/votes?on_conflict=user_id,poll_id
+```
+
+## Bulk inserts
+
+POST an array instead of a single object:
+
+```bash
+curl -X POST '{BASE_URL}/rest/v1/users' \
+  -H "Content-Type: application/json" \
+  -H "apikey: <KEY>" -H "Authorization: Bearer <KEY>" \
+  -d '[
+    {"email": "alice@example.com"},
+    {"email": "bob@example.com"},
+    {"email": "charlie@example.com"}
+  ]'
+```
+
+By default this is a single transaction — all succeed or all roll back. Set `Prefer: tx=rollback` to test without committing, or `Prefer: missing=default` to allow rows with omitted columns to use their defaults instead of failing.
+
+## Response shape control
+
+`Prefer: return=...` changes what comes back from a write:
+
+| Value | Response body | When |
+|---|---|---|
+| `return=minimal` (default for POST/PATCH) | empty | You don't need the inserted/updated rows back |
+| `return=representation` | the rows | You need the rows (e.g., for the generated id) |
+| `return=headers-only` | empty + `Location` header | RPC-style "tell me where the new row is" |
+
+For SELECT-after-INSERT patterns, `Prefer: return=representation` is what you want. It returns the inserted rows complete with database-generated columns.
+
+## Single-row responses
+
+PostgREST returns arrays by default. To get a single object instead of `[{...}]`, send `Accept: application/vnd.pgrst.object+json`:
+
+```bash
+curl '{BASE_URL}/rest/v1/users?id=eq.<uuid>' \
+  -H "Accept: application/vnd.pgrst.object+json"
+```
+
+Returns `{...}` directly. **Fails with 406 if the filter doesn't match exactly one row.** Use this when you want "fail loudly if I expected one row and got zero or many."
+
+## Partial response columns
+
+The `Range` header lets you do offset-based pagination at the response level:
+
+```bash
+curl '{BASE_URL}/rest/v1/posts?order=created_at.desc' \
+  -H "Range-Unit: items" \
+  -H "Range: 0-19"
+```
+
+Returns items 0 through 19. Combine with `Prefer: count=exact` and the `Content-Range` response header tells the client how many total items exist.
+
+For cursor-style pagination (which is friendlier to large tables), use `id` comparisons instead — `?id=gt.<last_seen>&limit=20`.
+
+## RPC for non-CRUD logic
+
+For anything that needs SQL beyond filter/sort/paginate, write a function and call it via RPC:
+
+```sql
+CREATE OR REPLACE FUNCTION public.recent_active_users(days int)
+RETURNS TABLE (id uuid, email text, last_seen timestamptz)
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT id, email, last_sign_in_at
+  FROM auth.users
+  WHERE last_sign_in_at > now() - (days || ' days')::interval
+  ORDER BY last_sign_in_at DESC
+$$;
+
+GRANT EXECUTE ON FUNCTION public.recent_active_users(int) TO authenticated;
+```
+
+Call:
+
+```bash
+POST /rest/v1/rpc/recent_active_users
+{ "days": 7 }
+```
+
+RPCs are how you keep complex logic in the database (where it has full SQL power, indexes, and consistent transactions) without exposing a custom endpoint.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="PostgREST reference" href="/api-reference/postgrest">
+The base CRUD surface these patterns extend.
+</Card>
+
+<Card title="ai-schema recipes" href="/guides/ai-schema-recipes">
+The same techniques applied to ai.* tables.
+</Card>
+
+<Card title="RLS Cookbook" href="/guides/rls-policies">
+Policies that gate which rows these queries see.
+</Card>
+
+<Card title="Direct Postgres" href="/guides/direct-postgres">
+For SQL PostgREST doesn't express, drop down to a direct connection.
+</Card>
+
+</CardGroup>

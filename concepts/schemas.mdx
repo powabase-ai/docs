@@ -1,0 +1,122 @@
+---
+title: "Schemas"
+description: "The five schemas you'll find in a Powabase project's Postgres: public (yours), ai (platform-managed), auth (GoTrue), storage (Storage API), and extensions (where pg_net and friends live)."
+icon: "layer-group"
+---
+
+A Powabase project's Postgres database has five user-visible schemas, plus a handful of internal ones (`_realtime`, `supabase_functions`, etc.) you'll occasionally see in `pg_namespace`. This page explains what each schema contains, who owns it, and which ones are safe to touch.
+
+For the AI-schema-specific queryability story, see [Querying the ai schema](/concepts/ai-schema-postgrest). For RLS, see [RLS Model](/concepts/rls-model). For migration boundaries, see [Migrations](/guides/migrations).
+
+## The five user-visible schemas
+
+| Schema | Owner | Purpose | Safe to migrate? |
+|---|---|---|---|
+| `public` | You | Your application tables | Yes |
+| `extensions` | You | User-installed Postgres extensions | Yes |
+| `ai` | Platform | Sources, KBs, agents, runs, sessions, workflows | No |
+| `auth` | GoTrue | User accounts, sessions, OAuth identities | No |
+| `storage` | Storage API | Bucket and object metadata | No |
+
+### `public` — your tables
+
+Empty by default. You add your application tables here: users (or `profiles` joining to `auth.users`), posts, orders, etc. RLS is **off** for new tables in `public` unless you explicitly enable it (`ALTER TABLE my_table ENABLE ROW LEVEL SECURITY`).
+
+PostgREST exposes `public` at `/rest/v1/*` without needing the `Accept-Profile` header — it's the default schema for the API.
+
+### `ai` — the AI surface's state
+
+Where the typed `/api/*` endpoints store their data. 35+ tables for sources, knowledge_bases, indexed_sources, chunks, embeddings, agents, agent_sessions, agent_runs, workflows, workflow_executions, etc. Full inventory in [Querying the ai schema](/concepts/ai-schema-postgrest#tables-in-the-ai-schema).
+
+**Don't migrate `ai.*`.** The platform's services assume the schema's invariants — modifying them risks data corruption or service-side breakage. Read freely (RLS lets `authenticated` SELECT most tables); never schema-change.
+
+PostgREST exposes `ai` at `/rest/v1/*` with `Accept-Profile: ai` for reads and `Content-Profile: ai` for writes. RLS gates which rows each role can touch.
+
+### `auth` — GoTrue's state
+
+User accounts (`auth.users`), refresh tokens (`auth.refresh_tokens`), OAuth identities (`auth.identities`), MFA factors (`auth.mfa_factors`), email-change records, recovery tokens. Managed entirely by GoTrue's own migrations; the project init SQL just creates the schema.
+
+**Don't migrate `auth.*`.** GoTrue runs its own schema migrations on startup; conflicting changes break the auth surface.
+
+PostgREST does **not** expose `auth` — there's no Accept-Profile that gets you in. Use the typed `/auth/v1/*` API instead.
+
+### `storage` — Storage API's state
+
+`storage.buckets` (one row per bucket), `storage.objects` (one row per uploaded file), plus a handful of helper tables and functions (`storage.foldername()`, `storage.filename()`). Managed by the Storage API.
+
+PostgREST exposes `storage` at `/rest/v1/*` (it's in the schemas list). You can read `storage.objects` to list files via SQL, and RLS policies on `storage.objects` are how you gate object access in private buckets. Don't write to `storage.objects` directly — go through `/storage/v1/object/...`, which keeps the underlying S3 backend in sync.
+
+See [Storage policies](/guides/storage-policies) for the policy patterns.
+
+### `extensions` — Postgres extensions land here
+
+When you `CREATE EXTENSION foo`, the extension's objects live in whatever schema the extension specifies, which by Powabase convention is `extensions`:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_net SCHEMA extensions;
+```
+
+You can install extensions yourself (from the allowlist — see [Extensions](/api-reference/extensions)) into `extensions`. The platform pre-installs `pg_net` and `vector` here at project provision time.
+
+## Internal schemas you'll see
+
+These exist for platform internals and aren't intended for user code, but you'll notice them in `pg_namespace` listings:
+
+| Schema | Purpose |
+|---|---|
+| `_realtime` | Realtime's per-tenant configuration and replication state |
+| `supabase_functions` | The `http_request()` trigger function plus the audit table for triggered hooks (used by [DB webhooks](/guides/db-webhooks)) |
+| `realtime` | The `realtime.send()` and `realtime.broadcast_changes()` SQL functions |
+| `graphql_public` | pg_graphql's mount point (queryable via `POST /rest/v1/rpc/graphql`) |
+| `vault` | Vault extension's encrypted secrets storage (preloaded but no platform code uses it) |
+| `pgsodium`, `pg_catalog`, `information_schema`, etc. | Standard Postgres internals |
+
+You can call functions in `realtime` and `supabase_functions` from your own code — that's why they're documented above. The rest are internal.
+
+## search_path and what schemas resolve
+
+Your Postgres session's `search_path` controls which schemas are searched for unqualified table references. The default is `"$user", public, extensions` — meaning `SELECT * FROM users` looks in `public` first, then `extensions`.
+
+To query `ai.*` from `psql` without qualifying every table:
+
+```sql
+SET search_path TO ai, public, extensions;
+SELECT * FROM agents;  -- Resolves to ai.agents
+```
+
+PostgREST sets the search_path automatically based on the `Accept-Profile` / `Content-Profile` headers — you only think about it for direct SQL connections.
+
+## What schema your role can see
+
+Each Postgres role has different `USAGE` grants on each schema. The defaults that matter:
+
+| Role | `public` | `ai` | `auth` | `storage` |
+|---|---|---|---|---|
+| `anon` | USAGE | USAGE (RLS denies all) | — | USAGE |
+| `authenticated` | USAGE | USAGE (RLS-gated) | — | USAGE |
+| `service_role` | USAGE | USAGE (RLS bypassed) | — | USAGE |
+| `supabase_admin` (you in psql / migrations) | USAGE | USAGE | USAGE | USAGE |
+
+Schema USAGE is just "can the role know this schema exists"; RLS policies on individual tables decide what's readable. The `auth.*` schema isn't granted to anon / authenticated / service_role — they can't even see it in `\dn` output, let alone query `auth.users`.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Querying the ai schema" href="/concepts/ai-schema-postgrest">
+What's in ai.* and how to query it under RLS.
+</Card>
+
+<Card title="Extensions" href="/api-reference/extensions">
+Which extensions are preloaded vs CREATE EXTENSION-able.
+</Card>
+
+<Card title="RLS Model" href="/concepts/rls-model">
+The role mapping that drives which schemas / rows each request can see.
+</Card>
+
+<Card title="Migrations" href="/guides/migrations">
+The schema boundary you should not cross when migrating.
+</Card>
+
+</CardGroup>

@@ -1,0 +1,142 @@
+---
+title: "API access (raw HTTP)"
+description: "Powabase ships no typed SDKs today. Raw HTTP via the documented endpoints is the supported access path. What this means for your stack and what's likely coming."
+icon: "plug"
+---
+
+Powabase doesn't currently ship first-party SDKs in any language. The supported way to access the platform from application code is **raw HTTP** against the documented endpoints — `/api/*` for the agentic surface, `/rest/v1/*` for PostgREST, `/auth/v1/*` for GoTrue, `/storage/v1/*` for Storage, `/realtime/v1/*` for Realtime, and the Database URL for direct Postgres.
+
+This page documents the current posture — what "raw HTTP" actually means in practice, why no SDK ships today, and what's likely on the horizon. For the conventions every endpoint shares, see [API conventions](/concepts/api-conventions).
+
+## What "raw HTTP" means in practice
+
+Every Powabase endpoint is a standard HTTP request. You can talk to it from:
+
+- **Browser `fetch`** — the BaaS surfaces (PostgREST, Auth, Storage) are designed for browser-direct calls with the Anon Key.
+- **Node.js `fetch`** — or any HTTP library (`axios`, `got`, `ky`).
+- **Python `requests`** or `httpx`.
+- **Go `net/http`**.
+- **Rust `reqwest`**.
+- **`curl`** for one-off testing.
+
+There's no magic in the API beyond what you see in the reference pages. If you can construct an HTTP request with two headers (`apikey` + `Authorization: Bearer`) and a JSON body, you can call any endpoint. The reference pages show snippets in Python, TypeScript, and `curl` for every endpoint; those are working examples you can copy.
+
+## Why no SDK
+
+A few honest reasons no SDK ships today:
+
+- **The API surface is still moving.** Shipping a typed SDK locks in shapes; reshaping the SDK on every endpoint change is a maintenance burden the platform team chose not to take on yet.
+- **Most users get along fine with `fetch`/`requests`.** The endpoints are RESTful enough that a thin wrapper doesn't add much.
+- **Multiple SDKs would multiply support burden.** A first-party Python SDK creates an expectation of a first-party TypeScript SDK, a Go SDK, etc. Better to ship none than to ship one and feel obligated to ship four.
+
+If you want SDK-like ergonomics, the most common pattern is rolling a thin wrapper inside your own codebase. A 200-line file that exposes `client.agents.run({id, message})` over `fetch` covers most use cases without adopting an external dependency.
+
+## What `@supabase/supabase-js` won't do
+
+The Supabase JS client (`@supabase/supabase-js`) handles auth, PostgREST, Storage, and Realtime as a unified SDK. It mostly works against Powabase — same endpoints, same auth model, same Realtime protocol — but with caveats:
+
+- **The agentic `/api/*` surface isn't in the Supabase client.** Agents, knowledge bases, workflows, etc. are Powabase-specific; the Supabase SDK has no methods for them.
+- **`/graphql/v1` doesn't exist on Powabase.** If your code uses `supabase.graphql()` it'll 404. Call `/rest/v1/rpc/graphql` directly.
+- **Connect modal URL pattern is different.** The Supabase SDK accepts an URL + Anon Key; Powabase's Anon Key works but you'll point the SDK at `https://{ref}.p.powabase.ai` not `https://{ref}.supabase.co`.
+- **Storage paths align cleanly but bucket admin endpoints may differ.** Test bucket creation / policy management before relying on it.
+
+For projects porting from Supabase: use `@supabase/supabase-js` for the BaaS surface (PostgREST, Auth, Storage, Realtime), and raw HTTP for the agentic `/api/*` surface. That gets you most of the SDK ergonomics with no need to migrate working code.
+
+## Header pattern reminder
+
+The standard pattern across every endpoint:
+
+```
+apikey: <Anon Publishable Key or Service Role Key>
+Authorization: Bearer <same key OR a user access token after sign-in>
+Content-Type: application/json   (for POST/PUT/PATCH)
+```
+
+The Anon Key is the routing credential at Kong; the `Authorization` header is what the downstream service uses for role assignment. They can hold the same value (server-side calls with Service Role) or different values (browser-side calls with Anon Key + user token). See [Auth model](/concepts/auth-model).
+
+## Patterns worth standardizing in your own wrapper
+
+If you're writing a project-specific wrapper, a few patterns to bake in:
+
+### Retry with backoff for 503 / 429
+
+`503 billing service unreachable` is transient; `429 rate limit exceeded` is transient with a known window. Both should retry with exponential backoff. Don't retry `402`, `4xx`, or `401`.
+
+```typescript
+async function withRetry<T>(fn: () => Promise<Response>): Promise<Response> {
+  const delays = [3000, 6000, 12000, 30000];
+  for (let i = 0; i <= delays.length; i++) {
+    const res = await fn();
+    if (res.ok) return res;
+    if (res.status === 503 || res.status === 429) {
+      if (i === delays.length) return res;
+      await new Promise(r => setTimeout(r, delays[i] * (1 + Math.random() * 0.25)));
+      continue;
+    }
+    return res;
+  }
+  throw new Error("unreachable");
+}
+```
+
+### Refresh access tokens before they expire
+
+User access tokens last 1 hour. Refresh at 50 minutes elapsed rather than waiting for a 401:
+
+```typescript
+const REFRESH_BEFORE = 50 * 60 * 1000;  // 50 min
+function shouldRefresh(token: { issuedAt: number }) {
+  return Date.now() - token.issuedAt > REFRESH_BEFORE;
+}
+```
+
+See [Signup, signin, magic link](/guides/auth-signup-signin) for the refresh endpoint.
+
+### Normalize error shapes
+
+The platform's services have different error envelopes (see [API conventions](/concepts/api-conventions)). A wrapper that normalizes them is worth the small upfront cost:
+
+```typescript
+type NormalizedError = { code: string; message: string; details?: unknown };
+
+async function normalizeError(res: Response): Promise<NormalizedError> {
+  const body = await res.json().catch(() => ({}));
+  return {
+    code: body.code || body.error || body.error_description || String(res.status),
+    message: body.message || body.error_description || body.error || res.statusText,
+    details: body,
+  };
+}
+```
+
+## What's coming
+
+A few realistic things to plan for:
+
+- **OpenAPI spec.** The most-likely next addition. Once the surface stabilizes, the platform team is likely to publish an OpenAPI document so users can codegen typed clients in their preferred language. Not committed; reasonable to anticipate.
+- **First-party SDKs.** Less certain. If they do ship, Python and TypeScript are the most likely. Don't build assuming they'll arrive on any timeline.
+- **Stable wire format.** The reference pages are the contract today. Changes that would break clients get called out in release notes; the platform team treats backwards-compatibility seriously even without a formal versioning policy on `/api/*`.
+
+If you build on raw HTTP today, you're not locking yourself out of SDK adoption later — SDKs would call the same endpoints. The migration cost from raw HTTP to a future SDK is small.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="API conventions" href="/concepts/api-conventions">
+The shared patterns every endpoint uses — the substrate any SDK would wrap.
+</Card>
+
+<Card title="Auth & Connection" href="/guides/auth-connection">
+The Connect modal — where every header value comes from.
+</Card>
+
+<Card title="Migrating from Supabase" href="/guides/migrating-from-supabase">
+For users with existing Supabase client code who want to keep using it.
+</Card>
+
+<Card title="Glossary" href="/concepts/glossary">
+The terminology that helps when reading endpoint reference pages.
+</Card>
+
+</CardGroup>
