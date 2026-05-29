@@ -1,0 +1,246 @@
+---
+title: "Storage policies"
+description: "Three copy-paste RLS patterns for storage.objects: own-files-only, public-read with auth-write, role-based access. Plus the storage.foldername helper and the pitfalls that bite people."
+icon: "boxes-stacked"
+---
+
+The `storage.objects` table is a regular Postgres table with Row Level Security enabled. Every file operation through `/storage/v1/object/authenticated/*` runs RLS policies on this table before letting the request through, just like queries against your own `public.*` tables.
+
+This page is a recipe collection for the three storage-specific patterns that come up most. For the conceptual model, see [Storage model](/concepts/storage-model). For the general RLS framing, see [RLS Model](/concepts/rls-model). For uploads, see [Storage uploads](/guides/storage-uploads).
+
+## The shape of storage.objects
+
+Before the patterns, what you're writing policies against:
+
+```sql
+storage.objects (
+  id uuid PRIMARY KEY,
+  bucket_id text NOT NULL REFERENCES storage.buckets(id),
+  name text,              -- the full path within the bucket, slashes included
+  owner uuid,             -- set to auth.uid() on insert, NULL for anon uploads
+  created_at timestamptz,
+  updated_at timestamptz,
+  last_accessed_at timestamptz,
+  metadata jsonb          -- size, mimetype, content-encoding, etc.
+)
+```
+
+Two functions you'll see in policies:
+
+- **`storage.foldername(name)`** — splits the path by `/` and returns the segments as a `text[]`. So for an object at `documents/2026/q1/report.pdf`, `storage.foldername` returns `{documents, 2026, q1}` (excluding the filename).
+- **`storage.filename(name)`** — returns just the filename part. For the same path, returns `report.pdf`.
+
+You combine these with `bucket_id` and `auth.uid()` to express "files in this bucket, in this folder, owned by this user."
+
+## Pattern 1 — Users access only their own files
+
+Most common pattern. Files are keyed by user id as the first path segment (e.g., `avatars/<user-id>/photo.png`). Each user can upload, read, update, and delete only their own files.
+
+```sql
+-- Upload: only allow paths starting with the user's own id
+CREATE POLICY upload_own_files ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'avatars'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- Read: only the user's own files
+CREATE POLICY read_own_files ON storage.objects
+  FOR SELECT TO authenticated
+  USING (
+    bucket_id = 'avatars'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- Update (re-upload, change metadata): same constraint
+CREATE POLICY update_own_files ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (
+    bucket_id = 'avatars'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  )
+  WITH CHECK (
+    bucket_id = 'avatars'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- Delete
+CREATE POLICY delete_own_files ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'avatars'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+```
+
+**Cast matters.** `auth.uid()` returns `uuid`; `storage.foldername(name)[1]` returns `text`. The cast `auth.uid()::text` makes the comparison work — without it, Postgres errors with "operator does not exist."
+
+**Why path-prefix not owner?** You *could* match on `owner = auth.uid()` instead. The difference is what happens when a user uploads to a path that doesn't start with their id — `owner = auth.uid()` blocks it because the owner is set at upload time (so the policy passes by construction), but `(storage.foldername(name))[1] = auth.uid()::text` blocks it because the path itself is wrong. Path-prefix is stricter; it prevents a user from uploading to `<some-other-user-id>/file.png` even if they somehow get the `owner` column set to their own id.
+
+For belt-and-suspenders, check both:
+
+```sql
+CREATE POLICY upload_own_files ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'avatars'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+    AND owner = auth.uid()
+  );
+```
+
+## Pattern 2 — Public read, auth-only write
+
+Think of the bucket as a content site: anyone can read any file (the bucket itself is `public = true`, so the read side is free — see the warning below), but only signed-in users can upload, and only to paths they own.
+
+```sql
+-- Anyone can read (handled by the bucket's public flag — no policy needed
+-- because the public-bucket URL bypasses RLS entirely).
+
+-- Authenticated users can upload to their own folder
+CREATE POLICY upload_own_in_public ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'public-blog-images'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- Authenticated users can update their own uploads
+CREATE POLICY update_own_in_public ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (
+    bucket_id = 'public-blog-images'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  )
+  WITH CHECK (
+    bucket_id = 'public-blog-images'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- Authenticated users can delete their own uploads
+CREATE POLICY delete_own_in_public ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'public-blog-images'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+```
+
+<Warning>
+**`public = true` on a bucket means the public URL bypasses RLS entirely.** Anyone fetching `GET /storage/v1/object/public/{bucket}/{path}` gets the file without any policy check. The RLS policies above only gate the *authenticated* URL (`/storage/v1/object/authenticated/`) and the metadata operations on `storage.objects`. If you don't want some files publicly fetchable, **don't put them in a public bucket** — use a private bucket and signed URLs instead.
+</Warning>
+
+## Pattern 3 — Role-based access (admins manage, users read their own)
+
+A team document-sharing app: every user can read and upload their own files (Pattern 1), but admins can read and delete anyone's files.
+
+Using the JWT claim approach (admin is set on `app_metadata.role` via `PUT /auth/v1/admin/users/{id}`):
+
+```sql
+-- Existing per-user policies from Pattern 1 still apply.
+-- Add admin overrides on top — RLS policies are OR-combined for the same role.
+
+CREATE POLICY admin_read_all ON storage.objects
+  FOR SELECT TO authenticated
+  USING (
+    bucket_id = 'documents'
+    AND auth.jwt() -> 'app_metadata' ->> 'role' = 'admin'
+  );
+
+CREATE POLICY admin_delete_all ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'documents'
+    AND auth.jwt() -> 'app_metadata' ->> 'role' = 'admin'
+  );
+```
+
+A user with `app_metadata.role = "admin"` matches both the per-user policy (for their own files) and the admin policy (for everyone's). Postgres ORs them; the admin sees everything in the bucket.
+
+Using a database table (`public.team_members(user_id, role)`) instead — useful when roles change dynamically without re-issuing JWTs:
+
+```sql
+CREATE POLICY admin_read_all ON storage.objects
+  FOR SELECT TO authenticated
+  USING (
+    bucket_id = 'documents'
+    AND EXISTS (
+      SELECT 1 FROM public.team_members
+      WHERE user_id = auth.uid() AND role = 'admin'
+    )
+  );
+```
+
+Trade-offs are the same as the [RLS Cookbook's role-based pattern](/guides/rls-policies) — JWT claims are faster but stale, database lookups are fresh but cost a join.
+
+## Listing files in a bucket
+
+The Storage API's `POST /storage/v1/object/list/{bucket}` endpoint runs against `storage.objects` and applies SELECT policies. Users see only the files they have a SELECT policy for. If you want to surface a "browse all files in this bucket" UI for admins, the admin policy above is what makes it work.
+
+`GET /storage/v1/bucket/{id}` (list bucket metadata) is gated separately by policies on `storage.buckets`. By default, signed-in users can see all bucket metadata in their project. If you want to hide bucket existence from non-admins, add policies on `storage.buckets`:
+
+```sql
+CREATE POLICY admin_only_bucket_visibility ON storage.buckets
+  FOR SELECT TO authenticated
+  USING (auth.jwt() -> 'app_metadata' ->> 'role' = 'admin');
+```
+
+(Most apps don't bother — bucket names aren't sensitive.)
+
+## Folder structure as authorization
+
+If your bucket is organized as `<org-id>/<user-id>/<filename>`, you can express "users in org X can read anything in their org's folder" with a multi-segment check:
+
+```sql
+CREATE POLICY read_org_files ON storage.objects
+  FOR SELECT TO authenticated
+  USING (
+    bucket_id = 'org-shared'
+    AND (storage.foldername(name))[1] IN (
+      SELECT org_id::text FROM public.members WHERE user_id = auth.uid()
+    )
+  );
+```
+
+This is the multi-tenant pattern from the RLS Cookbook applied to Storage. The first folder segment is the org id; the policy checks that the calling user is a member of that org.
+
+## Testing storage policies
+
+The same techniques from [RLS Testing](/guides/rls-testing) apply — `SET LOCAL ROLE authenticated; SET LOCAL request.jwt.claims = '{"sub": "...", "role": "authenticated"}';` and then run your INSERT/SELECT against `storage.objects` to confirm the policy accepts the right things and rejects the wrong things.
+
+A small detail: when testing storage policies, the path you pass to `storage.foldername()` matters. To simulate an upload at `avatars/<uid>/photo.png`, your test row's `name` column should be that exact string — the policy reads `name`, not `path` or any other column.
+
+## Pitfalls
+
+- **Forgetting to enable RLS.** `storage.objects` has RLS enabled by default. If you're testing locally with a fresh schema and policies aren't applying, check that `ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;` ran. Without RLS, every signed-in user sees everything.
+
+- **The public URL bypasses RLS.** Worth repeating because it confuses people. If your bucket is `public = true`, no amount of policy work on `storage.objects` will gate `GET /storage/v1/object/public/...`. Use private buckets + signed URLs if you need RLS-gated reads.
+
+- **`storage.foldername()` is zero-indexed in some examples online but one-indexed here.** PostgreSQL arrays are one-indexed: `(storage.foldername('a/b/c.png'))[1]` is `'a'`, not `'b'`. If you copy-paste from older Supabase docs, double-check the index.
+
+- **Update policies need both USING and WITH CHECK.** Without `WITH CHECK`, a user could change `name` (or `owner`) to a path they don't own mid-update. Always pair them.
+
+- **`auth.uid()` returns NULL for `anon`.** A policy like `owner = auth.uid()` will never match for anon — which is usually what you want, but means an anon-public-write bucket needs a separate policy targeting `TO anon` with whatever conditions you want.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Storage uploads" href="/guides/storage-uploads">
+The upload flows these policies gate.
+</Card>
+
+<Card title="Storage model" href="/concepts/storage-model">
+Buckets, public vs private, the underlying tables.
+</Card>
+
+<Card title="RLS Cookbook" href="/guides/rls-policies">
+The general RLS patterns this page builds on.
+</Card>
+
+<Card title="RLS Testing" href="/guides/rls-testing">
+How to test storage policies in psql or the Studio.
+</Card>
+
+</CardGroup>

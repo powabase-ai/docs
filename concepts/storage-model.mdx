@@ -1,0 +1,138 @@
+---
+title: "Storage model"
+description: "How Powabase Storage organizes files into buckets, who can access what, what the size and MIME limits actually are, and how image transformations happen."
+icon: "boxes-stacked"
+---
+
+Powabase Storage is the Supabase Storage API (v1.33.0) running at `/storage/v1/*` on your project URL. It manages files in **buckets** backed by S3, with metadata mirrored into the `storage.buckets` and `storage.objects` tables in your project's Postgres so you can apply Row Level Security to file access just like any other table.
+
+This page covers the conceptual model — buckets vs objects, public vs private, how the per-project S3 prefix works, and the size/MIME constraints. For the API surface, see [Storage Reference](/api-reference/storage). For uploads, see [Storage uploads](/guides/storage-uploads). For RLS on `storage.objects`, see [Storage policies](/guides/storage-policies).
+
+## Buckets and objects
+
+Every file lives inside a **bucket** — a top-level container with its own name, public/private flag, and optional MIME allowlist. Within a bucket, files are addressed by an arbitrary slash-separated **path** (Storage doesn't model "folders" — they're just substrings of the path).
+
+```
+<bucket>/<path>
+  ↓ examples:
+avatars/user-abc.png
+documents/2026/q1/invoice-101.pdf
+videos/marketing/landing.mp4
+```
+
+Two tables back this:
+
+- **`storage.buckets`** — one row per bucket: name, public flag, allowed MIME types, file size limit, owner. You manage buckets via `POST /storage/v1/bucket` or directly via PostgREST on `storage.buckets`.
+- **`storage.objects`** — one row per uploaded file: bucket_id, name (path), size, mimetype, metadata, owner. Storage API populates this on every upload; you read it via PostgREST to list files or apply RLS.
+
+Because object metadata lives in Postgres, you can join across `storage.objects` and your own `public.*` tables. A common pattern: a `public.documents` table with a `storage_path` column, joined to `storage.objects` for size/last-modified.
+
+## Public vs private buckets
+
+Buckets have a `public` boolean that gates one specific URL shape:
+
+- **`GET /storage/v1/object/public/{bucket}/{path}`** — no auth required, returns the file directly. Only works for buckets where `public = true`.
+- **`GET /storage/v1/object/authenticated/{bucket}/{path}`** — requires `Authorization: Bearer <user access token>`. RLS on `storage.objects` decides whether the request succeeds.
+- **`GET /storage/v1/object/sign/{bucket}/{path}`** — returns a pre-signed URL valid for a configurable TTL. Useful for sharing private files via email/links without making the whole bucket public.
+
+For RLS on the private side, `storage.objects` is a regular Postgres table with policies you can apply just like your own tables. See [Storage policies](/guides/storage-policies) for patterns.
+
+<Warning>
+**Public buckets are fully public.** A `public = true` bucket means anyone with the URL — no API key, no JWT, no referer check — can fetch any file in it. There's no per-object override. Don't store anything sensitive in a public bucket, ever.
+</Warning>
+
+## The per-project S3 prefix
+
+All Powabase projects share a single S3 bucket on the backend, but each project's files are namespaced under `s3://<global-bucket>/projects/<ref>/`. The Storage API enforces this prefix at the application layer — your project's reads and writes are constrained to its own subtree, even though the underlying S3 bucket is shared.
+
+You don't need to think about this in normal API use. It does matter if:
+
+- **You want to give an external system direct S3 access.** You can't issue an AWS IAM role scoped to "this project's prefix" without coordinating with the platform team. For external integrations, use signed URLs (TTL-bounded) or stream through your own backend.
+- **You're auditing storage usage.** Backups, S3 logs, and CloudWatch metrics are at the global-bucket level. To attribute usage to a project, filter by the `projects/{ref}/` prefix.
+
+## File size limit
+
+The default file size limit is **50 MB** (`52428800` bytes), enforced by the Storage API before forwarding to S3. Larger uploads return `413 Payload Too Large`.
+
+For files between 50 MB and several GB, use **resumable uploads** (TUS protocol at `/storage/v1/upload/resumable`). TUS chunks the upload and persists progress, so a dropped connection mid-upload can be resumed rather than restarted. The per-chunk size, not the total file size, is what hits the 50 MB limit — so set chunk size to under 50 MB and you can upload arbitrarily large files. See [Storage uploads](/guides/storage-uploads) for the TUS client setup.
+
+For files much larger than a few GB (video archives, datasets), TUS works but client-side handling gets heavyweight. Consider whether the file belongs in object storage at all — versioned datasets often want dataset-specific tooling, not a generic file API.
+
+## MIME allowlist
+
+Each bucket can optionally restrict which content types are accepted. Set it at bucket creation:
+
+```bash
+POST /storage/v1/bucket
+{
+  "name": "avatars",
+  "public": true,
+  "allowed_mime_types": ["image/png", "image/jpeg", "image/webp"],
+  "file_size_limit": 5242880
+}
+```
+
+When set, uploads with a non-matching `Content-Type` header return `400 invalid_mime_type`. When `allowed_mime_types` is null (the default), the bucket accepts anything within the global file size limit.
+
+Bucket-level `file_size_limit` overrides the project default for files in that bucket. Useful when you want a low limit on user-uploaded avatars but a higher limit on internal-only document buckets.
+
+<Note>
+**The MIME check is client-trust-based.** The Storage API checks the `Content-Type` header your client sends, not the actual file contents. A malicious client could upload an executable with `Content-Type: image/png` and bypass the allowlist. For untrusted clients, validate file contents server-side (e.g., by running magic-byte detection) before treating the upload as the claimed type. The MIME allowlist is a UX safeguard, not a security boundary.
+</Note>
+
+## Image transformations
+
+Powabase ships an **imgproxy** service in the shared infrastructure, fronted by the Storage API. When you fetch an image, you can pass transformation parameters as a query string and the response is the transformed image:
+
+```
+GET /storage/v1/render/image/public/{bucket}/{path}?width=200&height=200&resize=cover&quality=80
+```
+
+Supported transforms include `width`, `height`, `resize` (cover/contain/fill), `quality`, `format` (webp, png, jpeg), and a few others. The transformed images are cached by imgproxy, so the second request for the same parameters is fast.
+
+This is the right tool for serving multiple sizes of user-uploaded avatars, generating thumbnails for a media gallery, or converting between formats on the fly. It's not the right tool for batch processing — for that, do the transformation server-side and upload the results as separate objects.
+
+The render endpoint mirrors the object endpoint shape: `/render/image/public/`, `/render/image/authenticated/`, and `/render/image/sign/` for public, RLS-gated, and signed-URL access respectively.
+
+## Owner column and `auth.uid()`
+
+`storage.objects` includes an `owner` column (uuid) set at upload time. By default it's the `sub` claim from the uploading user's JWT — i.e., `auth.uid()` at upload time. RLS policies can use this for "users can only access files they uploaded" patterns:
+
+```sql
+CREATE POLICY own_objects ON storage.objects
+  FOR SELECT TO authenticated
+  USING (owner = auth.uid());
+```
+
+If the upload is unauthenticated (using the Anon Key with no user session), `owner` is null. Service-role uploads can explicitly set `owner` to any user uuid via the `x-owner` header.
+
+## Storage and the AI schema
+
+Powabase's Sources pipeline (`/api/sources/upload`) ingests files into Storage internally — the platform creates the bucket, manages the path, and tracks the lifecycle. **Those files are not the same as files you upload via `/storage/v1/*`.**
+
+- **User Storage** — buckets you create, files your app uploads. Lives in `storage.objects` under buckets you own.
+- **Platform Sources** — files uploaded via `/api/sources/upload`. Lives in a platform-managed bucket; the rows you see are in `ai.sources`, not `storage.objects`.
+
+If your app needs both — user-uploaded files (for display) plus user-supplied documents for RAG (for indexing) — keep them separate. Don't try to share buckets between the two flows; the AI surface assumes ownership of its bucket layout and will overwrite paths.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Storage uploads" href="/guides/storage-uploads">
+Browser-direct uploads, signed URLs, and TUS resumable uploads.
+</Card>
+
+<Card title="Storage policies" href="/guides/storage-policies">
+RLS patterns on storage.objects — own-files-only, public-read, role-based.
+</Card>
+
+<Card title="Storage Reference" href="/api-reference/storage">
+Full /storage/v1/* endpoint catalog.
+</Card>
+
+<Card title="RLS Model" href="/concepts/rls-model">
+The role-and-policy model that gates storage.objects.
+</Card>
+
+</CardGroup>
