@@ -1,0 +1,338 @@
+---
+title: "Storage uploads"
+description: "Upload files to Powabase Storage: simple multipart, browser-direct with the Anon Key, server-side signed upload URLs, and TUS resumable uploads for large files."
+icon: "boxes-stacked"
+---
+
+There are four ways files get into Storage, depending on where the upload originates and how big the file is. This guide walks each one with the headers, body shape, and gotchas. For the conceptual model, see [Storage model](/concepts/storage-model). For the full API surface, see [Storage Reference](/api-reference/storage). For controlling who can upload what, see [Storage policies](/guides/storage-policies).
+
+## Decision tree
+
+| Scenario | Use |
+|---|---|
+| Server-side upload (Node, Python backend, etc.) | Simple POST with the Service Role Key |
+| Browser uploads under 50MB, public bucket | Direct POST with the Anon Key |
+| Browser uploads under 50MB, private bucket | Same — RLS on `storage.objects` gates it |
+| Files over 50MB | TUS resumable at `/storage/v1/upload/resumable` |
+| Untrusted client, bandwidth on your backend matters | Signed upload URL (server mints, client uploads to S3-style URL) |
+
+## Simple upload from a backend
+
+The most basic flow. Server has the Service Role Key, picks a path, sends the bytes.
+
+<CodeGroup>
+
+```python Python
+import requests
+
+BASE_URL = "https://{ref}.p.powabase.ai"
+SERVICE_ROLE_KEY = "<your service role key>"
+
+with open("report.pdf", "rb") as f:
+    response = requests.post(
+        f"{BASE_URL}/storage/v1/object/documents/2026/q1/report.pdf",
+        headers={
+            "apikey": SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SERVICE_ROLE_KEY}",
+            "Content-Type": "application/pdf",
+        },
+        data=f,
+    )
+result = response.json()
+# {"Id": "...", "Key": "documents/2026/q1/report.pdf"}
+```
+
+```typescript TypeScript
+const BASE_URL = "https://{ref}.p.powabase.ai";
+const SERVICE_ROLE_KEY = "<your service role key>";
+
+const fileBlob = await fs.readFile("./report.pdf");
+
+const response = await fetch(
+  `${BASE_URL}/storage/v1/object/documents/2026/q1/report.pdf`,
+  {
+    method: "POST",
+    headers: {
+      apikey: SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/pdf",
+    },
+    body: fileBlob,
+  },
+);
+const { Id, Key } = await response.json();
+```
+
+```bash cURL
+curl -X POST 'https://{ref}.p.powabase.ai/storage/v1/object/documents/2026/q1/report.pdf' \
+  -H "apikey: <SERVICE_ROLE_KEY>" \
+  -H "Authorization: Bearer <SERVICE_ROLE_KEY>" \
+  -H "Content-Type: application/pdf" \
+  --data-binary @report.pdf
+```
+
+</CodeGroup>
+
+**Key things:**
+
+- The URL is `/storage/v1/object/{bucket}/{path}`. The bucket must already exist (`POST /storage/v1/bucket` if not).
+- `Content-Type` is what the bucket's MIME allowlist (if any) checks against.
+- Use `POST` for new objects, `PUT` to overwrite an existing object at the same path. `POST` to an existing path returns `409 Duplicate`.
+- The path can include slashes — they're stored verbatim and let you organize "folders" client-side.
+
+## Browser-direct upload (with the Anon Key)
+
+For uploads from a signed-in user's browser, you don't want to proxy the file through your backend — that doubles your bandwidth and adds latency. Have the browser upload directly to Storage with the Anon Key + the user's access token. RLS on `storage.objects` decides whether the upload is allowed.
+
+<CodeGroup>
+
+```typescript TypeScript
+const ANON_KEY = "<your anon key>";
+const accessToken = localStorage.getItem("powabase_access_token");
+
+async function uploadAvatar(file: File) {
+  const path = `${userId}/${file.name}`;
+  const res = await fetch(
+    `${BASE_URL}/storage/v1/object/avatars/${path}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: ANON_KEY,
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": file.type,
+      },
+      body: file,
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.message ?? res.statusText);
+  }
+  return res.json();
+}
+```
+
+```python Python
+# Python is typically server-side. If you're uploading on behalf of an
+# end user from a Python backend, the Service Role pattern above is
+# usually what you want. To explicitly act as a specific user (so RLS
+# applies, owner is set correctly, etc.), use the user's access token:
+response = requests.post(
+    f"{BASE_URL}/storage/v1/object/avatars/{user_id}/photo.jpg",
+    headers={
+        "apikey": ANON_KEY,
+        "Authorization": f"Bearer {user_access_token}",
+        "Content-Type": "image/jpeg",
+    },
+    data=image_bytes,
+)
+```
+
+```bash cURL
+curl -X POST 'https://{ref}.p.powabase.ai/storage/v1/object/avatars/user-123/photo.jpg' \
+  -H "apikey: <ANON_KEY>" \
+  -H "Authorization: Bearer <USER_ACCESS_TOKEN>" \
+  -H "Content-Type: image/jpeg" \
+  --data-binary @photo.jpg
+```
+
+</CodeGroup>
+
+**RLS policy you'll need on `storage.objects` for this to work** (assuming a bucket called `avatars` and a path convention of `<user-id>/...`):
+
+```sql
+CREATE POLICY upload_own_avatar ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'avatars'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+```
+
+`storage.foldername()` is a helper that splits the path by `/` and returns the segments — `(storage.foldername(name))[1]` is the first segment. The policy above lets users upload only to paths starting with their own user id. For more patterns, see [Storage policies](/guides/storage-policies).
+
+## Signed upload URLs
+
+For high-bandwidth cases (large files, many concurrent uploaders) you might not want every upload to go through the Storage API — you can have your server mint a signed URL that lets the client upload directly to S3 (well, to Storage at a URL that Storage forwards to S3 without re-auth'ing). This is a two-step flow:
+
+**Step 1 (server): mint the signed URL.**
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/storage/v1/object/upload/sign/documents/{user_id}/{filename}",
+    headers={
+        "apikey": SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SERVICE_ROLE_KEY}",
+    },
+)
+result = response.json()
+upload_url = f"{BASE_URL}{result['url']}"  # path-relative URL — prepend BASE_URL
+# Pass upload_url to your client.
+```
+
+```typescript TypeScript
+// Server-side
+const res = await fetch(
+  `${BASE_URL}/storage/v1/object/upload/sign/documents/${userId}/${filename}`,
+  {
+    method: "POST",
+    headers: {
+      apikey: SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+    },
+  },
+);
+const { url } = await res.json();
+const uploadUrl = `${BASE_URL}${url}`;
+// Return uploadUrl to the browser.
+```
+
+```bash cURL
+curl -X POST 'https://{ref}.p.powabase.ai/storage/v1/object/upload/sign/documents/user-123/big-file.pdf' \
+  -H "apikey: <SERVICE_ROLE_KEY>" \
+  -H "Authorization: Bearer <SERVICE_ROLE_KEY>"
+```
+
+</CodeGroup>
+
+The response is `{ "url": "/object/upload/sign/documents/user-123/big-file.pdf?token=..." }`. The token in the URL is single-use and TTL-bounded (default 2 hours, configurable per request via `?expires_in=`).
+
+**Step 2 (client): PUT the file to the signed URL.**
+
+```typescript
+await fetch(uploadUrl, {
+  method: "PUT",
+  headers: { "Content-Type": file.type },
+  body: file,
+});
+```
+
+Notice the client doesn't send `Authorization` or `apikey` — the signature in the URL is the auth. This lets you decouple the upload from your auth layer (e.g., for offline clients that need to upload when reconnected).
+
+## TUS resumable uploads (for files larger than 50MB)
+
+For uploads that might fail mid-stream — large files on flaky connections, mobile users, video editors — use the TUS protocol at `/storage/v1/upload/resumable`. TUS chunks the upload, persists progress server-side, and lets the client pick up where it left off after a disconnect.
+
+The protocol itself is involved (PATCH requests with offset headers, HEAD to query progress, etc.). Use a TUS client library rather than implementing it by hand:
+
+<CodeGroup>
+
+```typescript TypeScript
+import * as tus from "tus-js-client";
+
+const upload = new tus.Upload(file, {
+  endpoint: `${BASE_URL}/storage/v1/upload/resumable`,
+  retryDelays: [0, 1000, 3000, 5000, 10000, 20000],
+  headers: {
+    apikey: ANON_KEY,
+    Authorization: `Bearer ${accessToken}`,
+    "x-upsert": "true",  // overwrite if exists, otherwise 409
+  },
+  uploadDataDuringCreation: true,
+  removeFingerprintOnSuccess: true,
+  metadata: {
+    bucketName: "videos",
+    objectName: `${userId}/${file.name}`,
+    contentType: file.type,
+  },
+  chunkSize: 6 * 1024 * 1024,  // 6MB chunks — under the 50MB API limit, big enough for throughput
+  onError: (err) => console.error("Upload failed", err),
+  onProgress: (bytesUploaded, bytesTotal) => {
+    const pct = ((bytesUploaded / bytesTotal) * 100).toFixed(2);
+    console.log(`${pct}% — ${bytesUploaded}/${bytesTotal}`);
+  },
+  onSuccess: () => console.log("Upload complete:", upload.url),
+});
+
+// Check for previous uploads in progress (after a page reload, etc.)
+const previousUploads = await upload.findPreviousUploads();
+if (previousUploads.length > 0) {
+  upload.resumeFromPreviousUpload(previousUploads[0]);
+}
+upload.start();
+```
+
+```python Python
+# tuspy or similar TUS clients for Python — but Python uploads are
+# typically server-side where the simple POST flow above is enough.
+# For Python TUS, see the tuspy library docs.
+```
+
+```bash cURL
+# TUS is multi-request. Doing it by hand in cURL is impractical.
+# Use a TUS client library or the upstream Supabase JS client.
+```
+
+</CodeGroup>
+
+**Chunk size:** keep it under 50MB (the per-request limit). 6MB is a common starting point — small enough that one failed chunk is fast to retry, big enough that you're not constantly thrashing on TUS overhead.
+
+**Headers:** TUS needs the auth headers (`apikey` + `Authorization`) on every chunk request. The TUS client library handles this.
+
+**Metadata:** the `bucketName`, `objectName`, and `contentType` fields in `metadata` tell Storage where to put the file. The TUS library base64-encodes them into the `Upload-Metadata` header.
+
+## Downloading
+
+For reads, use one of three URL shapes depending on the bucket's visibility and your auth model:
+
+```
+GET /storage/v1/object/public/{bucket}/{path}            # no auth, public bucket only
+GET /storage/v1/object/authenticated/{bucket}/{path}     # user access token
+GET /storage/v1/object/sign/{bucket}/{path}?token=...    # signed URL (see below)
+```
+
+**Pre-signed download URLs.** For private files you want to share via email/link without making the bucket public:
+
+```typescript
+// Server-side
+const res = await fetch(
+  `${BASE_URL}/storage/v1/object/sign/documents/${path}`,
+  {
+    method: "POST",
+    headers: {
+      apikey: SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ expiresIn: 3600 }),  // seconds; default 60
+  },
+);
+const { signedURL } = await res.json();
+const downloadUrl = `${BASE_URL}${signedURL}`;
+// Share downloadUrl — anyone with it can fetch the file for the next hour.
+```
+
+The signed URL works without auth (the token in the query string is the credential). Useful for "send the customer a download link they can click in their email" patterns.
+
+## Common failure modes
+
+- **`413 Payload Too Large`** — the file (or chunk in TUS) exceeds 50MB. Use TUS with a smaller chunk size.
+- **`409 Duplicate`** — POSTing to a path that already exists. Use `PUT` to overwrite or set the `x-upsert: true` header.
+- **`401 Unauthorized`** — missing or wrong `Authorization` header. Check that you're sending both `apikey` and `Authorization`, and that they match what the operation needs (Anon Key for client-side; Service Role for server-side; user access token for user-scoped operations).
+- **`400 invalid_mime_type`** — the `Content-Type` doesn't match the bucket's `allowed_mime_types`. Either fix the header or widen the bucket's allowlist.
+- **`403 Forbidden`** — RLS on `storage.objects` denied the operation. Check your INSERT/UPDATE/SELECT policies match the path pattern your client is using.
+- **TUS uploads stall, no error.** The TUS client is retrying invisibly. Check the network tab — if you see repeated PATCH requests with 5xx responses, the issue is server-side (probably an RLS denial on UPDATE, since TUS PATCHes the same row). If you see PATCH requests with 200 responses but no progress, the client isn't sending the next chunk — check your `onProgress` handler isn't throwing.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Storage policies" href="/guides/storage-policies">
+RLS patterns on storage.objects — own-files, public-read, role-based access.
+</Card>
+
+<Card title="Storage model" href="/concepts/storage-model">
+Buckets vs objects, public vs private, the S3 prefix, MIME constraints.
+</Card>
+
+<Card title="Storage Reference" href="/api-reference/storage">
+Full /storage/v1/* endpoint catalog.
+</Card>
+
+<Card title="Auth: Signup, signin, magic link" href="/guides/auth-signup-signin">
+How to get the user access token you'll use in browser-direct uploads.
+</Card>
+
+</CardGroup>

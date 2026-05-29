@@ -1,0 +1,484 @@
+---
+title: "Storage"
+description: "End-user-facing Storage endpoints at /storage/v1/* — bucket CRUD, object upload/download/list/copy/move, signed URLs, image transformations, and TUS resumable uploads."
+icon: "boxes-stacked"
+---
+
+The Storage API is Supabase Storage v1.33.0 mounted at `/storage/v1/*` on your project URL. It manages files in buckets backed by S3, with object metadata mirrored into the `storage.buckets` and `storage.objects` tables in Postgres so RLS can gate access.
+
+For the conceptual model, see [Storage model](/concepts/storage-model). For uploading, see [Storage uploads](/guides/storage-uploads). For RLS, see [Storage policies](/guides/storage-policies).
+
+## Common headers
+
+```
+apikey: <Anon Publishable Key | Service Role Key>
+Authorization: Bearer <same key as apikey, or a user access token>
+```
+
+The Anon Key combined with a user's access token in `Authorization` is the right pattern for browser-direct uploads. Service Role in both is for server-side admin operations.
+
+The Storage API uses bearer auth for most endpoints. Public-URL reads (`/object/public/*`) work without auth; signed-URL reads pass auth via a `?token=` query parameter.
+
+## Buckets
+
+A bucket is a top-level container with a name, public flag, optional MIME allowlist, and optional file-size override.
+
+### POST /storage/v1/bucket
+
+Create a new bucket.
+
+<ParamField body="id" type="string" required>
+Bucket id (used in URLs). Must be unique. Lowercase alphanumeric, dashes, and dots.
+</ParamField>
+
+<ParamField body="name" type="string">
+Human-readable name. Defaults to `id`.
+</ParamField>
+
+<ParamField body="public" type="boolean">
+When `true`, the bucket's public URL (`/object/public/{bucket}/{path}`) returns files without auth. Default `false`.
+</ParamField>
+
+<ParamField body="file_size_limit" type="integer">
+Per-bucket override for the project's default file size limit. In bytes.
+</ParamField>
+
+<ParamField body="allowed_mime_types" type="string[]">
+Restrict uploads to specific Content-Types. Default null = anything.
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{
+  "id": "avatars",
+  "public": true,
+  "allowed_mime_types": ["image/png", "image/jpeg", "image/webp"],
+  "file_size_limit": 5242880
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(
+    f"{BASE_URL}/storage/v1/bucket",
+    headers={"apikey": SERVICE_ROLE_KEY, "Authorization": f"Bearer {SERVICE_ROLE_KEY}", "Content-Type": "application/json"},
+    json={"id": "avatars", "public": True, "allowed_mime_types": ["image/png", "image/jpeg"]},
+)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/storage/v1/bucket`, {
+  method: "POST",
+  headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+  body: JSON.stringify({ id: "avatars", public: true, allowed_mime_types: ["image/png", "image/jpeg"] }),
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/storage/v1/bucket' \
+  -H "apikey: <SERVICE_ROLE_KEY>" -H "Authorization: Bearer <SERVICE_ROLE_KEY>" -H "Content-Type: application/json" \
+  -d '{"id": "avatars", "public": true, "allowed_mime_types": ["image/png"]}'
+```
+
+</CodeGroup>
+
+**Response:** `{ "name": "avatars" }` on 200.
+
+### GET /storage/v1/bucket
+
+List all buckets. Returns the bucket metadata rows from `storage.buckets`, filtered by SELECT policies.
+
+<CodeGroup>
+
+```python Python
+requests.get(f"{BASE_URL}/storage/v1/bucket", headers={"apikey": ANON_KEY, "Authorization": f"Bearer {ANON_KEY}"})
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/storage/v1/bucket`, { headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}` } });
+```
+
+```bash cURL
+curl '{BASE_URL}/storage/v1/bucket' -H "apikey: <ANON_KEY>" -H "Authorization: Bearer <ANON_KEY>"
+```
+
+</CodeGroup>
+
+**Response:** array of `{ id, name, public, owner, created_at, updated_at, file_size_limit, allowed_mime_types }`.
+
+### GET /storage/v1/bucket/{id}
+
+Get a specific bucket's metadata.
+
+### PUT /storage/v1/bucket/{id}
+
+Update bucket metadata. Body fields are the same as create (`public`, `file_size_limit`, `allowed_mime_types`).
+
+### DELETE /storage/v1/bucket/{id}
+
+Delete an empty bucket. Returns `409 not_empty` if the bucket contains any objects — empty it first via `POST /bucket/{id}/empty` or DELETE the objects individually.
+
+### POST /storage/v1/bucket/{id}/empty
+
+Delete all objects in a bucket without removing the bucket itself. Returns `200 OK`.
+
+## Objects
+
+The core file operations. Object endpoints are routed by bucket + path.
+
+### POST /storage/v1/object/{bucket}/{path}
+
+Upload a new file. The path can include slashes — they're stored verbatim, not interpreted as folders by Storage. Returns `409 Duplicate` if a file already exists at that path; use `PUT` or set the `x-upsert: true` header to overwrite.
+
+**Headers:**
+
+- `Content-Type` — the MIME type of the file. Checked against the bucket's `allowed_mime_types` if set.
+- `x-upsert: true` (optional) — overwrite if exists.
+
+**Body:** raw file bytes.
+
+<CodeGroup>
+
+```python Python
+with open("avatar.png", "rb") as f:
+    requests.post(
+        f"{BASE_URL}/storage/v1/object/avatars/{user_id}/avatar.png",
+        headers={"apikey": ANON_KEY, "Authorization": f"Bearer {access_token}", "Content-Type": "image/png"},
+        data=f,
+    )
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/storage/v1/object/avatars/${userId}/avatar.png`, {
+  method: "POST",
+  headers: { apikey: ANON_KEY, Authorization: `Bearer ${accessToken}`, "Content-Type": "image/png" },
+  body: fileBlob,
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/storage/v1/object/avatars/user-123/avatar.png' \
+  -H "apikey: <ANON_KEY>" -H "Authorization: Bearer <ACCESS_TOKEN>" -H "Content-Type: image/png" \
+  --data-binary @avatar.png
+```
+
+</CodeGroup>
+
+**Response:** `{ "Id": "...", "Key": "avatars/user-123/avatar.png" }`.
+
+### PUT /storage/v1/object/{bucket}/{path}
+
+Overwrite an existing file at the same path. Same body shape as POST. Returns `200 OK`.
+
+### GET /storage/v1/object/public/{bucket}/{path}
+
+Fetch a file from a public bucket. **No auth required.** Returns the file bytes with the stored `Content-Type`. Returns 400 if the bucket is not public.
+
+### GET /storage/v1/object/authenticated/{bucket}/{path}
+
+Fetch a file from any bucket. Requires `Authorization: Bearer <access token>`. RLS on `storage.objects` decides whether the request succeeds.
+
+<CodeGroup>
+
+```python Python
+response = requests.get(
+    f"{BASE_URL}/storage/v1/object/authenticated/documents/{path}",
+    headers={"apikey": ANON_KEY, "Authorization": f"Bearer {access_token}"},
+)
+file_bytes = response.content
+```
+
+```typescript TypeScript
+const res = await fetch(
+  `${BASE_URL}/storage/v1/object/authenticated/documents/${path}`,
+  { headers: { apikey: ANON_KEY, Authorization: `Bearer ${accessToken}` } },
+);
+const blob = await res.blob();
+```
+
+```bash cURL
+curl '{BASE_URL}/storage/v1/object/authenticated/documents/report.pdf' \
+  -H "apikey: <ANON_KEY>" -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -o report.pdf
+```
+
+</CodeGroup>
+
+### DELETE /storage/v1/object/{bucket}/{path}
+
+Delete a single file. Requires DELETE policy match on `storage.objects` for the calling role.
+
+### POST /storage/v1/object/list/{bucket}
+
+List files in a bucket. Filtered by SELECT policies on `storage.objects`.
+
+<ParamField body="prefix" type="string">
+Only return files whose `name` starts with this prefix.
+</ParamField>
+
+<ParamField body="limit" type="integer">
+Max files to return. Default 100.
+</ParamField>
+
+<ParamField body="offset" type="integer">
+Pagination offset.
+</ParamField>
+
+<ParamField body="sortBy" type="object">
+`{ column: "name" | "created_at" | "updated_at", order: "asc" | "desc" }`.
+</ParamField>
+
+<ParamField body="search" type="string">
+Substring search on `name`. Case-insensitive.
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{
+  "prefix": "user-123/",
+  "limit": 50,
+  "sortBy": { "column": "created_at", "order": "desc" }
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(
+    f"{BASE_URL}/storage/v1/object/list/avatars",
+    headers={"apikey": ANON_KEY, "Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+    json={"prefix": f"{user_id}/", "limit": 50},
+)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/storage/v1/object/list/avatars`, {
+  method: "POST",
+  headers: { apikey: ANON_KEY, Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+  body: JSON.stringify({ prefix: `${userId}/`, limit: 50 }),
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/storage/v1/object/list/avatars' \
+  -H "apikey: <ANON_KEY>" -H "Authorization: Bearer <ACCESS_TOKEN>" -H "Content-Type: application/json" \
+  -d '{"prefix": "user-123/", "limit": 50}'
+```
+
+</CodeGroup>
+
+**Response:** array of `{ id, name, bucket_id, owner, created_at, updated_at, last_accessed_at, metadata }`.
+
+### POST /storage/v1/object/copy
+
+Copy a file to a new location (potentially in a different bucket).
+
+<ParamField body="bucketId" type="string" required>
+Source bucket.
+</ParamField>
+
+<ParamField body="sourceKey" type="string" required>
+Source path.
+</ParamField>
+
+<ParamField body="destinationBucket" type="string">
+Destination bucket. Defaults to source bucket.
+</ParamField>
+
+<ParamField body="destinationKey" type="string" required>
+Destination path.
+</ParamField>
+
+### POST /storage/v1/object/move
+
+Move a file to a new location. Same parameters as copy; the source is deleted on success.
+
+## Signed URLs
+
+For sharing files via TTL-bounded URLs that work without auth.
+
+### POST /storage/v1/object/sign/{bucket}/{path}
+
+Mint a download signed URL.
+
+<ParamField body="expiresIn" type="integer">
+URL TTL in seconds. Default 60. Max 604800 (7 days).
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/storage/v1/object/sign/documents/{path}",
+    headers={"apikey": SERVICE_ROLE_KEY, "Authorization": f"Bearer {SERVICE_ROLE_KEY}", "Content-Type": "application/json"},
+    json={"expiresIn": 3600},
+)
+signed_url = f"{BASE_URL}{response.json()['signedURL']}"
+```
+
+```typescript TypeScript
+const res = await fetch(
+  `${BASE_URL}/storage/v1/object/sign/documents/${path}`,
+  {
+    method: "POST",
+    headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ expiresIn: 3600 }),
+  },
+);
+const { signedURL } = await res.json();
+const downloadUrl = `${BASE_URL}${signedURL}`;
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/storage/v1/object/sign/documents/report.pdf' \
+  -H "apikey: <SERVICE_ROLE_KEY>" -H "Authorization: Bearer <SERVICE_ROLE_KEY>" -H "Content-Type: application/json" \
+  -d '{"expiresIn": 3600}'
+```
+
+</CodeGroup>
+
+**Response:** `{ "signedURL": "/object/sign/documents/report.pdf?token=..." }`. The URL is path-relative — prepend your `BASE_URL` to get the full URL.
+
+### GET /storage/v1/object/sign/{bucket}/{path}?token=...
+
+Fetch a file via a signed URL. The token is the signature; no other auth required.
+
+### POST /storage/v1/object/upload/sign/{bucket}/{path}
+
+Mint an upload signed URL — your server creates the URL, the client PUTs the file directly to it. Useful for high-bandwidth flows or offline clients.
+
+<ParamField body="expiresIn" type="integer">
+URL TTL in seconds. Default 7200 (2 hours).
+</ParamField>
+
+**Response:** `{ "url": "/object/upload/sign/documents/report.pdf?token=..." }`. The client then `PUT`s to `<BASE_URL>{url}` with the file bytes and `Content-Type` header.
+
+### POST /storage/v1/object/sign
+
+Sign multiple URLs in one request. Body: `{ "paths": ["bucket1/path1", "bucket2/path2"], "expiresIn": 3600 }`. Returns an array of signed URLs.
+
+## Image transformations
+
+The `render/image` endpoints route through imgproxy. The path shape mirrors the object endpoints — `public`, `authenticated`, `sign` — with the same auth requirements.
+
+### GET /storage/v1/render/image/public/{bucket}/{path}
+
+Fetch a transformed image from a public bucket. Pass transformations as query parameters.
+
+<ParamField query="width" type="integer">
+Output width in pixels.
+</ParamField>
+
+<ParamField query="height" type="integer">
+Output height in pixels.
+</ParamField>
+
+<ParamField query="resize" type="string">
+`cover`, `contain`, or `fill`. Default `cover`.
+</ParamField>
+
+<ParamField query="quality" type="integer">
+JPEG/WebP quality, 0-100. Default 80.
+</ParamField>
+
+<ParamField query="format" type="string">
+`webp`, `png`, `jpeg`, or `origin`. Default `origin` (preserves the original format).
+</ParamField>
+
+<CodeGroup>
+
+```typescript TypeScript
+// Direct URL — no fetch wrapper needed
+const thumbnailUrl =
+  `${BASE_URL}/storage/v1/render/image/public/avatars/${userId}/photo.png` +
+  `?width=200&height=200&resize=cover&quality=80`;
+// Use directly in <img src={thumbnailUrl} />
+```
+
+```bash cURL
+curl '{BASE_URL}/storage/v1/render/image/public/avatars/user-123/photo.png?width=200&height=200' \
+  -o thumb.png
+```
+
+</CodeGroup>
+
+### GET /storage/v1/render/image/authenticated/{bucket}/{path}
+
+Same as above but auth-gated.
+
+### GET /storage/v1/render/image/sign/{bucket}/{path}?token=...
+
+Same as above via signed URL.
+
+To mint a signed transformation URL, hit `POST /storage/v1/object/sign/{bucket}/{path}` with a `transform` parameter in the body:
+
+```json
+{
+  "expiresIn": 3600,
+  "transform": { "width": 200, "height": 200 }
+}
+```
+
+Returns a signed URL that already includes the transformation parameters.
+
+## TUS resumable uploads
+
+For files larger than 50MB (the per-request limit). Implements the [TUS 1.0 protocol](https://tus.io/protocols/resumable-upload). Use a TUS client library rather than hand-rolling.
+
+### POST /storage/v1/upload/resumable
+
+Initiate a resumable upload. Subsequent `PATCH` requests with `Upload-Offset` headers stream the chunks. `HEAD` requests query progress.
+
+**Required headers:**
+
+- `apikey`
+- `Authorization: Bearer <token>`
+- `Upload-Length: <total bytes>`
+- `Upload-Metadata: bucketName <base64>,objectName <base64>,contentType <base64>`
+- `Tus-Resumable: 1.0.0`
+
+The TUS protocol is multi-step; see [Storage uploads](/guides/storage-uploads#tus-resumable-uploads-for-files-larger-than-50mb) for a worked example with `tus-js-client`.
+
+## Error responses
+
+Storage returns errors as `{"statusCode": "<code>", "error": "<machine-readable>", "message": "<human-readable>"}`. Common cases:
+
+| Status | Error | When |
+|---|---|---|
+| 400 | `invalid_mime_type` | `Content-Type` not in bucket's `allowed_mime_types` |
+| 400 | `invalid_signature` | Signed URL token doesn't validate (tampered, expired, or wrong key) |
+| 401 | `Invalid JWT` | Missing or expired access token on an authenticated endpoint |
+| 403 | `not_authorized` | RLS denied the operation |
+| 404 | `not_found` | Bucket or object doesn't exist |
+| 409 | `Duplicate` | POSTing to an existing path (use PUT or `x-upsert: true`) |
+| 409 | `not_empty` | DELETE bucket with objects still in it |
+| 413 | `Payload too large` | File exceeds the 50MB per-request limit (or bucket override) |
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Storage uploads" href="/guides/storage-uploads">
+The four upload flows with worked examples.
+</Card>
+
+<Card title="Storage policies" href="/guides/storage-policies">
+RLS patterns on storage.objects.
+</Card>
+
+<Card title="Storage model" href="/concepts/storage-model">
+Buckets, public vs private, the underlying tables.
+</Card>
+
+<Card title="Auth Reference" href="/api-reference/auth">
+The auth surface that mints the tokens you'll use here.
+</Card>
+
+</CardGroup>

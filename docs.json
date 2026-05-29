@@ -104,6 +104,15 @@
             ]
           },
           {
+            "group": "Storage",
+            "pages": [
+              "concepts/storage-model",
+              "guides/storage-uploads",
+              "guides/storage-policies",
+              "api-reference/storage"
+            ]
+          },
+          {
             "group": "Admin proxies",
             "pages": [
               "api-reference/auth-storage"
