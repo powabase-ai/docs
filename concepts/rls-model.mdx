@@ -1,0 +1,117 @@
+---
+title: "Row Level Security"
+description: "How Powabase translates an HTTP request's API key or JWT into a Postgres role, and how RLS policies decide which rows that role can see."
+icon: "shield-halved"
+---
+
+Row Level Security (RLS) is the mechanism that lets you safely expose your project's database to clients you don't fully trust — browsers, mobile apps, partner integrations. Every request goes through PostgREST (or direct Postgres), which sets a database role on the session based on the credential you sent, and then runs your SQL with that role applied. Policies you define on each table decide which rows that role is allowed to see, insert, update, or delete.
+
+This page explains the request-to-role mapping, the auth helper functions (`auth.uid()`, `auth.jwt()`, `auth.role()`), and the trade-offs between the four credentials Powabase issues per project. For policy patterns, see the [RLS Cookbook](/guides/rls-policies). For local testing without spinning up a frontend, see [RLS Testing](/guides/rls-testing).
+
+## The four credentials and their roles
+
+The Connect modal hands out five values; four of them are credentials, and each maps to a distinct Postgres role:
+
+| Credential | Postgres role | Pre-issued JWT? | Typical use |
+|---|---|---|---|
+| Anon (Publishable) Key | `anon` | Yes (signed `aud=authenticated`, `role=anon`) | Embedded in clients; sets the floor for "what unauthenticated visitors see" |
+| Signed-in user access token | `authenticated` | Issued by GoTrue on sign-in | What your app gets back after `POST /auth/v1/token` |
+| Service Role (Secret) Key | `service_role` | Yes (signed `role=service_role`) | Server-side; bypasses RLS |
+| Database URL (direct Postgres) | `<ref>` (project owner) | n/a | Migrations, admin scripts; not RLS-checked |
+
+The Anon Key and Service Role Key are **pre-issued long-lived JWTs** that the platform mints when it provisions your project. They're shaped exactly like a user access token, but their `role` claim is hard-coded to `anon` and `service_role` respectively. PostgREST reads the `role` claim and sets the session's database role to match — `SET LOCAL ROLE anon` or `SET LOCAL ROLE service_role`.
+
+A signed-in user's token has `role=authenticated`. PostgREST sets the role to `authenticated`, and your RLS policies that target `TO authenticated` apply.
+
+## The auth helper functions
+
+Once PostgREST has set the role and stored the JWT claims as a session-local setting (`request.jwt.claims`), three SQL functions in the `auth` schema give policies access to the user's identity:
+
+```sql
+auth.uid()    -- uuid, the signed-in user's id (from the 'sub' claim)
+auth.role()   -- text, the 'role' claim ('authenticated', 'anon', 'service_role')
+auth.jwt()    -- jsonb, the full decoded JWT payload
+```
+
+You use these in `USING` and `WITH CHECK` policy expressions:
+
+```sql
+-- Only let users read their own profile
+CREATE POLICY own_profile ON public.profiles
+  FOR SELECT TO authenticated
+  USING (id = auth.uid());
+
+-- Only let users update their own profile
+CREATE POLICY update_own_profile ON public.profiles
+  FOR UPDATE TO authenticated
+  USING (id = auth.uid()) WITH CHECK (id = auth.uid());
+```
+
+`auth.uid()` returns `NULL` for `anon` requests (they have no `sub`). That means an `anon`-targeting policy can check `WHERE owner = auth.uid()` and it'll just never match — safe by default.
+
+Custom claims you set in JWTs (via GoTrue hooks or your own minting) land in `auth.jwt()`:
+
+```sql
+-- Read a custom claim
+CREATE POLICY only_admins ON public.audit_log
+  FOR SELECT TO authenticated
+  USING (auth.jwt() ->> 'is_admin' = 'true');
+```
+
+## The defaults
+
+When a new project is provisioned, `public` ships empty (you bring your own tables) and `ai` ships with a comprehensive default policy set.
+
+**`public` schema — empty by default.** RLS is enabled on no tables until you create some. When you create a table in `public`, RLS is **off** by default — you must `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` and add policies, otherwise PostgREST will refuse the request (it requires either RLS-enabled with policies, or grants — see the [Cookbook](/guides/rls-policies)).
+
+**`ai` schema — RLS enabled on every table.** Default policies are:
+
+- **`service_role`** has full access (`FOR ALL USING (true) WITH CHECK (true)`) on every table. This is what the platform's own backend uses.
+- **`authenticated`** has read access on every table. Most config tables (`agents`, `workflows`, `tools`, `knowledge_bases`, `sources`) are also writable. Session-shaped tables (`agent_sessions`, `agent_runs`, `orchestration_sessions`, `orchestration_runs`) read with per-user filtering via `auth.uid() = user_id OR user_id IS NULL`.
+- **`anon`** has no policies. Anon-key requests against `ai.*` return empty.
+
+<Warning>
+**The default `authenticated` policies on `ai.*` are project-wide, not per-user.**
+
+If two users sign into the same project, they can see each other's agents, workflows, knowledge bases, and configurations. Only the session-shaped tables filter by `user_id`. For multi-tenant scenarios where you don't want this, see the tenant-isolation pattern in the [RLS Cookbook](/guides/rls-policies).
+</Warning>
+
+## Client-side vs server-side: when each role is right
+
+Service Role and Anon aren't "tiers of privilege" — they're for different settings entirely.
+
+**Use the Anon Key client-side.** Embed it in browser JS, mobile apps, anything that ships to user devices. RLS is what makes this safe: even though the key is public, the policies you write decide what `anon` (and `authenticated`, after sign-in) can do. The key's value is its `role` claim — possessing it doesn't grant access; the policies do.
+
+**Use the Service Role Key server-side only.** It bypasses RLS entirely (`service_role` has `BYPASSRLS` set on the database role). Treat it like a database password — never ship it in client code, never embed it in a `Authorization` header you trust to a third party. It's for your backend server-to-server calls, batch jobs, migrations, the typed `/api/*` surface, and anything else inside your trust boundary.
+
+**Use signed-in user tokens for end-user identity.** When a user signs in via `POST /auth/v1/token?grant_type=password`, GoTrue returns an `access_token` and `refresh_token`. Send the access token as `Authorization: Bearer <token>` on every subsequent request. PostgREST will set the role to `authenticated` and your `auth.uid()` lookups will return that user's id.
+
+**Use the Database URL only from trusted, server-side environments.** It's a `<ref>` Postgres user with full schema ownership — RLS doesn't even apply (the role has `BYPASSRLS`). Use it for migrations, BI tools, and admin scripts; never for application traffic.
+
+## Composition with the typed `/api/*` surface
+
+The typed AI endpoints (`/api/agents`, `/api/sessions`, etc.) authenticate with the Service Role key and do their own ownership checks at the application layer. That means the RLS policies on `ai.*` don't directly affect those endpoints — the backend is already running with full access.
+
+What RLS does affect is **what your end users see when they query `ai.*` directly via PostgREST.** If you're not exposing `ai.*` to end users (you only hit `/api/*` from your backend), the defaults are fine; nobody on a user JWT ever touches it. If you are exposing `ai.*` reads to end users (custom dashboards, real-time subscriptions), the defaults' "any authenticated user sees everything" posture is the thing to be careful about.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="RLS Cookbook" href="/guides/rls-policies">
+Five patterns: own-rows-only, public-read+auth-write, tenant isolation, role-based, soft-delete.
+</Card>
+
+<Card title="RLS Testing" href="/guides/rls-testing">
+Test policies in psql or the SQL Editor without a frontend.
+</Card>
+
+<Card title="Auth & Connection" href="/guides/auth-connection">
+Where the four credentials come from in the Studio.
+</Card>
+
+<Card title="Querying the ai schema" href="/concepts/ai-schema-postgrest">
+The companion page for how RLS interacts with the AI-surface tables.
+</Card>
+
+</CardGroup>
