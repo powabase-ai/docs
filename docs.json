@@ -62,11 +62,31 @@
               "api-reference/copilot",
               "api-reference/tools",
               "api-reference/context-handlers",
-              "api-reference/database",
-              "api-reference/postgrest",
-              "api-reference/auth-storage",
               "api-reference/ai-provider-keys",
               "api-reference/settings"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "BaaS",
+        "groups": [
+          {
+            "group": "Database",
+            "pages": [
+              "api-reference/database"
+            ]
+          },
+          {
+            "group": "PostgREST",
+            "pages": [
+              "api-reference/postgrest"
+            ]
+          },
+          {
+            "group": "Auth & Storage",
+            "pages": [
+              "api-reference/auth-storage"
             ]
           }
         ]
