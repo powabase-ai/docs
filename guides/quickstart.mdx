@@ -134,10 +134,11 @@ curl '{BASE_URL}/api/sources/{source_id}' \
 ```json
 {
   "id": "source-uuid",
-  "filename": "product-docs.pdf",
-  "content_type": "application/pdf",
+  "name": "product-docs.pdf",
+  "file_type": "application/pdf",
+  "storage_path": "sources-{org}-{project}/{source_id}/product-docs.pdf",
   "extraction_status": "pending",
-  "created_at": "2026-01-01T00:00:00Z"
+  "task_id": "celery-task-uuid"
 }
 ```
 
@@ -237,7 +238,7 @@ response = requests.post(
         "name": "Docs Assistant",
         "model": "gpt-4o",
         "system_prompt": "You are a helpful assistant. Use the knowledge base to answer questions about our product documentation.",
-        "temperature": 0.7,
+        "settings": {"temperature": 0.7},
     },
 )
 agent = response.json()
@@ -262,7 +263,7 @@ const agentRes = await fetch(`${BASE_URL}/api/agents`, {
     name: "Docs Assistant",
     model: "gpt-4o",
     system_prompt: "You are a helpful assistant. Use the knowledge base to answer questions about our product documentation.",
-    temperature: 0.7,
+    settings: { temperature: 0.7 },
   }),
 });
 const agent = await agentRes.json();
@@ -288,7 +289,7 @@ curl -X POST '{BASE_URL}/api/agents' \
     "name": "Docs Assistant",
     "model": "gpt-4o",
     "system_prompt": "You are a helpful assistant.",
-    "temperature": 0.7
+    "settings": {"temperature": 0.7}
   }'
 
 # Link knowledge base (replace {agent_id})

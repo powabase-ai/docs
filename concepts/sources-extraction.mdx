@@ -22,7 +22,7 @@ A Source represents a single uploaded document. When you upload a file, the plat
 
 ## Extraction Models (PDF)
 
-For PDFs you can choose how the text is extracted by passing extraction_model at upload time or via POST /sources/\{id\}/reextract. If you don't pass one, the pipeline uses auto, which tries mistral → opendataloader → fitz → pdfplumber in order until one succeeds. paddleocr and lighton are not part of the auto chain — request them explicitly.
+For PDFs you can choose how the text is extracted by passing extraction_model at upload time or via POST /api/sources/\{id\}/reextract. If you don't pass one, the pipeline uses auto, which tries mistral → opendataloader → fitz → pdfplumber in order until one succeeds. paddleocr and lighton are not part of the auto chain — request them explicitly.
 
 | Model | What it does | Requires |
 | --- | --- | --- |
@@ -53,7 +53,7 @@ Every source goes through an extraction_status lifecycle. After upload the sourc
 | extracted | Extraction finished — derivatives available, source is indexable |
 | attention_required | Partial success — some pages failed. error_message explains. Still indexable. |
 | failed | Extraction failed — check error_message for details |
-| cancelled | User cancelled via POST /sources/{id}/cancel |
+| cancelled | User cancelled via POST /api/sources/{id}/cancel |
 
 ## Storage Integration
 

@@ -16,7 +16,7 @@ Beyond basic tools and knowledge bases, agents support three powerful configurat
 
 <Step title="Add an MCP server">
 
-Connect an external MCP server to your agent. The agent discovers and calls tools exposed by the MCP server over SSE transport during runs.
+Connect an external MCP server to your agent. The agent discovers and calls tools exposed by the MCP server over HTTP transport (default; SSE is also accepted) during runs.
 
 **Endpoint:** `POST /api/agents/{id}/mcp-servers`
 
@@ -32,8 +32,8 @@ response = requests.post(
     headers=headers,
     json={
         "name": "GitHub Tools",
-        "url": "https://mcp.example.com/github/sse",
-        "transport": "sse",
+        "url": "https://mcp.example.com/github/mcp",
+        "transport": "http",
         "headers": {
             "Authorization": "Bearer ghp_your_token_here",
         },
@@ -50,8 +50,8 @@ const response = await fetch(`${BASE_URL}/api/agents/${agentId}/mcp-servers`, {
   headers,
   body: JSON.stringify({
     name: "GitHub Tools",
-    url: "https://mcp.example.com/github/sse",
-    transport: "sse",
+    url: "https://mcp.example.com/github/mcp",
+    transport: "http",
     headers: {
       Authorization: "Bearer ghp_your_token_here",
     },
@@ -68,8 +68,8 @@ curl -X POST '{BASE_URL}/api/agents/{agent_id}/mcp-servers' \
   -H "Content-Type: application/json" \
   -d '{
     "name": "GitHub Tools",
-    "url": "https://mcp.example.com/github/sse",
-    "transport": "sse",
+    "url": "https://mcp.example.com/github/mcp",
+    "transport": "http",
     "headers": {
       "Authorization": "Bearer ghp_your_token_here"
     }
@@ -83,10 +83,15 @@ curl -X POST '{BASE_URL}/api/agents/{agent_id}/mcp-servers' \
 ```json
 {
   "id": "mcp-uuid",
+  "agent_id": "agent-uuid",
   "name": "GitHub Tools",
-  "url": "https://mcp.example.com/github/sse",
-  "transport": "sse",
-  "created_at": "2026-01-01T00:00:00Z"
+  "url": "https://mcp.example.com/github/mcp",
+  "transport": "http",
+  "headers": { "Authorization": "Bearer ..." },
+  "config": {},
+  "enabled": true,
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z"
 }
 ```
 

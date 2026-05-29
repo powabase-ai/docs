@@ -155,13 +155,16 @@ Workflow ID
 ```json Request
 {
   "blocks": [
-    { "id": "input", "type": "input", "config": {}, "position": {"x": 0, "y": 0} }
+    { "id": "start", "type": "starter", "config": {}, "position": {"x": 0, "y": 0} },
+    { "id": "out", "type": "response", "config": {}, "position": {"x": 300, "y": 0} }
   ],
   "edges": [
-    { "source": "input", "target": "output" }
+    { "source": "start", "target": "out" }
   ]
 }
 ```
+
+Unknown block types are rejected with `400 Unknown block type`. Canonical types: `starter`, `webhook`, `agent`, `orchestration`, `code`, `condition`, `general_api`, `platform_api`, `response`, `split` (plus back-compat aliases `function` → code, `api_call` → general_api).
 
 </RequestExample>
 
@@ -233,22 +236,26 @@ curl -X POST '{BASE_URL}/api/workflows/{id}/undeploy' -H "apikey: {API_KEY}" -H 
 
 ### POST /api/workflows/{id}/arm
 
-Arm webhook for a single external trigger.
+Arm the workflow's webhook for a single external trigger. Opens a 10-minute window during which the webhook accepts exactly one call; after it fires or expires, re-arm.
 
 <ParamField path="id" type="string" required>
 Workflow ID
 </ParamField>
 
+<Note>
+The response is `{"ok": true, "armed_until": "<iso8601>"}` — **not** a webhook id/secret. The `webhook_id` and `webhook_secret` live on the webhook block's config in the saved graph; fetch them with `GET /api/workflows/{id}` and read from the block whose `type == "webhook"`.
+</Note>
+
 <CodeGroup>
 
 ```python Python
 response = requests.post(f"{BASE_URL}/api/workflows/{wf_id}/arm", headers=headers)
-print(response.json())  # { webhook_id, secret }
+print(response.json())  # {"ok": true, "armed_until": "2026-01-01T00:00:00Z"}
 ```
 
 ```typescript TypeScript
 const res = await fetch(`${BASE_URL}/api/workflows/${wfId}/arm`, { method: "POST", headers });
-const { webhook_id, secret } = await res.json();
+const { ok, armed_until } = await res.json();
 ```
 
 ```bash cURL

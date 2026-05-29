@@ -30,7 +30,7 @@ Both keys live in the Connect modal in the Studio. Click the Connect button in y
 
 ## Request Routing
 
-When you make an API call, the request first hits the project's Kong API gateway. Kong routes /api/* paths to the Project Service (AI features), /auth/* to GoTrue (authentication), /rest/* to PostgREST (direct database access), and /storage/* to the Storage API. The control plane acts as a reverse proxy, routing requests to the correct project's infrastructure based on the project URL.
+When you make an API call to your project URL (`<ref>.p.powabase.ai`), the request hits the per-project Kong gateway directly — the control plane is **not** in the data-plane path. Kong matches the project hostname and routes `/api/*` paths to the Project Service (AI features), `/auth/v1/*` to GoTrue (authentication), `/rest/v1/*` to PostgREST (direct database access), `/storage/v1/*` to the Storage API, and `/realtime/v1/*` to the Realtime service.
 
 ## Database Schemas
 

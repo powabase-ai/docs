@@ -31,7 +31,7 @@ response = requests.post(
         "name": "Support Bot",
         "model": "gpt-4o",
         "system_prompt": "You are a helpful support assistant. Answer questions using the knowledge base when available.",
-        "temperature": 0.7,
+        "settings": {"temperature": 0.7},
     },
 )
 agent = response.json()
@@ -47,7 +47,7 @@ const response = await fetch(`${BASE_URL}/api/agents`, {
     name: "Support Bot",
     model: "gpt-4o",
     system_prompt: "You are a helpful support assistant. Answer questions using the knowledge base when available.",
-    temperature: 0.7,
+    settings: { temperature: 0.7 },
   }),
 });
 const agent = await response.json();
@@ -63,7 +63,7 @@ curl -X POST '{BASE_URL}/api/agents' \
     "name": "Support Bot",
     "model": "gpt-4o",
     "system_prompt": "You are a helpful support assistant.",
-    "temperature": 0.7
+    "settings": {"temperature": 0.7}
   }'
 ```
 
