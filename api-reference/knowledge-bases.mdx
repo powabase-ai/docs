@@ -270,7 +270,11 @@ curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/sources/{indexed_source_id}/ca
 
 ### DELETE /api/knowledge-bases/{id}/sources/{indexed_source_id}
 
-Remove a source from a knowledge base. Cascades to delete the source's chunks, so the source no longer contributes to retrieval in this KB. The underlying Source itself is not deleted — only its link to this KB and the chunks indexed for it. Returns 204 on success and 404 if no `indexed_sources` row matches the given pair.
+Remove a source from a knowledge base. The underlying `ai.sources` row is **not** touched — only its link to this KB and everything the indexing pipeline produced from it. The source stays available to re-add to other KBs.
+
+Deleting the `indexed_sources` row cascades through all eight derivative tables: `ai.chunks`, `ai.embeddings`, `ai.full_documents`, `ai.doc2json_documents`, `ai.page_index_toc`, `ai.page_index_nodes`, `ai.graph_index_toc`, `ai.graph_index_nodes`. After the call, the source contributes nothing to retrieval in this KB.
+
+If the source is mid-indexing (status `pending` or `indexing` with a `celery_task_id`), the Celery task is revoked before the row is deleted. A revoke failure logs a warning but does not block the deletion — the row goes regardless. Returns `200` with a small JSON body, or `404` if no `indexed_sources` row matches the given `(kb_id, indexed_source_id)` pair.
 
 <ParamField path="id" type="string" required>
 KB ID
@@ -295,6 +299,16 @@ curl -X DELETE '{BASE_URL}/api/knowledge-bases/{id}/sources/{indexed_source_id}'
 ```
 
 </CodeGroup>
+
+**Response:**
+
+```json
+{
+  "message": "Source removed from knowledge base",
+  "deleted_indexed_source_id": "indexed-source-uuid",
+  "kb_id": "kb-uuid"
+}
+```
 
 ### POST /api/knowledge-bases/{id}/reindex
 
