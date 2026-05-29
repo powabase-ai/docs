@@ -133,6 +133,81 @@ curl -X DELETE '{BASE_URL}/api/knowledge-bases/{id}' -H "apikey: {API_KEY}" -H "
 
 </CodeGroup>
 
+### GET /api/knowledge-bases/{id}/sources
+
+Paginated, filterable, sortable list of the sources indexed into a knowledge base. Each item joins the `indexed_sources` row with its underlying `sources` row, so you get both index status and source metadata in one response.
+
+<ParamField path="id" type="string" required>
+KB ID
+</ParamField>
+
+<ParamField query="q" type="string">
+Case-insensitive substring match on the source's `name`.
+</ParamField>
+
+<ParamField query="status" type="string">
+Exact match on `index_status` (`pending`, `indexing`, `indexed`, `failed`, `cancelled`).
+</ParamField>
+
+<ParamField query="sort" type="string">
+`name` or `created_at`. When omitted, sorts failed-first then newest-source-first — useful for surfacing problems at the top of a UI list.
+</ParamField>
+
+<ParamField query="order" type="string">
+`asc` or `desc` (default `desc`). Ignored when `sort` is omitted.
+</ParamField>
+
+<ParamField query="limit" type="integer">
+Page size. Defaults to 50, capped at 200.
+</ParamField>
+
+<ParamField query="offset" type="integer">
+Skip the first N rows. Defaults to 0.
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.get(f"{BASE_URL}/api/knowledge-bases/{kb_id}/sources", headers=headers, params={"status": "failed", "limit": 20})
+print(response.json())
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/sources?status=failed&limit=20`, { headers });
+const { items, total } = await res.json();
+```
+
+```bash cURL
+curl '{BASE_URL}/api/knowledge-bases/{id}/sources?status=failed&limit=20' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+**Response:**
+
+```json
+{
+  "items": [
+    {
+      "id": "indexed-source-uuid",
+      "source_id": "source-uuid",
+      "index_status": "failed",
+      "indexed_at": null,
+      "stats": {},
+      "error_message": "embedding provider rate-limited",
+      "source_name": "manual.pdf",
+      "file_type": "application/pdf",
+      "source_created_at": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+`id` is the `indexed_sources.id` (use this with the cancel, reindex, and DELETE endpoints below). `source_id` is the underlying `ai.sources` row.
+
 ### POST /api/knowledge-bases/{id}/sources
 
 Add a source to the knowledge base. Triggers asynchronous indexing.
@@ -268,6 +343,38 @@ curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/reindex' -H "apikey: {API_KEY}
 ```
 
 </CodeGroup>
+
+### POST /api/knowledge-bases/{id}/build-bm25
+
+Dispatch a one-shot BM25 rebuild for this KB. Re-tokenizes the entire item table for the KB's strategy (chunks / full_documents / graph_index_nodes) and writes a fresh BM25 index, replacing whatever was there. Operator path — most KBs never need this, but it's useful after changing `retrieval_config` tuning knobs or recovering from a partial index.
+
+<ParamField path="id" type="string" required>
+KB ID
+</ParamField>
+
+<Note>
+Only valid for KBs whose `retrieval_config.method` is `hybrid` or `full_text`. Vector-only KBs return `400` (BM25 isn't part of their retrieval path).
+</Note>
+
+<CodeGroup>
+
+```python Python
+response = requests.post(f"{BASE_URL}/api/knowledge-bases/{kb_id}/build-bm25", headers=headers)
+print(response.json())  # {"task_id": "...", "knowledge_base_id": "..."}
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/build-bm25`, { method: "POST", headers });
+const { task_id } = await res.json();
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/build-bm25' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+Returns `202` + `{"task_id": "celery-task-uuid", "knowledge_base_id": "kb-uuid"}`. Poll the KB's `bm25_status` field via `GET /api/knowledge-bases/{id}` to observe completion. Returns `503` if the Celery worker can't be reached.
 
 ### POST /api/knowledge-bases/{id}/items
 
