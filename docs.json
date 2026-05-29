@@ -95,7 +95,16 @@
             ]
           },
           {
-            "group": "Auth & Storage",
+            "group": "Auth",
+            "pages": [
+              "concepts/auth-model",
+              "guides/auth-signup-signin",
+              "guides/auth-oauth-providers",
+              "api-reference/auth"
+            ]
+          },
+          {
+            "group": "Admin proxies",
             "pages": [
               "api-reference/auth-storage"
             ]

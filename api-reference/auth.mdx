@@ -1,0 +1,622 @@
+---
+title: "Auth"
+description: "End-user-facing GoTrue endpoints at /auth/v1/* — sign up, sign in, refresh, magic link, password recovery, OAuth, MFA, user management, and admin operations."
+icon: "id-card"
+---
+
+The Auth API is GoTrue v2.184.0 mounted at `/auth/v1/*` on your project URL. Every endpoint accepts the project's Anon Key (or, for admin endpoints, the Service Role Key) as both the `apikey` and `Authorization: Bearer` headers, except where noted (e.g., after sign-in, the user's access token replaces the Anon Key in `Authorization`).
+
+For end-to-end signup/signin flows, see [Signup, signin, magic link](/guides/auth-signup-signin). For OAuth, see [OAuth providers](/guides/auth-oauth-providers). For the conceptual model, see [Auth model](/concepts/auth-model).
+
+## Common headers
+
+Two header sets you'll use depending on whether the user is signed in:
+
+**Unauthenticated requests** (signup, signin, recovery, OAuth initiation):
+
+```
+apikey: <Anon Publishable Key>
+Authorization: Bearer <Anon Publishable Key>
+Content-Type: application/json
+```
+
+**Authenticated requests** (`/user`, `/logout`, MFA enrollment, etc.):
+
+```
+apikey: <Anon Publishable Key>
+Authorization: Bearer <user access token>
+Content-Type: application/json
+```
+
+**Admin requests** (`/admin/users/*`):
+
+```
+apikey: <Service Role Secret Key>
+Authorization: Bearer <Service Role Secret Key>
+Content-Type: application/json
+```
+
+## Signup
+
+### POST /auth/v1/signup
+
+Create a new user with email + password (or phone + password if phone auth is enabled). On default `autoConfirm: true`, returns a session immediately. On `autoConfirm: false`, returns the user record only; the user must verify their email via the link sent by GoTrue.
+
+<ParamField body="email" type="string">
+Email address. Either `email` or `phone` is required.
+</ParamField>
+
+<ParamField body="phone" type="string">
+E.164 phone number (e.g., `+14155552671`). Requires `GOTRUE_EXTERNAL_PHONE_ENABLED=true` and an SMS provider configured.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+At least 6 characters by GoTrue default.
+</ParamField>
+
+<ParamField body="data" type="object">
+Arbitrary key/value pairs to store in `user_metadata`. User-editable.
+</ParamField>
+
+<ParamField body="gotrue_meta_security" type="object">
+`{ captcha_token: "..." }` if CAPTCHA is enabled.
+</ParamField>
+
+<RequestExample>
+
+```json Email + password
+{
+  "email": "alice@example.com",
+  "password": "correcthorsebatterystaple",
+  "data": { "display_name": "Alice" }
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(
+    f"{BASE_URL}/auth/v1/signup",
+    headers={"apikey": ANON_KEY, "Authorization": f"Bearer {ANON_KEY}", "Content-Type": "application/json"},
+    json={"email": "alice@example.com", "password": "correcthorsebatterystaple"},
+)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/auth/v1/signup`, {
+  method: "POST",
+  headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}`, "Content-Type": "application/json" },
+  body: JSON.stringify({ email: "alice@example.com", password: "correcthorsebatterystaple" }),
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/auth/v1/signup' \
+  -H "apikey: <ANON_KEY>" -H "Authorization: Bearer <ANON_KEY>" -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com", "password": "correcthorsebatterystaple"}'
+```
+
+</CodeGroup>
+
+**Response (autoConfirm: true):**
+
+```json
+{
+  "access_token": "eyJ...",
+  "token_type": "bearer",
+  "expires_in": 3600,
+  "expires_at": 1748563200,
+  "refresh_token": "v1.MzQ1...",
+  "user": {
+    "id": "...",
+    "aud": "authenticated",
+    "role": "authenticated",
+    "email": "alice@example.com",
+    "user_metadata": {"display_name": "Alice"},
+    "app_metadata": {"provider": "email", "providers": ["email"]},
+    "created_at": "2026-05-29T00:00:00Z"
+  }
+}
+```
+
+**Response (autoConfirm: false):** the user object only, no tokens.
+
+## Signin
+
+### POST /auth/v1/token?grant_type=password
+
+Exchange email/password (or phone/password) for an access token + refresh token.
+
+<ParamField query="grant_type" type="string" required>
+Must be `password`.
+</ParamField>
+
+<ParamField body="email" type="string">
+Either `email` or `phone` is required.
+</ParamField>
+
+<ParamField body="phone" type="string">
+E.164 format. Requires phone auth enabled.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.post(
+    f"{BASE_URL}/auth/v1/token",
+    headers={"apikey": ANON_KEY, "Authorization": f"Bearer {ANON_KEY}", "Content-Type": "application/json"},
+    params={"grant_type": "password"},
+    json={"email": "alice@example.com", "password": "..."},
+)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/auth/v1/token?grant_type=password`, {
+  method: "POST",
+  headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}`, "Content-Type": "application/json" },
+  body: JSON.stringify({ email: "alice@example.com", password: "..." }),
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/auth/v1/token?grant_type=password' \
+  -H "apikey: <ANON_KEY>" -H "Authorization: Bearer <ANON_KEY>" -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com", "password": "..."}'
+```
+
+</CodeGroup>
+
+**Response:** same shape as signup with autoConfirm: true.
+
+### POST /auth/v1/token?grant_type=refresh_token
+
+Exchange a refresh token for a new access token + new refresh token. Refresh-token rotation is enabled by default — each refresh token is single-use, with a 10-second grace window for concurrent refresh attempts.
+
+<ParamField body="refresh_token" type="string" required>
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.post(
+    f"{BASE_URL}/auth/v1/token",
+    headers={"apikey": ANON_KEY, "Authorization": f"Bearer {ANON_KEY}", "Content-Type": "application/json"},
+    params={"grant_type": "refresh_token"},
+    json={"refresh_token": "v1.MzQ1..."},
+)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+  method: "POST",
+  headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}`, "Content-Type": "application/json" },
+  body: JSON.stringify({ refresh_token: "v1.MzQ1..." }),
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/auth/v1/token?grant_type=refresh_token' \
+  -H "apikey: <ANON_KEY>" -H "Authorization: Bearer <ANON_KEY>" -H "Content-Type": "application/json" \
+  -d '{"refresh_token": "v1.MzQ1..."}'
+```
+
+</CodeGroup>
+
+### POST /auth/v1/token?grant_type=pkce
+
+Exchange a PKCE authorization code (from OAuth or magic link) for a session.
+
+<ParamField body="auth_code" type="string" required>
+Authorization code from the redirect query string.
+</ParamField>
+
+<ParamField body="code_verifier" type="string" required>
+The PKCE verifier you generated before calling `/authorize`.
+</ParamField>
+
+See [OAuth providers](/guides/auth-oauth-providers#pkce-when-and-why) for the full PKCE walkthrough.
+
+## Passwordless / magic link
+
+### POST /auth/v1/otp
+
+Send a one-time email (or SMS) with a sign-in link. The user clicks it, GoTrue redirects them back to your app with tokens in the URL fragment.
+
+<ParamField body="email" type="string">
+Either `email` or `phone` is required.
+</ParamField>
+
+<ParamField body="phone" type="string">
+E.164 format. Requires phone auth enabled.
+</ParamField>
+
+<ParamField body="create_user" type="boolean">
+Default `true`. When false, returns 400 if no user with that address exists — useful for "magic link only for existing users."
+</ParamField>
+
+<ParamField body="options" type="object">
+`{ email_redirect_to: "...", data: { ... } }` — `email_redirect_to` overrides the default site URL for this request; `data` populates `user_metadata` if `create_user` results in a new user.
+</ParamField>
+
+<RequestExample>
+
+```json Magic link
+{
+  "email": "alice@example.com",
+  "create_user": true,
+  "options": { "email_redirect_to": "https://your-app.example.com/auth/callback" }
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(
+    f"{BASE_URL}/auth/v1/otp",
+    headers={"apikey": ANON_KEY, "Authorization": f"Bearer {ANON_KEY}", "Content-Type": "application/json"},
+    json={"email": "alice@example.com", "create_user": True, "options": {"email_redirect_to": "..."}},
+)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/auth/v1/otp`, {
+  method: "POST",
+  headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}`, "Content-Type": "application/json" },
+  body: JSON.stringify({
+    email: "alice@example.com",
+    create_user: true,
+    options: { email_redirect_to: "..." },
+  }),
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/auth/v1/otp' \
+  -H "apikey: <ANON_KEY>" -H "Authorization: Bearer <ANON_KEY>" -H "Content-Type": "application/json" \
+  -d '{"email": "alice@example.com", "create_user": true, "options": {"email_redirect_to": "..."}}'
+```
+
+</CodeGroup>
+
+**Response:** `200 OK` with empty body if the email was queued. Returns 200 even for non-existent addresses when `create_user: false` would have failed — GoTrue treats this as "do not enumerate users."
+
+### POST /auth/v1/verify
+
+Verify an OTP token directly (alternative to clicking the email link). Useful for native apps that handle the email link via a URL scheme.
+
+<ParamField body="type" type="string" required>
+`signup`, `magiclink`, `recovery`, `invite`, `email_change`, `sms`, or `phone_change`.
+</ParamField>
+
+<ParamField body="token" type="string" required>
+The token from the email link or SMS.
+</ParamField>
+
+<ParamField body="email" type="string">
+Required for email-typed verifications.
+</ParamField>
+
+<ParamField body="phone" type="string">
+Required for SMS verifications.
+</ParamField>
+
+**Response:** session tokens, same shape as `POST /token?grant_type=password`.
+
+## Password recovery
+
+### POST /auth/v1/recover
+
+Send a password-reset email. The user clicks it and arrives at your `redirect_to` URL signed in (tokens in URL fragment), then calls `PUT /user` to set a new password.
+
+<ParamField body="email" type="string" required>
+</ParamField>
+
+<ParamField body="options" type="object">
+`{ redirect_to: "https://your-app.example.com/auth/reset-password" }` overrides the default site URL for this request.
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.post(
+    f"{BASE_URL}/auth/v1/recover",
+    headers={"apikey": ANON_KEY, "Authorization": f"Bearer {ANON_KEY}", "Content-Type": "application/json"},
+    json={"email": "alice@example.com", "options": {"redirect_to": "..."}},
+)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/auth/v1/recover`, {
+  method: "POST",
+  headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}`, "Content-Type": "application/json" },
+  body: JSON.stringify({ email: "alice@example.com", options: { redirect_to: "..." } }),
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/auth/v1/recover' \
+  -H "apikey: <ANON_KEY>" -H "Authorization: Bearer <ANON_KEY>" -H "Content-Type": "application/json" \
+  -d '{"email": "alice@example.com"}'
+```
+
+</CodeGroup>
+
+Always returns 200, even if the email doesn't exist — prevents user enumeration.
+
+## OAuth
+
+### GET /auth/v1/authorize
+
+Initiates an OAuth flow. Returns a 302 redirect to the upstream provider. Not callable from cURL in the normal sense — you put the user's browser at this URL.
+
+<ParamField query="provider" type="string" required>
+One of: `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `figma`, `github`, `gitlab`, `google`, `kakao`, `keycloak`, `linkedin_oidc`, `notion`, `slack`, `slack_oidc`, `spotify`, `twitch`, `twitter`, `workos`, `zoom`. Must be enabled on the project.
+</ParamField>
+
+<ParamField query="redirect_to" type="string">
+Where to redirect after the OAuth dance completes. Must be in the project's `uriAllowList`.
+</ParamField>
+
+<ParamField query="scopes" type="string">
+Space-separated extra scopes to request from the provider.
+</ParamField>
+
+<ParamField query="code_challenge" type="string">
+PKCE code challenge (base64url-encoded SHA-256 of the verifier). Including this puts the flow in PKCE mode — the code comes back in the query string instead of the URL fragment.
+</ParamField>
+
+<ParamField query="code_challenge_method" type="string">
+Must be `S256` when `code_challenge` is set.
+</ParamField>
+
+Full walkthrough at [OAuth providers](/guides/auth-oauth-providers).
+
+### GET /auth/v1/callback
+
+GoTrue's own OAuth callback. The upstream provider redirects to this URL after the user authorizes; GoTrue exchanges the code, finalizes the session, then 302s the browser to your `redirect_to`. You shouldn't call this directly — it's the URL you register with the provider.
+
+## User management (authenticated)
+
+### GET /auth/v1/user
+
+Return the currently-signed-in user. Read from the access token's claims plus a fresh lookup against `auth.users`.
+
+<CodeGroup>
+
+```python Python
+requests.get(
+    f"{BASE_URL}/auth/v1/user",
+    headers={"apikey": ANON_KEY, "Authorization": f"Bearer {access_token}"},
+)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/auth/v1/user`, {
+  headers: { apikey: ANON_KEY, Authorization: `Bearer ${accessToken}` },
+});
+```
+
+```bash cURL
+curl '{BASE_URL}/auth/v1/user' \
+  -H "apikey: <ANON_KEY>" -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+</CodeGroup>
+
+### PUT /auth/v1/user
+
+Update the signed-in user's email, password, phone, or `user_metadata`. Cannot modify `app_metadata` from here (use the admin API).
+
+<ParamField body="email" type="string">
+Triggers a confirmation email if changed. The new email isn't active until confirmed; the session continues under the old email until then.
+</ParamField>
+
+<ParamField body="password" type="string">
+The new password.
+</ParamField>
+
+<ParamField body="phone" type="string">
+Same flow as email — sends a verification SMS.
+</ParamField>
+
+<ParamField body="data" type="object">
+Merged into `user_metadata`.
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.put(
+    f"{BASE_URL}/auth/v1/user",
+    headers={"apikey": ANON_KEY, "Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+    json={"data": {"display_name": "Alice Smith"}},
+)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/auth/v1/user`, {
+  method: "PUT",
+  headers: { apikey: ANON_KEY, Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+  body: JSON.stringify({ data: { display_name: "Alice Smith" } }),
+});
+```
+
+```bash cURL
+curl -X PUT '{BASE_URL}/auth/v1/user' \
+  -H "apikey: <ANON_KEY>" -H "Authorization: Bearer <ACCESS_TOKEN>" -H "Content-Type": "application/json" \
+  -d '{"data": {"display_name": "Alice Smith"}}'
+```
+
+</CodeGroup>
+
+### POST /auth/v1/logout
+
+Invalidate the current session (revokes the refresh token server-side). Optionally specify scope.
+
+<ParamField query="scope" type="string">
+`global` (default — revoke all refresh tokens for this user), `local` (just this session), or `others` (every session except this one).
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.post(
+    f"{BASE_URL}/auth/v1/logout",
+    headers={"apikey": ANON_KEY, "Authorization": f"Bearer {access_token}"},
+    params={"scope": "global"},
+)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/auth/v1/logout?scope=global`, {
+  method: "POST",
+  headers: { apikey: ANON_KEY, Authorization: `Bearer ${accessToken}` },
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/auth/v1/logout?scope=global' \
+  -H "apikey: <ANON_KEY>" -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+</CodeGroup>
+
+## Multi-factor authentication
+
+TOTP MFA is enabled by default; phone-based MFA requires `GOTRUE_MFA_PHONE_ENROLL_ENABLED=true` and Twilio configured. Up to 10 factors per user.
+
+### POST /auth/v1/factors
+
+Enroll a new MFA factor. Returns a TOTP secret (and QR code URI) the user can add to their authenticator app.
+
+<ParamField body="factor_type" type="string" required>
+`totp` or `phone`.
+</ParamField>
+
+<ParamField body="friendly_name" type="string">
+User-visible label, e.g., "iPhone Authy".
+</ParamField>
+
+<ParamField body="issuer" type="string">
+TOTP issuer field, e.g., your app name.
+</ParamField>
+
+### POST /auth/v1/factors/{factor_id}/challenge
+
+Start a challenge (TOTP doesn't need this; phone sends the OTP).
+
+### POST /auth/v1/factors/{factor_id}/verify
+
+Verify the challenge code. On first-time enrollment, also activates the factor. Returns an `aal2` (Authenticator Assurance Level 2) access token if successful.
+
+### DELETE /auth/v1/factors/{factor_id}
+
+Unenroll a factor. Requires the current access token to be at aal2 if the factor being deleted is the user's last factor — prevents lockout from a stolen access token.
+
+## Admin (service-role only)
+
+These require the **Service Role Key**, not the user's access token. Server-side use only.
+
+### GET /auth/v1/admin/users
+
+List all users in the project. Supports pagination via `page` and `per_page` (default 50).
+
+### POST /auth/v1/admin/users
+
+Create a user with any email, password, metadata. Skips confirmation. Useful for migrations.
+
+<ParamField body="email" type="string"></ParamField>
+<ParamField body="phone" type="string"></ParamField>
+<ParamField body="password" type="string"></ParamField>
+<ParamField body="email_confirm" type="boolean">Default `true`.</ParamField>
+<ParamField body="phone_confirm" type="boolean">Default `true`.</ParamField>
+<ParamField body="user_metadata" type="object"></ParamField>
+<ParamField body="app_metadata" type="object">The only way to set `app_metadata`.</ParamField>
+<ParamField body="role" type="string">Override the default `authenticated` role.</ParamField>
+
+### GET /auth/v1/admin/users/{user_id}
+
+Fetch a specific user, including the fields `GET /user` doesn't return (banned status, last sign-in, MFA factors, identities).
+
+### PUT /auth/v1/admin/users/{user_id}
+
+Update any field on the user, including `app_metadata`, `ban_duration`, and `role`. The right place to set custom claims that policies will read via `auth.jwt()`.
+
+<ParamField body="email" type="string"></ParamField>
+<ParamField body="phone" type="string"></ParamField>
+<ParamField body="password" type="string"></ParamField>
+<ParamField body="email_confirm" type="boolean"></ParamField>
+<ParamField body="phone_confirm" type="boolean"></ParamField>
+<ParamField body="user_metadata" type="object"></ParamField>
+<ParamField body="app_metadata" type="object"></ParamField>
+<ParamField body="ban_duration" type="string">`24h`, `48h`, `none`, etc. Banned users get 401 on sign-in.</ParamField>
+
+### DELETE /auth/v1/admin/users/{user_id}
+
+Hard-delete a user. Cascades through identities, sessions, MFA factors, and (if configured) the `auth.users` row's downstream references in `public.*`.
+
+### POST /auth/v1/admin/generate_link
+
+Generate a magic-link URL without sending an email. Useful for impersonation flows or custom email delivery.
+
+<ParamField body="type" type="string" required>
+`signup`, `invite`, `magiclink`, `recovery`, `email_change_current`, `email_change_new`.
+</ParamField>
+
+<ParamField body="email" type="string" required></ParamField>
+
+**Response:** `{ "action_link": "...", "email_otp": "...", "hashed_token": "...", ... }`.
+
+## Error Responses
+
+GoTrue returns errors as `{"error": "code", "error_description": "human-readable"}` or `{"msg": "..."}` depending on the endpoint. Common codes:
+
+| Status | Code | When |
+|---|---|---|
+| 400 | `invalid_grant` | Wrong email/password, expired refresh token, or refresh-token already used |
+| 400 | `email_not_confirmed` | Sign-in attempt before email verification |
+| 400 | `email_address_invalid` | Malformed email |
+| 400 | `weak_password` | Below 6 characters by default |
+| 400 | `user_already_exists` | Signup with an existing email |
+| 401 | `unauthorized` | Missing or expired access token |
+| 403 | `not_admin` | Hitting `/admin/*` without the service role key |
+| 422 | `invalid_credentials` | Same as 400 `invalid_grant` in some GoTrue versions |
+| 429 | `over_email_send_rate_limit` | Too many email-sending attempts (30/hour by default) |
+| 429 | `over_sms_send_rate_limit` | Too many SMS attempts |
+| 429 | `over_request_rate_limit` | Too many failed verify attempts |
+
+The `/admin/*` endpoints additionally return:
+
+| Status | Code | When |
+|---|---|---|
+| 404 | `user_not_found` | User UUID doesn't exist |
+| 422 | `validation_failed` | Body field shape is wrong (e.g., non-string `phone`) |
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Signup, signin, magic link" href="/guides/auth-signup-signin">
+End-to-end flows in Python, TypeScript, and cURL.
+</Card>
+
+<Card title="OAuth providers" href="/guides/auth-oauth-providers">
+Provider-specific configuration + PKCE.
+</Card>
+
+<Card title="Auth model" href="/concepts/auth-model">
+JWT structure, the four roles, refresh-token rotation, the autoconfirm default.
+</Card>
+
+<Card title="RLS Cookbook" href="/guides/rls-policies">
+How to use auth.uid() and auth.jwt() in policies on the tables your users will hit.
+</Card>
+
+</CardGroup>

@@ -1,0 +1,449 @@
+---
+title: "Signup, signin, magic link"
+description: "Working end-to-end auth flows: email + password signup and signin, magic link, password recovery, and session refresh. In Python, TypeScript, and cURL."
+icon: "id-card"
+---
+
+These flows assume you've read [Auth model](/concepts/auth-model) and have your Anon (Publishable) Key from the Connect modal. **All calls here use the Anon Key** as the `apikey` header — the Anon Key is what makes the auth endpoints reachable from public clients. After sign-in, you'll send the user's access token as the `Authorization: Bearer <token>` header on subsequent API calls (and keep the Anon Key in `apikey`).
+
+For the conceptual underpinning, see [Auth model](/concepts/auth-model). For the full endpoint surface, see [Auth Reference](/api-reference/auth). For OAuth flows specifically, see [OAuth providers](/guides/auth-oauth-providers).
+
+## Headers used throughout
+
+Every request below uses these two headers (the auth API doesn't need its own access token — that's what you're trying to get):
+
+```
+apikey: <Anon Publishable Key>
+Authorization: Bearer <Anon Publishable Key>
+```
+
+After sign-in, replace the `Authorization` value with the user's `access_token`. Keep `apikey` as the Anon Key — PostgREST and GoTrue both check it for upstream routing.
+
+## Email + password — signup
+
+`POST /auth/v1/signup` creates a new user with email + password and, on default settings (`autoConfirm: true`), returns a session immediately. On projects where you've enabled email confirmation, the response is just `{ user }` and the user has to click the email link before they can sign in.
+
+<CodeGroup>
+
+```python Python
+import requests
+
+ANON_KEY = "<your anon key>"
+BASE_URL = "https://{ref}.p.powabase.ai"
+
+response = requests.post(
+    f"{BASE_URL}/auth/v1/signup",
+    headers={
+        "apikey": ANON_KEY,
+        "Authorization": f"Bearer {ANON_KEY}",
+        "Content-Type": "application/json",
+    },
+    json={
+        "email": "alice@example.com",
+        "password": "correcthorsebatterystaple",
+    },
+)
+result = response.json()
+
+# autoConfirm: true → session present
+if "access_token" in result:
+    access_token = result["access_token"]
+    refresh_token = result["refresh_token"]
+    print(f"Signed in. User id: {result['user']['id']}")
+else:
+    # autoConfirm: false → user must verify email first
+    print(f"User created, verification email sent. User id: {result['id']}")
+```
+
+```typescript TypeScript
+const ANON_KEY = "<your anon key>";
+const BASE_URL = "https://{ref}.p.powabase.ai";
+
+const res = await fetch(`${BASE_URL}/auth/v1/signup`, {
+  method: "POST",
+  headers: {
+    apikey: ANON_KEY,
+    Authorization: `Bearer ${ANON_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    email: "alice@example.com",
+    password: "correcthorsebatterystaple",
+  }),
+});
+const result = await res.json();
+
+if (result.access_token) {
+  // Persist these — see "Storing tokens" below
+  localStorage.setItem("powabase_access_token", result.access_token);
+  localStorage.setItem("powabase_refresh_token", result.refresh_token);
+  console.log("Signed in as", result.user.email);
+} else {
+  console.log("Confirmation email sent. User id:", result.id);
+}
+```
+
+```bash cURL
+curl -X POST 'https://{ref}.p.powabase.ai/auth/v1/signup' \
+  -H "apikey: <ANON_KEY>" \
+  -H "Authorization: Bearer <ANON_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com", "password": "correcthorsebatterystaple"}'
+```
+
+</CodeGroup>
+
+**Optional fields you can include in the body:**
+
+- `data: { ... }` — populates `user_metadata`. Use for display name, signup source, marketing consent, etc.
+- `phone: "+1..."` — phone-based signup (requires `GOTRUE_EXTERNAL_PHONE_ENABLED=true` + Twilio configured).
+- `gotrue_meta_security: { captcha_token: "..." }` — required if CAPTCHA is enabled on the project.
+
+## Email + password — signin
+
+`POST /auth/v1/token?grant_type=password` exchanges credentials for an access token + refresh token.
+
+<CodeGroup>
+
+```python Python
+response = requests.post(
+    f"{BASE_URL}/auth/v1/token",
+    headers={
+        "apikey": ANON_KEY,
+        "Authorization": f"Bearer {ANON_KEY}",
+        "Content-Type": "application/json",
+    },
+    params={"grant_type": "password"},
+    json={
+        "email": "alice@example.com",
+        "password": "correcthorsebatterystaple",
+    },
+)
+result = response.json()
+if response.status_code == 200:
+    access_token = result["access_token"]
+    refresh_token = result["refresh_token"]
+    user = result["user"]
+else:
+    # 400: invalid_grant (wrong credentials), email_not_confirmed, etc.
+    print(f"Sign-in failed: {result.get('error_description')}")
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/auth/v1/token?grant_type=password`, {
+  method: "POST",
+  headers: {
+    apikey: ANON_KEY,
+    Authorization: `Bearer ${ANON_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    email: "alice@example.com",
+    password: "correcthorsebatterystaple",
+  }),
+});
+const result = await res.json();
+if (res.ok) {
+  localStorage.setItem("powabase_access_token", result.access_token);
+  localStorage.setItem("powabase_refresh_token", result.refresh_token);
+} else {
+  console.error("Sign-in failed:", result.error_description);
+}
+```
+
+```bash cURL
+curl -X POST 'https://{ref}.p.powabase.ai/auth/v1/token?grant_type=password' \
+  -H "apikey: <ANON_KEY>" \
+  -H "Authorization: Bearer <ANON_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com", "password": "correcthorsebatterystaple"}'
+```
+
+</CodeGroup>
+
+**Common error responses:**
+
+- `400 invalid_grant` — wrong email/password combination, or the user doesn't exist.
+- `400 email_not_confirmed` — autoConfirm is off and the user hasn't clicked the verification email yet.
+- `400 over_email_send_rate_limit` — too many recent failed signin attempts from this IP (30/hour by default).
+
+## Magic link (passwordless email)
+
+`POST /auth/v1/otp` sends an email containing a magic link. The user clicks it, GoTrue verifies the token in the link, redirects to your app with a code in the URL, and your app calls `POST /auth/v1/token?grant_type=pkce` to exchange that code for the session.
+
+The link flow takes two steps in your app: (1) request the magic link, (2) handle the redirect callback.
+
+<CodeGroup>
+
+```python Python
+# Step 1: Request the magic link
+response = requests.post(
+    f"{BASE_URL}/auth/v1/otp",
+    headers={
+        "apikey": ANON_KEY,
+        "Authorization": f"Bearer {ANON_KEY}",
+        "Content-Type": "application/json",
+    },
+    json={
+        "email": "alice@example.com",
+        "create_user": True,  # signs up the user if they don't exist
+        "options": {
+            "email_redirect_to": "https://your-app.example.com/auth/callback",
+        },
+    },
+)
+# 200 OK with empty body means the email was sent.
+
+# Step 2: Handle the redirect (server-side example — usually you'd do this in a
+# browser route handler that parses the URL fragment from window.location)
+# The redirect URL will look like:
+#   https://your-app.example.com/auth/callback#access_token=...&refresh_token=...
+# Tokens are in the URL fragment, not the query string, so they don't hit your
+# server logs. Parse them client-side and persist.
+```
+
+```typescript TypeScript
+// Step 1: Request the magic link
+await fetch(`${BASE_URL}/auth/v1/otp`, {
+  method: "POST",
+  headers: {
+    apikey: ANON_KEY,
+    Authorization: `Bearer ${ANON_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    email: "alice@example.com",
+    create_user: true,
+    options: { email_redirect_to: "https://your-app.example.com/auth/callback" },
+  }),
+});
+// 200 OK with empty body means the email was sent.
+
+// Step 2: In your /auth/callback route in the browser
+// Tokens come back in the URL fragment, not the query string.
+const params = new URLSearchParams(window.location.hash.slice(1));
+const access_token = params.get("access_token");
+const refresh_token = params.get("refresh_token");
+if (access_token && refresh_token) {
+  localStorage.setItem("powabase_access_token", access_token);
+  localStorage.setItem("powabase_refresh_token", refresh_token);
+  window.location.hash = ""; // clean up the URL
+}
+```
+
+```bash cURL
+# Step 1 only — the redirect happens in a browser
+curl -X POST 'https://{ref}.p.powabase.ai/auth/v1/otp' \
+  -H "apikey: <ANON_KEY>" \
+  -H "Authorization: Bearer <ANON_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "alice@example.com",
+    "create_user": true,
+    "options": {"email_redirect_to": "https://your-app.example.com/auth/callback"}
+  }'
+```
+
+</CodeGroup>
+
+**Two things to know:**
+
+- **`create_user: false`** lets you implement "magic link only for existing users" (returns 400 if no user with that email).
+- **Your redirect URL must be in the project's URI allow list** (`gotrue.uriAllowList` in Helm overrides, or the auth settings in the Studio). GoTrue won't redirect to arbitrary URLs.
+
+## Password recovery
+
+The recovery flow looks just like magic link — request a recovery email, user clicks it, your callback grabs tokens from the URL fragment.
+
+<CodeGroup>
+
+```python Python
+requests.post(
+    f"{BASE_URL}/auth/v1/recover",
+    headers={
+        "apikey": ANON_KEY,
+        "Authorization": f"Bearer {ANON_KEY}",
+        "Content-Type": "application/json",
+    },
+    json={
+        "email": "alice@example.com",
+        "options": {
+            "redirect_to": "https://your-app.example.com/auth/reset-password",
+        },
+    },
+)
+# Then on /auth/reset-password, the user is signed in (tokens in URL fragment).
+# Have them enter a new password and call:
+#   PUT /auth/v1/user with Authorization: Bearer <access_token> and body
+#   {"password": "<new-password>"}
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/auth/v1/recover`, {
+  method: "POST",
+  headers: {
+    apikey: ANON_KEY,
+    Authorization: `Bearer ${ANON_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    email: "alice@example.com",
+    options: { redirect_to: "https://your-app.example.com/auth/reset-password" },
+  }),
+});
+
+// Then on /auth/reset-password, after the user enters their new password:
+await fetch(`${BASE_URL}/auth/v1/user`, {
+  method: "PUT",
+  headers: {
+    apikey: ANON_KEY,
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({ password: newPassword }),
+});
+```
+
+```bash cURL
+curl -X POST 'https://{ref}.p.powabase.ai/auth/v1/recover' \
+  -H "apikey: <ANON_KEY>" \
+  -H "Authorization: Bearer <ANON_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com", "options": {"redirect_to": "https://your-app.example.com/auth/reset-password"}}'
+```
+
+</CodeGroup>
+
+The `POST /auth/v1/recover` always returns 200, even for emails that don't exist — this is intentional, so an attacker can't enumerate user accounts via the recovery endpoint.
+
+## Refreshing the access token
+
+Access tokens last 1 hour. Before yours expires, exchange the refresh token for a new pair:
+
+<CodeGroup>
+
+```python Python
+def refresh_session(refresh_token: str) -> dict:
+    response = requests.post(
+        f"{BASE_URL}/auth/v1/token",
+        headers={
+            "apikey": ANON_KEY,
+            "Authorization": f"Bearer {ANON_KEY}",
+            "Content-Type": "application/json",
+        },
+        params={"grant_type": "refresh_token"},
+        json={"refresh_token": refresh_token},
+    )
+    if response.status_code == 400:
+        # invalid_grant: token already used, expired, or doesn't exist.
+        # Treat as session lost; re-authenticate from scratch.
+        raise SessionExpired()
+    return response.json()  # {access_token, refresh_token, expires_in, ...}
+```
+
+```typescript TypeScript
+async function refreshSession(refreshToken: string) {
+  const res = await fetch(`${BASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+    method: "POST",
+    headers: {
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${ANON_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  if (res.status === 400) {
+    // Session lost — re-authenticate
+    throw new Error("SESSION_EXPIRED");
+  }
+  const result = await res.json();
+  localStorage.setItem("powabase_access_token", result.access_token);
+  localStorage.setItem("powabase_refresh_token", result.refresh_token);
+  return result;
+}
+```
+
+```bash cURL
+curl -X POST 'https://{ref}.p.powabase.ai/auth/v1/token?grant_type=refresh_token' \
+  -H "apikey: <ANON_KEY>" \
+  -H "Authorization: Bearer <ANON_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token": "v1.MzQ1..."}'
+```
+
+</CodeGroup>
+
+**Rotation is on by default.** Each refresh token is single-use; the response includes a fresh refresh token that must replace the old one in storage. The 10-second grace window means concurrent refresh attempts from the same client (a common SPA race) don't both fail.
+
+**Schedule the refresh before expiry, not after.** A common pattern: schedule a refresh at `expires_at - 60s`. If you wait for expiry, you'll get 401s on in-flight requests.
+
+## Sign out
+
+`POST /auth/v1/logout` (with the user's access token) invalidates the refresh token server-side and emits a session-revocation event. Always clear client-side storage too — server-side invalidation alone won't log the user out if the access token is still in localStorage.
+
+<CodeGroup>
+
+```python Python
+requests.post(
+    f"{BASE_URL}/auth/v1/logout",
+    headers={
+        "apikey": ANON_KEY,
+        "Authorization": f"Bearer {access_token}",
+    },
+)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/auth/v1/logout`, {
+  method: "POST",
+  headers: {
+    apikey: ANON_KEY,
+    Authorization: `Bearer ${accessToken}`,
+  },
+});
+localStorage.removeItem("powabase_access_token");
+localStorage.removeItem("powabase_refresh_token");
+```
+
+```bash cURL
+curl -X POST 'https://{ref}.p.powabase.ai/auth/v1/logout' \
+  -H "apikey: <ANON_KEY>" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+</CodeGroup>
+
+The `scope` query parameter can be `global` (default — revoke refresh tokens on all devices), `local` (just this session), or `others` (everywhere except this device).
+
+## Storing tokens
+
+A short detour because this trips people up. The right place to store the tokens depends on your environment:
+
+- **Browser SPA** — `localStorage` is fine for most apps. The Anon Key is already public; the access token is short-lived; the refresh token's single-use rotation limits damage from XSS-stolen tokens. If XSS is a serious concern, use an httpOnly cookie set by your backend proxy.
+- **Server-side rendering (Next.js, Remix, etc.)** — use httpOnly cookies set by the server. The client never sees the tokens; your server attaches them on outbound API calls.
+- **Mobile (iOS, Android)** — the OS-native secure storage (Keychain on iOS, EncryptedSharedPreferences on Android). Don't put refresh tokens in regular preferences.
+- **CLI / desktop apps** — write to a `~/.config/your-app/credentials.json` with 0600 perms.
+
+In all cases, treat the refresh token as the more sensitive credential — it lasts indefinitely until rotated, while the access token expires in an hour.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="OAuth providers" href="/guides/auth-oauth-providers">
+Google, GitHub, and 20 more OAuth providers with PKCE.
+</Card>
+
+<Card title="Auth model" href="/concepts/auth-model">
+What's inside the JWTs and how rotation works under the hood.
+</Card>
+
+<Card title="Auth Reference" href="/api-reference/auth">
+Full /auth/v1/* endpoint surface.
+</Card>
+
+<Card title="RLS Cookbook" href="/guides/rls-policies">
+The policy patterns that gate what signed-in users can see.
+</Card>
+
+</CardGroup>
