@@ -1,0 +1,238 @@
+---
+title: "Migrations"
+description: "Three migration patterns for evolving your project's schema — hand-written SQL with psql, Prisma Migrate, and Drizzle Kit. Plus the boundary between your tables and the platform's."
+icon: "boxes-packing"
+---
+
+Migrations are how you change your database schema over time without losing data. This page covers three approaches Powabase users tend to converge on: hand-written `.sql` files run through `psql`, Prisma Migrate, and Drizzle Kit. Pick whichever fits your stack — they all produce the same kind of result.
+
+For the underlying connection setup, see [Direct Postgres patterns](/guides/direct-postgres). For the per-driver configuration each migration tool needs to coexist with the pooler, see [Connection pooling](/guides/connection-pooling).
+
+## The platform / user schema boundary
+
+Powabase projects ship with five schemas. **Two are yours**, three are the platform's:
+
+| Schema | Owner | Safe to migrate? |
+|---|---|---|
+| `public` | You | Yes — your application tables live here |
+| `extensions` | You | Yes — add custom extensions here |
+| `ai` | Platform | **No** — managed by the AI surface |
+| `auth` | GoTrue | **No** — managed by GoTrue migrations |
+| `storage` | Storage API | **No** — managed by the Storage API |
+
+You can technically alter `ai.*`, `auth.*`, and `storage.*` because you connect as `supabase_admin` (the project owner) and the platform doesn't `REVOKE` those grants. **Don't.** The platform's services assume their schemas' invariants; modifying them risks data corruption or platform-side breakage.
+
+Always scope your migrations to `public` and `extensions`. If you need to add an index to an `ai.*` table for a performance reason, file a platform issue rather than touching it directly.
+
+## Pattern 1 — Hand-written SQL through psql
+
+The simplest approach: a numbered directory of `.sql` files, each one a migration step. Apply them in order with `psql`. Track which have been applied in a small metadata table.
+
+**Directory layout:**
+
+```
+migrations/
+  0001_create_users.sql
+  0002_add_user_avatar_column.sql
+  0003_create_posts.sql
+  ...
+```
+
+**Bootstrap a migrations tracking table** (run once):
+
+```sql
+CREATE TABLE IF NOT EXISTS public.schema_migrations (
+  version text PRIMARY KEY,
+  applied_at timestamptz NOT NULL DEFAULT now()
+);
+```
+
+**Wrap each migration in a transaction with the version recorded as the last step:**
+
+```sql
+-- 0001_create_users.sql
+BEGIN;
+
+CREATE TABLE public.users (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email text UNIQUE NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX users_email_lower_idx ON public.users (lower(email));
+
+INSERT INTO public.schema_migrations (version) VALUES ('0001');
+
+COMMIT;
+```
+
+**Apply migrations with a tiny shell loop:**
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+URL="$DATABASE_URL"
+
+for sql in migrations/*.sql; do
+  version=$(basename "$sql" | cut -d_ -f1)
+  already=$(psql "$URL" -At -c "SELECT 1 FROM public.schema_migrations WHERE version = '$version'")
+  if [ "$already" = "1" ]; then
+    echo "skip $version (already applied)"
+    continue
+  fi
+  echo "applying $version"
+  psql "$URL" -f "$sql"
+done
+```
+
+The whole approach is ~30 lines of shell plus your SQL files. No framework, no metadata sync, easy to inspect, easy to debug. Trade-off: you write your own rollback logic (each migration probably needs an inverse `.down.sql` file) and you don't get auto-generation from a model.
+
+**Pooler note.** `psql` opens a persistent connection that PgBouncer treats nicely, and your migration wraps everything in a transaction, so the transaction-mode constraints don't apply. If you have a CREATE INDEX CONCURRENTLY that needs to run outside a transaction, run it as its own migration without the BEGIN/COMMIT wrapper.
+
+## Pattern 2 — Prisma Migrate
+
+If your stack is TypeScript / Next.js, Prisma is the path of least resistance. Schema lives in `prisma/schema.prisma`; `prisma migrate dev` generates SQL migrations from schema changes.
+
+**`prisma/schema.prisma`** — minimal setup:
+
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("users")
+}
+```
+
+**`.env`** — point at the pooler URL with Prisma's required flags:
+
+```
+DATABASE_URL="postgresql://<ref>:<password>@db.p.powabase.ai:5432/<ref>?pgbouncer=true&connection_limit=1"
+```
+
+The `pgbouncer=true` flag disables prepared statements (which transaction-mode pooling breaks); `connection_limit=1` keeps Prisma from opening more connections than the pool can serve. See [Connection pooling](/guides/connection-pooling) for the full driver-flags table.
+
+**Generate and apply a migration:**
+
+```bash
+# In development — generates a migration file AND applies it
+npx prisma migrate dev --name add_users
+
+# In production — applies pending migrations, doesn't generate anything
+npx prisma migrate deploy
+```
+
+Prisma uses an internal `_prisma_migrations` table it manages itself. Don't touch it.
+
+**Caveat.** Prisma's `migrate dev` assumes it can open many connections (it spins up a shadow database to validate the migration). Through the pooler with `connection_limit=1`, this can hang. The workaround: run `migrate dev` against a local Postgres during development, copy the generated migration file to your repo, and only run `migrate deploy` (not `migrate dev`) against Powabase.
+
+## Pattern 3 — Drizzle Kit
+
+For TypeScript users who want a lighter-touch ORM (closer to raw SQL, no model decorators), Drizzle is increasingly the default. Drizzle Kit generates and applies migrations from schema definitions written in TypeScript.
+
+**`src/schema.ts`** — schema as TypeScript:
+
+```typescript
+import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
+
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").unique().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+```
+
+**`drizzle.config.ts`:**
+
+```typescript
+import type { Config } from "drizzle-kit";
+
+export default {
+  schema: "./src/schema.ts",
+  out: "./drizzle",
+  dialect: "postgresql",
+  dbCredentials: {
+    url: process.env.DATABASE_URL!,
+  },
+} satisfies Config;
+```
+
+**`.env`** — same URL with the `prepare=false` query param for the `postgres.js` driver Drizzle uses:
+
+```
+DATABASE_URL="postgresql://<ref>:<password>@db.p.powabase.ai:5432/<ref>?prepare=false"
+```
+
+**Generate and apply:**
+
+```bash
+# Generate a SQL migration from schema changes
+npx drizzle-kit generate
+
+# Apply pending migrations
+npx drizzle-kit migrate
+```
+
+Drizzle writes migrations as plain `.sql` files in the `./drizzle` directory plus a `_journal.json` metadata file. Inspecting them is straightforward — same flavor as Pattern 1 except autogenerated.
+
+## SQLAlchemy + Alembic
+
+The Python equivalent. Covered on its own page: [SQLAlchemy + Alembic](/guides/orm-sqlalchemy).
+
+## Patterns that work across all three
+
+A few practices that apply regardless of which tool you use.
+
+**Always wrap migrations in transactions.** All three patterns do this by default for individual statements, but if you're writing multi-statement migrations, make sure the whole change is atomic. Half-applied migrations are the worst kind of mess.
+
+**Avoid renames; prefer "add new column → migrate readers → drop old column".** A direct `ALTER TABLE ... RENAME COLUMN` is fine in development but invalidates every cached query in PostgREST, breaks every running client, and leaves no rollback path. The 3-step pattern is slower to develop but doesn't break running services.
+
+**Test against a real Postgres, not a mock.** Migrations interact with the entire schema — types, constraints, triggers, indexes. A mock that just records calls won't catch a `NOT NULL` violation on existing data. The fastest setup: a local Postgres container, run your migrations against it, then run your test suite.
+
+**Backfill data carefully.** Schema changes are usually fast; data backfills can take hours. For backfills that need to run online (the app keeps serving traffic while the backfill runs), use a separate background job that pages through the table in chunks, with `LIMIT` and `WHERE id > <last_seen>` — not one massive `UPDATE`.
+
+**For `CREATE INDEX CONCURRENTLY`, run it outside a transaction.** It can't run inside one, and the migration tools all support running specific statements outside the transactional wrapper (Prisma: edit the generated SQL file by hand; Drizzle: same; psql: just don't wrap in `BEGIN`/`COMMIT`). Concurrent indexes don't block writes during creation, which is what you want on production tables.
+
+## When migrations fail
+
+Each pattern handles failure differently:
+
+**Hand-written:** if the migration's transaction rolls back, nothing changed. Re-run after fixing the SQL. If the migration committed partially (only possible with `CREATE INDEX CONCURRENTLY` outside a transaction), you have a half-done state — re-running may be safe (`CREATE INDEX IF NOT EXISTS`) or may need manual cleanup.
+
+**Prisma:** `migrate deploy` is idempotent — re-running picks up where it left off. If the migration failed mid-application, Prisma marks it as `applied_steps_count < N` in `_prisma_migrations`. Resolve with `prisma migrate resolve` after manually fixing the state.
+
+**Drizzle:** similar to Prisma — migrations are tracked in a metadata table; a failure leaves them marked partial. Re-running with `drizzle-kit migrate` picks up.
+
+In all three cases, the right move after a failure is: stop, inspect the partial state, fix it by hand (or revert if possible), then continue. Re-running blindly after a failure can compound damage.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Direct Postgres patterns" href="/guides/direct-postgres">
+The connection-level basics every migration tool builds on.
+</Card>
+
+<Card title="Connection pooling" href="/guides/connection-pooling">
+The PgBouncer constraints that shape per-driver migration tool config.
+</Card>
+
+<Card title="Prisma" href="/guides/orm-prisma">
+The full Prisma setup — schema, queries, migrations.
+</Card>
+
+<Card title="Drizzle" href="/guides/orm-drizzle">
+Drizzle setup including schema, queries, and Drizzle Kit migrations.
+</Card>
+
+</CardGroup>
