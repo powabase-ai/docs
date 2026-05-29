@@ -74,6 +74,9 @@
           {
             "group": "Database",
             "pages": [
+              "concepts/ai-schema-postgrest",
+              "guides/ai-schema-recipes",
+              "guides/connection-pooling",
               "api-reference/database"
             ]
           },
@@ -81,6 +84,14 @@
             "group": "PostgREST",
             "pages": [
               "api-reference/postgrest"
+            ]
+          },
+          {
+            "group": "Row Level Security",
+            "pages": [
+              "concepts/rls-model",
+              "guides/rls-policies",
+              "guides/rls-testing"
             ]
           },
           {

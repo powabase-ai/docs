@@ -1,0 +1,106 @@
+---
+title: "Connection Pooling"
+description: "All external Postgres connections in Powabase go through PgBouncer in transaction mode. What that buys you, what it breaks, and how to write code that works against it."
+icon: "plug"
+---
+
+The Database URL you copy from the Connect modal is a PgBouncer pooler URL, not a direct connection to your project's Postgres. PgBouncer multiplexes many client connections onto a smaller pool of Postgres connections, which is how serverless and short-lived processes can hit Postgres without overwhelming it.
+
+There's one mode (transaction), and it has constraints that bite people coming from direct Postgres. This guide walks through the URL format, what the constraints actually are, and the workarounds.
+
+For when you need direct (non-pooled) access — migrations, long-running admin scripts — see the bottom of the page.
+
+## The URL format
+
+The Database URL handed out by the Connect modal looks like this:
+
+```
+postgresql://{ref}:{password}@db.p.powabase.ai:5432/{ref}
+```
+
+Three things to notice:
+
+- **Username and database are both your project ref**, not `postgres`. Coming from Supabase or a self-hosted Postgres, the muscle memory is `postgres:postgres@host:5432/postgres`. Powabase uses the ref consistently — PgBouncer routes by the database name to figure out which project's Postgres to forward to.
+- **Port 5432** (not 6543). PgBouncer listens on the standard Postgres port; there's no separate session-mode endpoint on 5544/6543/etc.
+- **Pooler hostname** `db.p.powabase.ai`. This is a shared LoadBalancer pointing at the PgBouncer pods in the `shared-services` namespace; the per-project Postgres lives elsewhere and isn't directly reachable.
+
+## What "transaction mode" means
+
+PgBouncer in transaction mode assigns a server connection to a client at `BEGIN`, holds it for the duration of that transaction, and returns it to the pool at `COMMIT`/`ROLLBACK`. Two clients that issue interleaved statements outside a transaction will likely land on different server connections — there's no guarantee of "stickiness" across statements.
+
+This is what makes the pool small (20 connections per project by default, 200 cluster-wide) handle thousands of client connections — but it breaks any feature that needs a server connection to persist across multiple statements.
+
+### What works
+
+- All single-statement queries.
+- Any sequence of statements wrapped in an explicit `BEGIN`/`COMMIT`.
+- `BEGIN`/`SAVEPOINT`/`ROLLBACK` within a transaction.
+- Standard CRUD.
+- Read replicas if you've set them up (PgBouncer transparently routes by SQL).
+
+### What breaks
+
+- **`LISTEN`/`NOTIFY`.** Notifications are delivered to the server connection that issued `LISTEN`; in transaction mode, you'll get a different server connection on the next statement and the listener is gone. **Use Realtime instead** (`/realtime/v1/*`) for change notifications.
+- **Prepared statements via the extended query protocol.** PostgreSQL's prepared-statement cache lives on the server connection; if your driver prepares once and reuses across transactions, the prepared statement isn't on the next server connection and you get `prepared statement "..." does not exist`. **Workaround:** disable prepared statements in your driver config (most have a flag).
+- **Session-level `SET`.** `SET statement_timeout = '5s'` outside a transaction "sticks" to one server connection — your next statement on a different connection sees the default. **Workaround:** use `SET LOCAL` inside a transaction, or pass settings via the connection string (`?options=-c%20statement_timeout%3D5000`).
+- **Advisory locks across statements.** `pg_advisory_lock(...)` outside a transaction locks one server connection — released or moot when you switch. **Workaround:** use transaction-scoped advisory locks (`pg_advisory_xact_lock`) which are released on `COMMIT`.
+- **Temporary tables across statements.** Same reason. Use them inside a transaction.
+
+## Per-driver configuration
+
+Most drivers have a setting to disable prepared statements or use the simple query protocol. The relevant flag:
+
+| Language / driver | What to set |
+|---|---|
+| Node.js `pg` | `Client({ connectionString, statement_timeout: undefined })` is fine; for prepared statements use `client.unsafe(...)` from `postgres` or pass `?statement_cache_mode=safe` on `node-postgres` |
+| Python `psycopg` 3 | `psycopg.connect("...", prepare_threshold=None)` disables auto-prepare. `prepare_threshold=0` always prepares, breaks under pooling. |
+| Python `asyncpg` | `asyncpg.connect("...", statement_cache_size=0)` |
+| Python `psycopg2` | Doesn't auto-prepare; nothing to do unless your code calls `cur.execute(..., prepared=True)`. |
+| SQLAlchemy | `create_engine("...", connect_args={"prepare_threshold": None})` for psycopg3; or `engine = create_engine("...", poolclass=NullPool)` if you also want to disable SQLAlchemy's own pooling (PgBouncer is already doing it). |
+| Prisma | Append `?pgbouncer=true&connection_limit=1` to the URL. The `pgbouncer=true` flag turns off prepared statements; `connection_limit=1` prevents Prisma from opening more connections than your pool can serve. |
+| Drizzle / `postgres.js` | Append `?prepare=false` to the URL, or pass `{ prepare: false }` in the client options. |
+| Go `pgx` v5 | `config.DefaultQueryExecMode = pgx.QueryExecModeExec` on `*pgxpool.Config`. |
+| Go `database/sql` + `lib/pq` | Doesn't auto-prepare; nothing to do. |
+| JDBC | Append `?prepareThreshold=0&binaryTransfer=false` to the JDBC URL. |
+| .NET `Npgsql` | Append `;Max Auto Prepare=0;No Reset On Close=true` to the connection string. |
+| PHP `pg_connect` | Doesn't auto-prepare; nothing to do unless you call `pg_prepare()`. |
+
+If you're using a serverless runtime (Lambda, Vercel Functions, Cloudflare Workers) on top of these drivers, the right pattern is: **create one client per request, run your transactions, close**. Letting clients live across invocations leaks server connections — PgBouncer eventually starts refusing new ones (`max_client_conn = 200` cluster-wide).
+
+## Sizing your client-side pool
+
+You have **20 server connections per project**. That's the ceiling. Above it, PgBouncer queues your requests until a connection frees up; queueing past a few hundred ms manifests as latency spikes.
+
+For application servers, set your client-side pool to a fraction of this — typically 10-15 — to leave headroom for migrations, cron jobs, and the platform's own backend. Setting the client pool to 20 from a single replica fully consumes the project's allocation; running two replicas each with 20 means one's queries get queued behind the other's.
+
+A safe baseline for a single replica: **client pool size 10**, **client connection timeout 5s**, **statement timeout 30s** (matching PostgREST's authenticator role). Tune up if you see your own application's request rate getting throttled before PgBouncer's queue fills.
+
+## When transaction-mode doesn't work
+
+If your workload genuinely needs session state — long migrations with `SET LOCAL`, schema changes with advisory locks, anything where multiple statements need to share a server connection without being wrapped in a single transaction — you have two options:
+
+1. **Wrap everything in a single transaction.** Most use cases are amenable: open a transaction at the start of the script, do all the work, commit at the end. This works as long as the transaction completes before any statement-level timeout (PostgREST authenticator is 30s; the connection itself has no timeout).
+
+2. **Hit Postgres directly, bypassing PgBouncer.** Today this is only available from inside the project's namespace (e.g., a Kubernetes Job running inside `project-{ref}` can connect to `postgres.project-{ref}.svc.cluster.local:5432`). There's no public direct-connection URL. For one-off operations from outside the cluster, contact support.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Auth & Connection" href="/guides/auth-connection">
+Where the pooler URL comes from in the Connect modal.
+</Card>
+
+<Card title="Database Access" href="/concepts/database-access">
+PostgREST vs typed API vs direct Postgres — when each is right.
+</Card>
+
+<Card title="Querying the ai schema" href="/concepts/ai-schema-postgrest">
+The schema-level patterns most apps use instead of writing raw SQL.
+</Card>
+
+<Card title="RLS Model" href="/concepts/rls-model">
+The auth posture you'll want set up before exposing direct Postgres patterns to clients.
+</Card>
+
+</CardGroup>
