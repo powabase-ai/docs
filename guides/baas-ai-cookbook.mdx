@@ -1,0 +1,376 @@
+---
+title: "BaaS + AI cookbook"
+description: "Four worked patterns that pair the BaaS primitives (PostgREST, Auth, Storage, Realtime) with the AI surface (agents, KBs, workflows). The composability story Powabase is built around."
+icon: "book"
+---
+
+The whole point of Powabase is that the BaaS substrate and the AI primitives compose. You can build an app that signs users in (Auth), stores their files (Storage), indexes those files into a knowledge base (Sources + KB), runs an agent that searches the KB (Agents), and streams the answer back to the user — all on one platform, with one auth model, with RLS gating the right things.
+
+This page is four worked patterns that string these primitives together. None of them is the only right way — they're starting points you'll adapt to your shape. For deeper dives on each primitive, see the per-area pages linked from the Cards at the end.
+
+For the audit-flagged limitation that drives Recipe 2 — **the platform does not forward end-user JWTs to agent tools** — see [JWT forwarding investigation](#why-recipe-2-is-shaped-this-way) below the recipes.
+
+## Recipe 1 — RLS-aware agent context via PostgREST on ai.*
+
+The pattern: you have an agent that needs to retrieve from a knowledge base, but you want each end user to see only their own sources within that KB. The naive approach (agent has unrestricted KB access; you filter results in your app) leaks data via the response.
+
+The right approach: query `ai.chunks` directly via PostgREST under the user's JWT before invoking the agent, and pass the resulting context into the agent run as `context_items`.
+
+**Step 1 — RLS on `ai.indexed_sources` and `ai.chunks`** (assuming a `user_id` column on your `ai.sources` table tracks ownership):
+
+```sql
+-- ai.sources already has RLS enabled by default; tighten the authenticated
+-- read policy to only show user's own sources.
+DROP POLICY IF EXISTS auth_read_sources ON ai.sources;
+CREATE POLICY auth_read_own_sources ON ai.sources
+  FOR SELECT TO authenticated
+  USING (
+    -- Adapt to wherever your "who owns this source" lives — most apps
+    -- have a public.documents row with owner_id that joins to ai.sources.id
+    EXISTS (
+      SELECT 1 FROM public.documents
+      WHERE source_id = ai.sources.id
+        AND owner_id = auth.uid()
+    )
+  );
+
+-- ai.chunks inherits the source's ownership.
+DROP POLICY IF EXISTS auth_read_chunks ON ai.chunks;
+CREATE POLICY auth_read_own_chunks ON ai.chunks
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM ai.indexed_sources ix
+      JOIN public.documents d ON d.source_id = ix.source_id
+      WHERE ix.id = ai.chunks.indexed_source_id
+        AND d.owner_id = auth.uid()
+    )
+  );
+```
+
+**Step 2 — query for chunks from the browser**, using the user's access token:
+
+```typescript
+async function retrieveContext(kbId: string, query: string, userToken: string) {
+  // PostgREST does the RLS-filtered hybrid search; we just need top-K chunks
+  // ordered by similarity. For real hybrid search, you'd typically POST to
+  // /api/knowledge-bases/{kbId}/search instead — but that runs with the
+  // service role and skips RLS. Hand-rolling against ai.chunks under the
+  // user's JWT gets per-user filtering for free.
+  const params = new URLSearchParams({
+    select: "id,text,score,source_id,meta",
+    knowledge_base_id: `eq.${kbId}`,
+    order: "score.desc",
+    limit: "10",
+  });
+  const res = await fetch(`${BASE_URL}/rest/v1/chunks?${params}`, {
+    headers: {
+      "Accept-Profile": "ai",
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${userToken}`,
+    },
+  });
+  return res.json();
+}
+```
+
+**Step 3 — pass the retrieved chunks as agent context_items.** The agent run endpoint accepts a `context_items` array that bypasses the agent's own retrieval:
+
+```typescript
+async function askAgent(agentId: string, message: string, contextItems: any[], userToken: string) {
+  // The agent run endpoint runs under the service role internally — it does
+  // not check RLS on its own tools. Filtering happened above, when we
+  // retrieved chunks under the user's JWT.
+  const res = await fetch(`${BASE_URL}/api/agents/${agentId}/run`, {
+    method: "POST",
+    headers: {
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,  // see Recipe 2 about why
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message,
+      context_items: contextItems.map((c) => ({
+        text: c.text,
+        source_id: c.source_id,
+        meta: c.meta,
+      })),
+    }),
+  });
+  return res.json();
+}
+```
+
+The agent run no longer touches `ai.chunks` itself (because we pre-fed the context). The data path is: user JWT → PostgREST → RLS-filtered chunks → context_items → agent. There's no point in the request where the agent has access to chunks the user shouldn't see.
+
+**Trade-offs.** This pattern works for read-only retrieval. You're doing the RAG retrieval yourself; you lose the platform's hybrid scoring, reranking, and the chunks→pages reflow that the typed search endpoint does for you. For full retrieval pipelines, the right answer is "use the typed search endpoint but call it from your backend, with your backend enforcing ownership before the call" — at the cost of a service-role layer in the middle.
+
+## Recipe 2 — Build-your-own authenticated chatbot
+
+A chat app where each user has their own agent (or shares an agent with others). The user sends a message, the agent runs, the response streams back to the user. RLS should ensure that user A's chat history isn't visible to user B.
+
+**Important up-front:** the obvious approach — "let the browser call `/api/agents/{id}/run/stream` directly with the user's access token" — looks like it works but is unsafe.
+
+### Why the obvious approach is wrong
+
+When you send a request to `/api/agents/{id}/run/stream` with `Authorization: Bearer <user_jwt>`:
+
+1. The user's JWT is signed with the same `JWT_SECRET` as the Service Role Key, just with `role: "authenticated"` instead of `role: "service_role"`.
+2. `@require_auth` accepts both — the JWT signature validates and the request is authorized.
+3. **But** the platform does not propagate the user's identity to the agent's tools. The agent's `database_query`/`database_write` builtin tools run under a superuser Postgres role (`supabase_admin`) inside the project-service worker. Whatever the agent decides to query, it gets back unfiltered data — including other users' rows.
+
+So a user who hits `/run/stream` directly with their own JWT gets an answer, but the answer is computed with full project-wide DB access. If the agent has database tools, it can leak data from other users. **Don't expose `/api/agents/{id}/run/stream` to clients with their own JWTs.**
+
+### The safe pattern
+
+Run the agent run from a trusted backend with the Service Role key. Inject user-scoped context yourself — either via `context_items` (Recipe 1's pattern) or by constructing a Custom HTTP Tool that calls a route on your own backend that's auth-checked.
+
+```typescript
+// Backend route. Express-style for illustration.
+app.post("/api/chat", requireUserAuth, async (req, res) => {
+  const { userId, userJwt } = req.user;  // from your own auth middleware
+  const { message } = req.body;
+
+  // Look up the user's agent — or use a shared agent ID for the whole app.
+  const agentId = await getAgentForUser(userId);
+
+  // Persist the chat message to your own table for history. RLS-protected
+  // public.chat_messages with owner_id = userId enforces per-user history.
+  const sessionId = await ensureSession(userId);
+
+  // Stream the agent run from the backend to the client. The platform's SSE
+  // stream is preserved by streaming the response body through your handler.
+  const agentRes = await fetch(`${POWABASE_URL}/api/agents/${agentId}/run/stream`, {
+    method: "POST",
+    headers: {
+      apikey: SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message,
+      session_id: sessionId,
+      // If you need the agent to access user-specific data, pre-fetch and
+      // inject as context_items here. See Recipe 1.
+    }),
+  });
+
+  // Forward the SSE stream to the client.
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  agentRes.body.pipe(res);
+});
+```
+
+The client never sees the Service Role key; only your backend does. Your backend enforces who can call `/api/chat` (via `requireUserAuth`), and the agent run happens with full database access but only acts on context you injected.
+
+### Adding a Custom Tool that's user-aware
+
+For agents that need to query user-specific data dynamically (e.g., "search through my saved articles"), register a Custom HTTP Tool that points at your own backend:
+
+```bash
+POST /api/tools
+{
+  "name": "search_user_articles",
+  "description": "Searches the user's saved articles for relevant content.",
+  "type": "http",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": { "type": "string" },
+      "session_token": { "type": "string" }
+    },
+    "required": ["query", "session_token"]
+  },
+  "config": {
+    "endpoint": "https://your-app.example.com/internal/tools/search-articles",
+    "method": "POST"
+  }
+}
+```
+
+Then in your backend's `/internal/tools/search-articles` handler:
+
+```typescript
+app.post("/internal/tools/search-articles", async (req, res) => {
+  const { query, session_token } = req.body;
+
+  // Look up the user from your opaque session_token — NOT from any header
+  // because the platform doesn't forward auth to custom tools.
+  const userId = await sessionStore.lookup(session_token);
+  if (!userId) return res.status(401).end();
+
+  // Now run the query against your DB with the user's identity applied.
+  const results = await db.searchArticles(userId, query);
+  res.json({ results });
+});
+```
+
+The pattern: pass an opaque `session_token` through the tool's arguments at call time. Your backend resolves it to the user identity and gates the query. The agent doesn't know who the user is; your backend does.
+
+The system prompt for the agent includes "always call `search_user_articles` with `session_token = <token>`" — you inject the current user's token into the system prompt at agent-run-time, server-side. From the agent's perspective, the token is opaque data it passes through.
+
+This pattern is more work than "the platform forwards my JWT" would be. It's the safe alternative given current platform behavior.
+
+## Recipe 3 — Storage vs ai.sources
+
+You have a multi-format app: users upload PDFs that need to be indexed for RAG, plus they upload images for display. Two distinct flows.
+
+**For files that need to enter the RAG pipeline (PDFs, docs, anything you want chunked + embedded):**
+
+- Upload via `POST /api/sources/upload` (the typed Sources endpoint).
+- The platform creates a row in `ai.sources`, stores the file in a platform-managed Storage bucket, dispatches the extraction Celery task, and returns the source id.
+- Add the source to a KB via `POST /api/knowledge-bases/{id}/sources` to trigger indexing.
+
+**For files that are user content displayed back to the user (avatars, gallery images, attachments):**
+
+- Upload via `POST /storage/v1/object/{bucket}/{path}` (the typed Storage endpoint).
+- The file lands in `storage.objects` under your own bucket. Your application code reads/displays it.
+
+The two flows use different buckets, different tables (`ai.sources` vs `storage.objects`), and have different RLS postures. **Don't try to share buckets between them.** The platform assumes ownership of its Sources bucket layout and will overwrite paths.
+
+For files that need to be both (e.g., a PDF the user uploaded that they should be able to download AND that's indexed for RAG): upload twice, once through each path. They're independent — one row in `storage.objects` (for download) and one row in `ai.sources` (for indexing). Or pick one path: upload to `ai.sources` and use the platform's pre-signed download URL for the user-facing download.
+
+A worked end-to-end flow for an "upload a PDF, then chat with it" pattern:
+
+```typescript
+async function uploadAndChat(file: File, userToken: string) {
+  // Step 1: Upload to Sources (will be indexed). The user's access token here
+  // is for record-keeping; the actual upload runs server-side via your backend
+  // if you want auth scoping on what the user can upload.
+  const sourceRes = await fetch(`${BASE_URL}/api/sources/upload`, {
+    method: "POST",
+    headers: {
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,  // Service role — see Recipe 2
+    },
+    body: (() => {
+      const fd = new FormData();
+      fd.append("file", file);
+      return fd;
+    })(),
+  });
+  const { id: sourceId } = await sourceRes.json();
+
+  // Step 2: Record ownership (so RLS can scope future reads)
+  await postgrest("documents", { source_id: sourceId, owner_id: userId });
+
+  // Step 3: Poll for extraction completion (see Sources Reference for shape)
+  await pollUntilExtracted(sourceId);
+
+  // Step 4: Add to a user-specific KB
+  const kbId = await getUserKb(userId);
+  await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/sources`, {
+    method: "POST",
+    headers: { apikey: ANON_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ source_id: sourceId }),
+  });
+
+  // Step 5: Now an agent linked to that KB can answer questions about the PDF.
+  return runChat(kbId, userToken);
+}
+```
+
+`public.documents` is your own table for "who owns which source." `ai.sources` is the platform's table; `public.documents.source_id` references it for the ownership graph.
+
+## Recipe 4 — Realtime + agent runs
+
+For showing live progress during agent runs: the agent SSE stream is one event source, but if you want UI updates to also propagate to other devices (the user's phone watching while their laptop runs the chat), Realtime is the right second channel.
+
+Two patterns:
+
+**Pattern 4a: Mirror the SSE stream to a Realtime channel.** Your backend receives the SSE stream from `/api/agents/{id}/run/stream`, persists each event to a row in a `public.chat_messages` table, AND re-broadcasts each event to a per-user Realtime channel. Clients subscribe to the channel for live updates.
+
+```typescript
+async function streamAndBroadcast(agentId: string, userId: string, message: string) {
+  // Open the agent SSE stream
+  const agentRes = await fetch(`${POWABASE_URL}/api/agents/${agentId}/run/stream`, { ... });
+  const reader = agentRes.body!.getReader();
+
+  // The Realtime topic this user is subscribed to
+  const topic = `chat:${userId}`;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const text = decoder.decode(value);
+    for (const line of text.split("\n")) {
+      if (!line.startsWith("data: ")) continue;
+      const event = JSON.parse(line.slice(6));
+
+      // Persist for chat history
+      if (event.event === "chunk" || event.event === "complete") {
+        await db.chatMessages.insert({ user_id: userId, payload: event });
+      }
+
+      // Broadcast for live UIs
+      await broadcast({
+        topic,
+        event: event.event,
+        payload: event,
+      });
+    }
+  }
+}
+```
+
+**Pattern 4b: Use a database trigger.** Insert each agent event into `public.chat_messages`; a trigger function calls `realtime.send()` to broadcast it. The application code doesn't need to call Realtime explicitly — the database side-effect drives the broadcast.
+
+```sql
+CREATE OR REPLACE FUNCTION broadcast_chat_message()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  PERFORM realtime.send(
+    payload  => jsonb_build_object('message_id', NEW.id, 'event', NEW.payload),
+    event    => 'chat_event',
+    topic    => 'chat:' || NEW.user_id::text,
+    private  => true
+  );
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER chat_realtime
+  AFTER INSERT ON public.chat_messages
+  FOR EACH ROW EXECUTE FUNCTION broadcast_chat_message();
+```
+
+Pair this with the matching RLS on `realtime.messages` (so only the user themselves can subscribe to their channel) and you have device-syncing chat for free, gated by the same auth model as the rest of the app. See [Realtime model](/concepts/realtime) for the function reference.
+
+## Why Recipe 2 is shaped this way
+
+A platform investigation while drafting the audit found that the agent surface does **not** forward end-user JWTs to its tools. Concretely:
+
+- `@require_auth` accepts user JWTs and sets `g.user_id` from the `sub` claim
+- `g.user_id` is consumed only by session-ownership checks; never propagated to tool dispatch
+- The `database_query`/`database_write` builtin tools execute SQL via a superuser SQLAlchemy session (`postgresql+psycopg://postgres:postgres@db:5432/postgres`) with no `SET ROLE` and no `set_config('request.jwt.claims', ...)`
+- Custom HTTP tools forward only the `config.headers` set at tool-create time — no request-time auth injection
+
+The implication is that anyone reaching `/api/agents/{id}/run/stream` directly with a user JWT gets full project-wide database access from any tool the agent calls. This is the footgun Recipe 2's "safe pattern" works around. If/when the platform adds JWT forwarding (some kind of `act_as_user` parameter or automatic propagation), the safe pattern simplifies considerably.
+
+For now: only call agent endpoints from trusted backends, with the Service Role key, with user-scoped context pre-injected.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="ai schema recipes" href="/guides/ai-schema-recipes">
+PostgREST patterns on ai.* that complement these higher-level cookbooks.
+</Card>
+
+<Card title="RLS Cookbook" href="/guides/rls-policies">
+The lower-level RLS patterns these recipes build on.
+</Card>
+
+<Card title="Billing model" href="/concepts/billing-model">
+What every agent run and workflow execution costs in credits.
+</Card>
+
+<Card title="Realtime subscriptions" href="/guides/realtime-subscriptions">
+Detailed Realtime patterns the recipe-4 broadcast is one application of.
+</Card>
+
+</CardGroup>

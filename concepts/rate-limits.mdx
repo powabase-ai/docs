@@ -1,0 +1,100 @@
+---
+title: "Rate limits"
+description: "Where Powabase enforces request-rate limits today (workflow executions at 20/min) and where it deliberately doesn't (the rest of the surface)."
+icon: "gauge"
+---
+
+Powabase's only quantitative rate limit on the AI surface today applies to workflow execution endpoints. The rest of the API — agent runs, knowledge search, source CRUD, etc. — has no Kong-level or in-process limiter; abuse protection there comes from credit-based billing (you can't run 10,000 agents per second because you'd exhaust your credits).
+
+This page covers what is rate-limited, what isn't, and how to handle the 429 response when you hit the workflow limit. For credit-based pre-dispatch refusals, see [Billing model](/concepts/billing-model).
+
+## What's rate-limited
+
+| Endpoint | Limit | Per | Window | Response |
+|---|---|---|---|---|
+| `POST /api/workflows/{id}/execute` | 20 requests | per user | 60 seconds | `429` |
+| `POST /api/workflows/{id}/execute/stream` | 20 requests | per user | 60 seconds | `429` |
+
+The limit is **per user, per project-service replica** (so per pod, not cluster-wide). It's a sliding-window in-memory counter — no Redis, no distributed coordination. In Powabase's v1 deployment there's one project-service replica per project (per `CLAUDE.md` deployment constraint), so per-pod and per-project are the same thing today.
+
+When you exceed the limit:
+
+```json
+{
+  "error": "Rate limit exceeded. Max 20 executions per minute."
+}
+```
+
+The HTTP status is `429`.
+
+## Rate limit by user identity
+
+The limiter keys on `g.user_id`, which is set by `@require_auth` from the JWT's `sub` claim. Two consequences worth knowing:
+
+- **Each end user gets their own 20/min budget.** Two users in the same project hitting the same workflow each get 20 executions per minute, independently.
+- **Unauthenticated callers share a single `"anonymous"` budget.** If you're calling `/execute` with the Service Role key (which doesn't carry a user `sub`), the limit applies to a shared `"anonymous"` bucket — 20/min total across all unauthenticated callers. This is rarely an issue in practice but worth knowing if you have many backend services calling workflows.
+
+## What isn't rate-limited
+
+The rest of the AI surface:
+
+- **Agent runs** (`POST /api/agents/{id}/run`, `/run/stream`) — no limit. Each run is metered by credits, not request rate.
+- **Orchestration runs** (`POST /api/orchestrations/{id}/run`) — no limit. Same credit-metered story.
+- **Knowledge base search** (`POST /api/knowledge-bases/{id}/search`) — no limit.
+- **Source operations** (upload, reextract, cancel, delete) — no limit.
+- **All CRUD on agents, KBs, workflows, tools, etc.** — no limit.
+- **All `/auth/v1/*`, `/rest/v1/*`, `/storage/v1/*`, `/realtime/v1/*` BaaS endpoints** — no Kong-level rate limit. GoTrue has its own per-endpoint rate limits documented in [Auth model](/concepts/auth-model).
+
+## Why workflows specifically
+
+Workflow `/execute` is rate-limited because a workflow can be triggered by an external system (a webhook from Stripe, GitHub, cron, etc.) that loses control over its retry behavior. Without a limit, a misconfigured upstream retry storm could exhaust an org's credits in seconds. The 20/min cap is wide enough for normal usage and narrow enough to bound damage from a runaway loop.
+
+Agent runs aren't limited the same way because they're typically initiated from your own application code with rate-limiting already in place client-side — you're not going to accidentally `POST /api/agents/{id}/run/stream` 10,000 times per second from a React app.
+
+## What to do client-side
+
+When you get a `429`:
+
+- **Don't retry immediately.** The limiter's sliding window means a retry within the current minute will hit the same 429.
+- **Back off exponentially with jitter.** Start at 3-5 seconds; double up to 30 seconds; add ±25% random jitter.
+- **Surface the wait to the user.** "Trying again in 20 seconds" is better UX than spinning indefinitely.
+
+A reasonable retry sequence: 3s → 6s → 12s → 30s → 30s → 30s, with jitter. After three full 30-second waits, give up and surface a hard error — you're either coding wrong or hitting a real abuse pattern.
+
+## What to do server-side (your own backend)
+
+If your application triggers workflows on behalf of end users (your service calling `/execute` with the Service Role key for many users), the shared `"anonymous"` budget will bite you at scale. Two options:
+
+1. **Run each workflow execution under the end user's JWT.** Get the user's access token from your auth layer, pass it as `Authorization: Bearer <user_access_token>` instead of the Service Role key. Each user gets their own 20/min bucket. (You'll need to make sure RLS on `ai.workflows` lets the user execute — see [RLS Cookbook](/guides/rls-policies).)
+
+2. **Throttle and queue client-side.** If using the Service Role for a fan-out pattern is the right shape, add a token-bucket limiter in front of your `/execute` calls — release 20 every 60 seconds, queue the overflow. Don't rely on Powabase's 429 to do throttling for you; that just trades steady throughput for retry overhead.
+
+## Future quantitative limits
+
+A few things to be explicit about today's posture so you can plan for changes:
+
+- **There is no Kong-level rate limit** on any endpoint as of v1. The audit's earlier inspection of `kong_config.py` confirmed only `cors` and `key-auth` plugins are attached — no `rate-limiting` plugin. A comment in that file calls webhooks "rate-limited" but it's aspirational; nothing actually enforces it at the gateway.
+- **Per-IP limits are not enforced** by the platform. If your concern is unauthenticated abuse against the Anon Key-fronted endpoints (PostgREST, Storage public URLs), gate them behind your own CDN or WAF.
+- **The 20/min workflows limit may move** as the platform tunes for usage patterns. The number isn't a hard product commitment.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Billing model" href="/concepts/billing-model">
+The credit system — the other gate on AI surface usage besides rate limits.
+</Card>
+
+<Card title="Workflows reference" href="/api-reference/workflows">
+The endpoints this limit applies to.
+</Card>
+
+<Card title="Auth model" href="/concepts/auth-model">
+GoTrue's per-endpoint rate limits on the auth surface (separate from the AI surface limits documented here).
+</Card>
+
+<Card title="Webhooks reference" href="/api-reference/webhooks">
+The webhook trigger surface — the most common abuse vector and why workflows are limited.
+</Card>
+
+</CardGroup>

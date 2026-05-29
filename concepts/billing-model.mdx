@@ -1,0 +1,148 @@
+---
+title: "Billing model"
+description: "How Powabase charges in credits, what triggers a charge, the 402 and 503 errors users see when they hit their balance or billing is unreachable, and where BYOK keys fit in."
+icon: "wallet"
+---
+
+Powabase bills in **credits**. Every billable operation in the platform — running an agent, indexing a source, executing a workflow block, searching a knowledge base — debits credits from the project's organization. Free-tier organizations have a credit allowance that refills monthly; if you run out, the platform returns `402` until the next refill (or until you upgrade or top up).
+
+This page covers the billing model: what costs credits, how the platform decides whether to dispatch a charge or refuse the request, the structure of the `402` and `503` error responses, and where the BYOK (bring-your-own-key) provider keys interact with the credit system.
+
+## What costs credits
+
+A non-exhaustive list of billable operations. Each shows up as a `post_charge` call in the project service:
+
+| Action | When |
+|---|---|
+| `agent_run` | An agent run (`POST /api/agents/{id}/run` or `/run/stream`) starts |
+| `agent_tool_call` | Each tool call inside an agent run |
+| `orchestration_run` | An orchestration run starts |
+| `workflow_run` | A workflow execution starts |
+| `workflow_block_<type>` | Per workflow block (`agent`, `code`, `general_api`, `platform_api`, etc.) — failed blocks aren't billed |
+| `indexing_<strategy>` | Per 1K tokens indexed (ChunkEmbed, PageIndex, GraphIndex, Doc2JSON, FullDocument) |
+| `extraction` | Per page of OCR / text extraction |
+| `web_search` / `web_scrape` | Each call to the web tools |
+| `metadata_enrichment` | Per chunk during enrichment runs |
+| `knowledge_search` | Per call to `/api/knowledge-bases/{id}/search` |
+
+The per-action prices and what one credit equates to in dollars are documented separately in the pricing page on powabase.ai. The complete catalog and pricing schedule lives there; this page focuses on the API-side semantics — how charges interact with your requests, and what error responses you'll see if a charge fails.
+
+## When the charge happens
+
+There are two charge timings depending on the operation:
+
+**Pre-dispatch charges** — the platform estimates the cost before doing anything, checks the org's balance, and refuses the request with `402` if the balance is insufficient. This applies to agent runs (the `check_balance_or_503` call before the run starts), knowledge search, and enrichment runs. The estimated cost is the platform's best guess at what the operation will consume; the actual cost is reconciled after.
+
+**Async charges from worker tasks** — long-running operations (source extraction, KB indexing) dispatch the request immediately and let the Celery worker post the actual charge when the work completes. The pre-dispatch path here only validates that the balance is *positive*, not that it covers the entire expected cost. This is "best-effort" billing — a project that runs out of credits mid-extraction completes the in-flight task but blocks new ones until refill.
+
+Workflow executions charge per block as they complete (`charge_workflow_blocks`), so a workflow that runs out of credits mid-execution stops at the first failed block.
+
+## Plan tiers
+
+Powabase has two notional tiers, and only one is live today:
+
+- **`free`** — the only tier in v1. Hard cap: balance must be >= estimated cost or the request returns `402`. Credits refill on the first of each UTC month.
+- **`pro`** — wired in the code, not currently in production. When live, would use a "soft cap" model where balance can briefly go negative up to a configurable grace amount (`BILLING_PAID_TIER_SOFT_CAP_GRACE_CREDITS`) before refusal.
+
+The plan tier is propagated via the `BILLING_PLAN_TIER` env var on the project-service pod and defaults to `"free"`. All API responses you'll see today are free-tier semantics.
+
+## The 402 response
+
+When pre-dispatch detects insufficient balance, the response is:
+
+```json
+{
+  "error": "insufficient_credits",
+  "balance": 1234,
+  "estimated_cost": 5000,
+  "renews_at": "2026-06-01T00:00:00+00:00"
+}
+```
+
+Fields:
+- **`balance`** — the org's current credit balance (integer credits)
+- **`estimated_cost`** — what the platform estimated the operation would cost
+- **`renews_at`** — when the next free-tier refill arrives (first of next UTC month)
+
+The frontend Studio renders this as a "You're out of credits" banner with the renewal date. Your own clients should do the same — when a `402 insufficient_credits` comes back, the right user-facing response is "you're out of credits, refill on X" rather than retrying.
+
+## The 503 response
+
+When the project-service can't reach the billing-service to verify the balance, it returns `503 Service Unavailable` rather than dispatching:
+
+```json
+{
+  "error": "billing service unreachable; cannot verify balance"
+}
+```
+
+This is a **fail-closed** posture — the platform refuses to dispatch a billable request if it can't first check the balance. The alternative (fail-open: dispatch and hope billing comes back later) would let free-tier orgs keep spending past their cap during outages.
+
+There's a per-process 30-second balance cache in front of this check, so transient billing hiccups don't cause user-facing 503s — the cached balance covers most outages. A 503 means **the cache is stale AND billing is unreachable**.
+
+Clients should treat `503` as a retry-able error with backoff (the cache will refresh on the next successful fetch elsewhere in the cluster). It's not a configuration error on your side.
+
+## BYOK provider keys and AI-on-us
+
+Powabase supports two LLM-billing modes:
+
+**AI-on-us** — the platform pays the upstream LLM provider (OpenAI, Anthropic, etc.) and bills you in credits. To use this, you don't need any provider keys yourself; the platform's pod-level env vars (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) cover the cost. Which providers are AI-on-us-available depends on what the pod has env vars for — query `GET /api/ai-provider-keys/platform_supported` to find out.
+
+**BYOK (bring-your-own-key)** — you upsert your own provider key via `POST /api/ai-provider-keys`, and that key is used for inference instead of the platform's. You pay the provider directly (outside Powabase billing); credit charges from Powabase still apply for the platform's compute, indexing, retrieval, etc., but not for the LLM tokens themselves.
+
+You can mix the two: BYOK for OpenAI while using AI-on-us for Anthropic, for example. The agent run looks at the model's provider, checks for a stored BYOK key first, and falls back to AI-on-us only if both (a) no BYOK key exists and (b) the provider is in `platform_supported`.
+
+If you've stored a BYOK key but it can't be decrypted (encryption-key rotation gone wrong, corrupted DB row), the agent run returns:
+
+```json
+{
+  "error": "<error message>",
+  "code": "provider_key_decrypt_failed",
+  "provider": "openai"
+}
+```
+
+This is rare. If you see it consistently, re-upsert the affected key with `POST /api/ai-provider-keys`.
+
+## Idempotency keys
+
+Every `post_charge` carries an idempotency key derived from the operation's identifying fields. Specifically:
+
+- **Workflow blocks:** `sha256(org_id + action + execution_id + block_id)`
+- **Agent runs:** `sha256(org_id + action + run_id)`
+- **Source operations:** `sha256(org_id + action + source_id + task_id)`
+
+A retried request with the same idempotency key returns the original charge result instead of double-billing. This matters for client retries — if you get a timeout, retrying is safe; the platform won't charge you twice for the same operation as long as the keys match.
+
+## What to do client-side
+
+A rough decision tree for handling billing-related errors:
+
+| Response | Right thing to do |
+|---|---|
+| `402 insufficient_credits` | Surface the renewal date to the user; don't retry. Suggest top-up or upgrade. |
+| `503 billing service unreachable` | Retry with exponential backoff (start at 5s, double up to 1 minute). |
+| `400 provider_key_decrypt_failed` | Re-upsert the BYOK key for the affected provider. Don't retry the original request until then. |
+| `429 rate limit` (workflows only) | Back off — you've exceeded 20 executions per minute. See [Rate limits](/concepts/rate-limits). |
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Rate limits" href="/concepts/rate-limits">
+The other quantitative limit on the API — workflow executions at 20/min returning 429.
+</Card>
+
+<Card title="AI provider keys reference" href="/api-reference/ai-provider-keys">
+The BYOK API: storing keys, the platform_supported endpoint, validation.
+</Card>
+
+<Card title="BaaS + AI cookbook" href="/guides/baas-ai-cookbook">
+Patterns that pair BaaS primitives with the AI surface — relevant for cost-aware app design.
+</Card>
+
+<Card title="Agents Reference" href="/api-reference/agents">
+Where most credit consumption originates.
+</Card>
+
+</CardGroup>
