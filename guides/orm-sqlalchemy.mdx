@@ -1,0 +1,251 @@
+---
+title: "SQLAlchemy + Alembic"
+description: "Use SQLAlchemy with Powabase — connection setup with psycopg, declarative models, queries, sessions, and Alembic migrations."
+icon: "boxes-packing"
+---
+
+[SQLAlchemy](https://www.sqlalchemy.org/) is the dominant Python ORM. Most Powabase teams writing Python use it. The migration runner that pairs with SQLAlchemy is [Alembic](https://alembic.sqlalchemy.org/), maintained by the same author. This guide covers both.
+
+For pooler-level constraints, see [Connection pooling](/guides/connection-pooling). For migration patterns shared across ORMs, see [Migrations](/guides/migrations).
+
+## Connection setup
+
+SQLAlchemy v2 with the `psycopg` (v3) driver is the most common pairing on modern projects. The Database URL becomes a SQLAlchemy URL by changing the prefix:
+
+```python
+import os
+from sqlalchemy import create_engine
+
+DATABASE_URL = os.environ["DATABASE_URL"]
+# Original: postgresql://<ref>:<pw>@db.p.powabase.ai:5432/<ref>
+# For psycopg v3, swap the dialect:
+SQLA_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+
+engine = create_engine(
+    SQLA_URL,
+    # Disable SQLAlchemy's own connection pool — PgBouncer is already pooling.
+    # NullPool gives us "one connection per checkout, closed on return," which
+    # is the right shape on top of an external pooler.
+    poolclass=__import__("sqlalchemy.pool", fromlist=["NullPool"]).NullPool,
+    connect_args={
+        # Disable psycopg's auto-prepare. PgBouncer transaction mode breaks
+        # prepared statements; prepare_threshold=None disables them entirely.
+        "prepare_threshold": None,
+    },
+)
+```
+
+Two flags doing real work:
+
+- **`poolclass=NullPool`** — SQLAlchemy's default `QueuePool` keeps connections alive across requests, but you already have PgBouncer doing that. Stacking two pools wastes connections and complicates debugging. `NullPool` opens a connection per checkout and closes it on return.
+- **`connect_args={"prepare_threshold": None}`** — disables `psycopg` v3's auto-prepare. Without this, you'll get sporadic `prepared statement "..." does not exist` errors at runtime.
+
+For `psycopg2` (the older C-based driver), the URL prefix is `postgresql+psycopg2://` and the prepared-statement flag isn't needed (`psycopg2` doesn't auto-prepare). Most new projects should use `psycopg` v3.
+
+## Declarative models
+
+```python
+import uuid
+from datetime import datetime, timezone
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy import String, Boolean, DateTime, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
+
+class Base(DeclarativeBase):
+    pass
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    posts: Mapped[list["Post"]] = relationship("Post", back_populates="author")
+
+
+class Post(Base):
+    __tablename__ = "posts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    author_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    body: Mapped[str] = mapped_column(String, nullable=False)
+    published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    author: Mapped[User] = relationship("User", back_populates="posts")
+```
+
+`Mapped` and `mapped_column` are the v2-style annotations. They give you fully-typed model attributes — `user.email: str`, not `Column[str]`.
+
+## Sessions and queries
+
+```python
+from sqlalchemy.orm import Session
+from sqlalchemy import select
+
+with Session(engine) as session:
+    # Insert
+    alice = User(email="alice@example.com")
+    session.add(alice)
+    session.commit()
+
+    # Read with relation
+    stmt = (
+        select(Post)
+        .join(User)
+        .where(Post.author_id == alice.id, Post.published.is_(True))
+        .order_by(Post.created_at.desc())
+        .limit(10)
+    )
+    posts = session.scalars(stmt).all()
+
+    # Update
+    alice.email = "alice@new.example.com"
+    session.commit()
+
+    # Delete
+    session.delete(alice)
+    session.commit()
+```
+
+The `with Session(engine) as session:` context manager handles connection lifecycle correctly for `NullPool` — the connection is opened on first query, returned on exit. Don't reuse a session across HTTP requests.
+
+For web apps, use the per-request session pattern your framework provides (Flask-SQLAlchemy's `db.session`, FastAPI's `Depends(get_db)` dependency, etc.). Each pattern wraps `Session(engine)` and ensures cleanup.
+
+## Alembic migrations
+
+`alembic.ini` (after `alembic init alembic`):
+
+```ini
+sqlalchemy.url = postgresql+psycopg://<ref>:<password>@db.p.powabase.ai:5432/<ref>
+```
+
+In practice, you'll read the URL from an env var rather than hardcoding. In `alembic/env.py`:
+
+```python
+import os
+from sqlalchemy import create_engine, pool
+from alembic import context
+from your_app.db import Base  # so Alembic sees your models
+
+DATABASE_URL = os.environ["DATABASE_URL"].replace("postgresql://", "postgresql+psycopg://", 1)
+target_metadata = Base.metadata
+
+def run_migrations_online() -> None:
+    connectable = create_engine(
+        DATABASE_URL,
+        poolclass=pool.NullPool,
+        connect_args={"prepare_threshold": None},
+    )
+
+    with connectable.connect() as connection:
+        context.configure(connection=connection, target_metadata=target_metadata)
+
+        with context.begin_transaction():
+            context.run_migrations()
+```
+
+The same `NullPool` + `prepare_threshold=None` pattern as your app's engine. Alembic's autogenerate diffs your models against the live database and writes a migration:
+
+```bash
+# Autogenerate a migration from model changes
+alembic revision --autogenerate -m "add users"
+
+# Apply pending migrations
+alembic upgrade head
+
+# Roll back one migration
+alembic downgrade -1
+
+# See where you are
+alembic current
+```
+
+The generated migration file in `alembic/versions/` is plain Python — review it before applying. Autogenerate is usually right but occasionally misses subtleties (column renames look like drop+add, custom check constraints aren't picked up, etc.).
+
+Alembic tracks state in `alembic_version` (a single-row table). Don't touch it.
+
+## RLS from SQLAlchemy
+
+The connection is `supabase_admin`, bypassing RLS. To run queries as a specific user:
+
+```python
+import json
+from sqlalchemy import text
+
+with Session(engine) as session:
+    session.begin()  # Explicit transaction — SET LOCAL needs one
+    session.execute(text("SET LOCAL ROLE authenticated"))
+    session.execute(text(
+        "SET LOCAL request.jwt.claims = :claims::jsonb"
+    ), {"claims": json.dumps({"sub": str(user_id), "role": "authenticated"})})
+
+    # Now RLS applies to these queries
+    posts = session.scalars(select(Post).where(Post.author_id == user_id)).all()
+    session.commit()
+```
+
+The `SET LOCAL` statements must be in the same transaction as the queries. The pattern works for read-mostly backend code; for per-request RLS, the cleaner separation is to use PostgREST (`/rest/v1/*`) under the user's JWT for those reads and SQLAlchemy as `supabase_admin` for everything else.
+
+## SQLAlchemy in async
+
+For async apps (FastAPI with `asyncio`, etc.), use the async engine and `psycopg`'s async support:
+
+```python
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+
+async_engine = create_async_engine(
+    DATABASE_URL.replace("postgresql://", "postgresql+psycopg_async://", 1),
+    poolclass=NullPool,
+    connect_args={"prepare_threshold": None},
+)
+
+AsyncSessionLocal = async_sessionmaker(async_engine, expire_on_commit=False)
+
+async def list_posts(user_id):
+    async with AsyncSessionLocal() as session:
+        result = await session.scalars(select(Post).where(Post.author_id == user_id))
+        return result.all()
+```
+
+For `asyncpg` (a different async driver), use `statement_cache_size=0` instead of `prepare_threshold=None`:
+
+```python
+async_engine = create_async_engine(
+    DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1),
+    poolclass=NullPool,
+    connect_args={"statement_cache_size": 0},
+)
+```
+
+Both flags do the same thing: disable prepared statements for pooler compatibility.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Connection pooling" href="/guides/connection-pooling">
+Why `NullPool` and `prepare_threshold=None` are required.
+</Card>
+
+<Card title="Migrations" href="/guides/migrations">
+Alembic in the context of the other ORMs' migration tools.
+</Card>
+
+<Card title="Direct Postgres" href="/guides/direct-postgres">
+For SQL SQLAlchemy doesn't express — bulk imports, schema introspection.
+</Card>
+
+<Card title="TypeORM" href="/guides/orm-typeorm">
+The other ORM Python-and-Node teams sometimes share.
+</Card>
+
+</CardGroup>

@@ -77,6 +77,12 @@
               "concepts/ai-schema-postgrest",
               "guides/ai-schema-recipes",
               "guides/connection-pooling",
+              "guides/direct-postgres",
+              "guides/migrations",
+              "guides/orm-prisma",
+              "guides/orm-drizzle",
+              "guides/orm-sqlalchemy",
+              "guides/orm-typeorm",
               "api-reference/database"
             ]
           },

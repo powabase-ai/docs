@@ -1,0 +1,233 @@
+---
+title: "Direct Postgres patterns"
+description: "Connecting to your project's Postgres directly via the pooler URL — psql sessions, prepared statements, transactions, error handling, and the patterns that work safely inside PgBouncer transaction mode."
+icon: "elephant"
+---
+
+For SQL you can't or don't want to express through PostgREST — schema introspection, ad-hoc queries during development, bulk imports, scheduled jobs — connect directly to Postgres via the Database URL from the Connect modal. This guide covers the patterns that work, focused on the constraints of transaction-mode pooling.
+
+For the pooler-level concerns (what breaks in transaction mode, per-driver flags), see [Connection pooling](/guides/connection-pooling). For ORM-specific setup, see the four ORM pages: [Prisma](/guides/orm-prisma), [Drizzle](/guides/orm-drizzle), [SQLAlchemy](/guides/orm-sqlalchemy), [TypeORM](/guides/orm-typeorm). For migration workflows, see [Migrations](/guides/migrations).
+
+## The Database URL
+
+Copy from the Connect modal in the Studio:
+
+```
+postgresql://<ref>:<password>@db.p.powabase.ai:5432/<ref>
+```
+
+Username and database are both your project ref — not `postgres`. This is the PgBouncer pooler URL; there is no separate direct (non-pooled) endpoint exposed externally.
+
+## psql from your laptop
+
+```bash
+psql "postgresql://<ref>:<password>@db.p.powabase.ai:5432/<ref>"
+```
+
+You're connected as `supabase_admin` — full schema ownership across `public`, `ai`, `auth`, `storage`, and `extensions`. Treat this like database root access. The Database URL is a secret; never commit it, never paste it in chat.
+
+Useful first queries to orient yourself:
+
+```sql
+-- See your schemas
+\dn
+
+-- See your tables in public
+\dt public.*
+
+-- See the AI schema (platform-managed)
+\dt ai.*
+
+-- See your extensions
+\dx
+
+-- Check the role you're connected as
+SELECT current_user, session_user;
+-- → supabase_admin, supabase_admin
+```
+
+## Transactions inside the pooler
+
+PgBouncer's transaction mode means **a server connection is held for the duration of one transaction, then returned to the pool**. The implication for your code: if you want a sequence of statements to share state (a temp table, a `SET LOCAL`, a prepared statement), wrap them in a transaction.
+
+Outside a transaction, every statement potentially lands on a different server connection — you can't rely on session-scoped state.
+
+```sql
+-- WORKS — single transaction
+BEGIN;
+SET LOCAL statement_timeout = '5s';
+CREATE TEMP TABLE staged_orders AS SELECT * FROM raw_imports;
+DELETE FROM staged_orders WHERE total < 0;
+INSERT INTO orders SELECT * FROM staged_orders;
+COMMIT;
+
+-- BROKEN — statements may land on different server connections
+SET statement_timeout = '5s';  -- might apply to one server connection
+SELECT * FROM big_table;       -- might run on a different connection (no timeout)
+```
+
+For `psql` sessions, this is rarely an issue — `psql` opens a persistent connection and your statements stay on it. The pooler's transaction-mode quirks bite hardest when your driver opens new connections per query (or when a connection pool in your app rotates connections out from under you).
+
+## Common SQL patterns
+
+A few patterns that come up in practice.
+
+### Bulk import from a CSV
+
+```sql
+BEGIN;
+CREATE TEMP TABLE staged_users (
+  email text NOT NULL,
+  display_name text,
+  created_at timestamptz DEFAULT now()
+) ON COMMIT DROP;
+
+\copy staged_users (email, display_name) FROM 'users.csv' DELIMITER ',' CSV HEADER;
+
+INSERT INTO public.profiles (id, email, display_name)
+SELECT gen_random_uuid(), email, display_name
+FROM staged_users
+ON CONFLICT (email) DO NOTHING;
+
+COMMIT;
+```
+
+The `\copy` meta-command (not the SQL `COPY`) reads from your local filesystem. `ON COMMIT DROP` cleans up the temp table even though it's pooler-friendly (the whole flow is in one transaction).
+
+### Renaming a column without breaking PostgREST clients
+
+```sql
+BEGIN;
+ALTER TABLE public.orders RENAME COLUMN status TO order_status;
+-- PostgREST hot-reloads its schema cache via a NOTIFY (Powabase configures
+-- this automatically); clients querying the old column name will start
+-- getting 400s. For a zero-downtime rename, add the new column as a
+-- generated column first, switch clients, then drop the old.
+COMMIT;
+```
+
+For zero-downtime, the safer sequence is: add new column, dual-write from triggers, migrate readers, drop old column. The single ALTER is fine for development; production schema changes deserve more care.
+
+### Reading a large result without buffering
+
+```sql
+\timing on
+\set FETCH_COUNT 1000
+SELECT * FROM events WHERE created_at > now() - interval '30 days';
+```
+
+`FETCH_COUNT` makes `psql` page through the result rather than buffering it all in memory. Useful for "what does this look like across millions of rows" exploration.
+
+### Cancelling a runaway query
+
+If you start a query and want to stop it from another session:
+
+```sql
+-- Find your query
+SELECT pid, query, state, query_start
+FROM pg_stat_activity
+WHERE state = 'active'
+  AND usename = 'supabase_admin'
+ORDER BY query_start;
+
+-- Cancel it (gentle — asks the backend to stop)
+SELECT pg_cancel_backend(<pid>);
+
+-- Or kill it (hard — terminates the connection)
+SELECT pg_terminate_backend(<pid>);
+```
+
+`pg_cancel_backend` is the right first move; `pg_terminate_backend` is the escalation if cancel doesn't work.
+
+## Error classes worth knowing
+
+Postgres errors come with a 5-character SQLSTATE class. The classes you'll see most:
+
+| SQLSTATE | Name | When |
+|---|---|---|
+| `23505` | unique_violation | Inserted a duplicate value for a unique index — including primary key collisions |
+| `23503` | foreign_key_violation | Inserted a row referencing a non-existent parent, or deleted a row with children |
+| `23502` | not_null_violation | Missed a `NOT NULL` column on insert |
+| `23514` | check_violation | A `CHECK` constraint failed |
+| `40001` | serialization_failure | Conflicting concurrent transactions at SERIALIZABLE isolation — **retry the transaction** |
+| `40P01` | deadlock_detected | Two transactions waiting on each other; Postgres killed one. The killed transaction should retry. |
+| `42501` | insufficient_privilege | Tried to act on something you don't have permissions for (rare as `supabase_admin`) |
+| `42883` | undefined_function | Called a function with wrong argument types — often a cast issue |
+| `42P01` | undefined_table | Table doesn't exist (or you forgot `Accept-Profile`/`search_path` for `ai.*`) |
+| `26000` | invalid_sql_statement_name | **PgBouncer footgun.** Your prepared statement isn't on this server connection — see [Connection pooling](/guides/connection-pooling). |
+| `08006` | connection_failure | Connection dropped. Almost always retryable. |
+
+Most drivers expose SQLSTATE as a structured property. In Python `psycopg`:
+
+```python
+import psycopg
+from psycopg import errors
+
+try:
+    cur.execute("INSERT INTO users (email) VALUES (%s)", ["alice@example.com"])
+except errors.UniqueViolation:
+    # Handle duplicate — typically "treat as success" or "update instead"
+    pass
+except psycopg.OperationalError as e:
+    if e.sqlstate in ("40001", "40P01"):
+        # Serialization / deadlock — retry the transaction
+        pass
+```
+
+The retry pattern for `40001` and `40P01` is "back off briefly, redo the entire transaction." Half-retrying a multi-statement transaction is rarely what you want — the partial state is already gone.
+
+## Connection lifecycle from a backend
+
+For application servers (not psql), the right shape depends on your runtime:
+
+**Long-running services** (Node, Python, Go on Kubernetes / VMs):
+- One client-side pool per process, sized at 10-15 connections.
+- Each request acquires a connection, runs its work (inside a transaction if it does more than one statement), returns the connection.
+- Keep the pool alive for the lifetime of the process.
+
+**Serverless** (Lambda, Vercel Functions, Cloudflare Workers):
+- One connection per invocation. Open, transact, close.
+- Don't try to reuse a connection across invocations — the runtime tears down state unpredictably, and you'll leak server connections at PgBouncer.
+- Or use the HTTP-friendly PostgREST API instead — it's stateless and doesn't burn pooler slots.
+
+**One-off scripts** (migrations, batch jobs):
+- One connection, in a single transaction, then exit.
+- For long migrations that hit transaction-mode constraints, see [Migrations](/guides/migrations).
+
+## When to use direct Postgres vs PostgREST vs typed API
+
+A rough decision tree:
+
+| Goal | Use |
+|---|---|
+| CRUD on `public.*` with RLS, called from clients | PostgREST `/rest/v1/*` |
+| Bulk INSERT/UPDATE/DELETE from a backend | Direct Postgres (faster than N PostgREST calls) |
+| Schema changes (CREATE TABLE, ADD COLUMN, etc.) | Direct Postgres |
+| Read-only queries with complex JOINs / aggregations | Direct Postgres or PostgREST RPC |
+| AI features (run agent, search KB, upload source) | Typed `/api/*` |
+| Custom analytics on `ai.*` tables | PostgREST with `Accept-Profile: ai` |
+| Pub/sub-style notifications | Realtime (not LISTEN/NOTIFY through the pooler) |
+
+The typed `/api/*` is the only path for AI operations. PostgREST is the right path for client-side CRUD. Direct Postgres is for everything else, especially anything that touches schema or runs many statements.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Connection pooling" href="/guides/connection-pooling">
+The lower-level constraints that shape what works at the connection level.
+</Card>
+
+<Card title="Migrations" href="/guides/migrations">
+Schema evolution patterns for hand-written SQL, Drizzle, and Prisma migrations.
+</Card>
+
+<Card title="Prisma" href="/guides/orm-prisma">
+The TypeScript ORM most teams reach for.
+</Card>
+
+<Card title="SQLAlchemy + Alembic" href="/guides/orm-sqlalchemy">
+The dominant Python ORM with the migration runner Powabase teams typically use.
+</Card>
+
+</CardGroup>

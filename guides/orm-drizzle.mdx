@@ -1,0 +1,193 @@
+---
+title: "Drizzle"
+description: "Use Drizzle with Powabase — connection setup using postgres.js, schema as TypeScript, queries that look like SQL, and Drizzle Kit migrations."
+icon: "boxes-packing"
+---
+
+[Drizzle](https://orm.drizzle.team/) is a lightweight TypeScript ORM that stays close to SQL. Schema is defined in TypeScript files, queries look like SQL with type safety wrapped around them, and migrations are generated as plain `.sql` files you can inspect.
+
+For pooler-level constraints, see [Connection pooling](/guides/connection-pooling). For broader migration patterns, see [Migrations](/guides/migrations).
+
+## Connection setup
+
+Drizzle works with several Postgres drivers. The most-used pairing on Powabase is `postgres.js` (a.k.a. `postgres`). One required flag on the URL:
+
+```
+DATABASE_URL="postgresql://<ref>:<password>@db.p.powabase.ai:5432/<ref>?prepare=false"
+```
+
+- **`prepare=false`** — disables `postgres.js`'s prepared-statement cache. Required for PgBouncer transaction-mode pooling.
+
+You can also pass `{ prepare: false }` directly in client options instead of the query param:
+
+```typescript
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
+
+const client = postgres(process.env.DATABASE_URL!, { prepare: false });
+export const db = drizzle(client);
+```
+
+## Schema as TypeScript
+
+`src/schema.ts`:
+
+```typescript
+import { pgTable, uuid, text, boolean, timestamp } from "drizzle-orm/pg-core";
+
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").unique().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const posts = pgTable("posts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  authorId: uuid("author_id").notNull().references(() => users.id),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  published: boolean("published").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+```
+
+Column names are snake_case in SQL; the TypeScript field names are camelCase. Both are explicit, no implicit conversion.
+
+## Queries
+
+```typescript
+import { eq, desc, and } from "drizzle-orm";
+import { db } from "./db";
+import { users, posts } from "./schema";
+
+// Insert
+const [alice] = await db.insert(users)
+  .values({ email: "alice@example.com" })
+  .returning();
+
+// Read with relation
+const publishedByAlice = await db
+  .select({
+    post: posts,
+    authorEmail: users.email,
+  })
+  .from(posts)
+  .innerJoin(users, eq(posts.authorId, users.id))
+  .where(and(eq(posts.authorId, alice.id), eq(posts.published, true)))
+  .orderBy(desc(posts.createdAt))
+  .limit(10);
+
+// Update
+await db.update(users)
+  .set({ email: "alice@new.example.com" })
+  .where(eq(users.id, alice.id));
+
+// Delete
+await db.delete(users).where(eq(users.id, alice.id));
+
+// Transaction
+await db.transaction(async (tx) => {
+  await tx.insert(users).values({ email: "bob@example.com" });
+  await tx.insert(posts).values({ authorId: alice.id, title: "hi", body: "world" });
+});
+```
+
+The queries read like SQL because that's the design — `db.select().from().where().orderBy().limit()` maps 1:1 to `SELECT ... FROM ... WHERE ... ORDER BY ... LIMIT`. The advantage over raw SQL is that Drizzle infers result types from the schema; the advantage over heavier ORMs is that there's no magic between you and the query plan.
+
+## Migrations with Drizzle Kit
+
+`drizzle.config.ts`:
+
+```typescript
+import type { Config } from "drizzle-kit";
+
+export default {
+  schema: "./src/schema.ts",
+  out: "./drizzle",
+  dialect: "postgresql",
+  dbCredentials: {
+    url: process.env.DATABASE_URL!,
+  },
+} satisfies Config;
+```
+
+```bash
+# Generate a SQL migration from schema changes
+npx drizzle-kit generate
+
+# Apply pending migrations
+npx drizzle-kit migrate
+```
+
+Migrations land in `./drizzle/` as `.sql` files (one per migration step) plus a `_journal.json` index. Inspect them before applying in production — Drizzle's generated SQL is straightforward but worth a glance for anything that touches data.
+
+The migration tracking table is `drizzle.__drizzle_migrations`. Don't touch it.
+
+## RLS with Drizzle
+
+Drizzle, like Prisma, connects as `supabase_admin` and bypasses RLS. To run a query under a specific user's identity for RLS-gated reads:
+
+```typescript
+import { sql } from "drizzle-orm";
+
+await db.transaction(async (tx) => {
+  await tx.execute(sql`SET LOCAL ROLE authenticated`);
+  await tx.execute(sql`
+    SET LOCAL request.jwt.claims = ${JSON.stringify({
+      sub: userId,
+      role: "authenticated",
+    })}::jsonb
+  `);
+  return tx.select().from(users).where(eq(users.id, userId));
+});
+```
+
+Inside the transaction, RLS applies. **Don't issue the SET LOCAL outside a transaction** — PgBouncer hands you a different server connection per statement and your role/claims won't persist.
+
+For most apps, the cleaner separation is: PostgREST (`/rest/v1/*`) under user JWTs for RLS-required reads from the browser, Drizzle for server-side work under `supabase_admin`.
+
+## Drizzle in serverless
+
+`postgres.js` opens a real socket per call. In Lambda / Vercel Functions, the right shape is one connection per invocation:
+
+```typescript
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
+
+export async function handler(event) {
+  const sql = postgres(process.env.DATABASE_URL!, { prepare: false, max: 1 });
+  const db = drizzle(sql);
+
+  try {
+    return await db.select().from(users).where(eq(users.id, event.userId));
+  } finally {
+    await sql.end();  // Closes the connection
+  }
+}
+```
+
+The `max: 1` keeps each invocation to one connection. Without `sql.end()`, you'll leak connections at PgBouncer until `max_client_conn = 200` cluster-wide runs out and new invocations start 429ing.
+
+For high-traffic serverless workloads, consider Drizzle's HTTP-based drivers ([Neon serverless driver](https://neon.tech/docs/serverless/serverless-driver), Vercel Postgres) — they're built for stateless invocations and don't burn pooler slots. But for moderate serverless traffic on Powabase, the open-and-close pattern is fine.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Connection pooling" href="/guides/connection-pooling">
+Why `prepare=false` is required.
+</Card>
+
+<Card title="Migrations" href="/guides/migrations">
+The migration patterns across all three ORMs we cover.
+</Card>
+
+<Card title="Direct Postgres" href="/guides/direct-postgres">
+For SQL Drizzle doesn't cover — bulk imports, schema introspection.
+</Card>
+
+<Card title="Prisma" href="/guides/orm-prisma">
+The heavier-but-more-batteries-included TypeScript alternative.
+</Card>
+
+</CardGroup>

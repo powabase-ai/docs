@@ -1,0 +1,246 @@
+---
+title: "TypeORM"
+description: "Use TypeORM with Powabase — DataSource setup for the pooler, decorator-based entities, queries via the repository pattern, and TypeORM migrations."
+icon: "boxes-packing"
+---
+
+[TypeORM](https://typeorm.io/) is a decorator-based TypeScript ORM, popular in NestJS apps and other framework-first stacks. Its model definitions and migration runner work well with Powabase as long as you turn off TypeORM's prepared-statement caching at the pooler level.
+
+For pooler-level constraints, see [Connection pooling](/guides/connection-pooling). For migration patterns shared across ORMs, see [Migrations](/guides/migrations).
+
+## DataSource setup
+
+`src/data-source.ts`:
+
+```typescript
+import "reflect-metadata";
+import { DataSource } from "typeorm";
+import { User } from "./entities/User";
+import { Post } from "./entities/Post";
+
+export const AppDataSource = new DataSource({
+  type: "postgres",
+  url: process.env.DATABASE_URL,
+  entities: [User, Post],
+  migrations: ["src/migrations/*.ts"],
+  // TypeORM uses node-postgres under the hood; disable prepared statements
+  // for PgBouncer transaction-mode compatibility.
+  extra: {
+    statement_timeout: 30_000,
+    application_name: "your-app-name",
+  },
+  // Cap the pool to avoid saturating PgBouncer
+  poolSize: 10,
+  // Prepared statements are off by default in node-postgres unless explicitly
+  // enabled; nothing extra needed here for that.
+});
+
+await AppDataSource.initialize();
+```
+
+`poolSize: 10` keeps your app's connection share at half of PgBouncer's `default_pool_size = 20`, leaving room for migrations and other workloads.
+
+If you're using `pg` directly (TypeORM's default for `type: "postgres"`), prepared statements aren't enabled unless you call `client.query()` with the `name` option — which TypeORM's repository methods don't do. So unlike Prisma/Drizzle, no explicit `prepare=false` flag is needed. Just don't switch to a driver that does auto-prepare.
+
+## Entities
+
+`src/entities/User.ts`:
+
+```typescript
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn } from "typeorm";
+import { Post } from "./Post";
+
+@Entity({ name: "users" })
+export class User {
+  @PrimaryGeneratedColumn("uuid")
+  id!: string;
+
+  @Column({ type: "text", unique: true })
+  email!: string;
+
+  @CreateDateColumn({ type: "timestamptz", name: "created_at" })
+  createdAt!: Date;
+
+  @OneToMany(() => Post, (post) => post.author)
+  posts!: Post[];
+}
+```
+
+`src/entities/Post.ts`:
+
+```typescript
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn } from "typeorm";
+import { User } from "./User";
+
+@Entity({ name: "posts" })
+export class Post {
+  @PrimaryGeneratedColumn("uuid")
+  id!: string;
+
+  @Column({ type: "uuid", name: "author_id" })
+  authorId!: string;
+
+  @Column({ type: "text" })
+  title!: string;
+
+  @Column({ type: "text" })
+  body!: string;
+
+  @Column({ type: "boolean", default: false })
+  published!: boolean;
+
+  @CreateDateColumn({ type: "timestamptz", name: "created_at" })
+  createdAt!: Date;
+
+  @ManyToOne(() => User, (user) => user.posts)
+  @JoinColumn({ name: "author_id" })
+  author!: User;
+}
+```
+
+The `{ name: "users" }` / `{ name: "created_at" }` overrides map the TypeScript names to snake_case SQL — match whatever convention you've set for the rest of your schema.
+
+## Queries via repositories
+
+```typescript
+import { AppDataSource } from "./data-source";
+import { User } from "./entities/User";
+import { Post } from "./entities/Post";
+
+const userRepo = AppDataSource.getRepository(User);
+const postRepo = AppDataSource.getRepository(Post);
+
+// Insert
+const alice = await userRepo.save({ email: "alice@example.com" });
+
+// Read with relation
+const posts = await postRepo.find({
+  where: { authorId: alice.id, published: true },
+  relations: { author: true },
+  order: { createdAt: "DESC" },
+  take: 10,
+});
+
+// Update
+await userRepo.update(alice.id, { email: "alice@new.example.com" });
+
+// Delete
+await userRepo.delete(alice.id);
+
+// Transaction
+await AppDataSource.transaction(async (tx) => {
+  await tx.getRepository(User).save({ email: "bob@example.com" });
+  await tx.getRepository(Post).save({ authorId: alice.id, title: "hi", body: "world" });
+});
+```
+
+For complex queries, use the QueryBuilder — it's the closest TypeORM gets to raw SQL:
+
+```typescript
+const recentPosts = await postRepo
+  .createQueryBuilder("post")
+  .innerJoinAndSelect("post.author", "author")
+  .where("post.published = :published", { published: true })
+  .andWhere("post.created_at > :since", { since: thirtyDaysAgo })
+  .orderBy("post.created_at", "DESC")
+  .take(50)
+  .getMany();
+```
+
+## Migrations
+
+TypeORM has its own migration runner. Generate from current schema vs entities:
+
+```bash
+# Generate a migration based on entity changes
+npx typeorm migration:generate src/migrations/AddUsers -d src/data-source.ts
+
+# Apply pending migrations
+npx typeorm migration:run -d src/data-source.ts
+
+# Roll back the last migration
+npx typeorm migration:revert -d src/data-source.ts
+```
+
+Migrations land in `src/migrations/` as TypeScript classes implementing `MigrationInterface`. Like Drizzle, the generated migration is largely SQL — easy to inspect before applying.
+
+TypeORM's tracking table is `migrations`. Don't touch it.
+
+The auto-generate caveat is worth knowing: TypeORM compares your entities against the live database schema, which means **you need a development database that matches your production schema** for autogenerate to produce a clean diff. Most teams keep a local Postgres pinned to production's schema for this.
+
+## RLS from TypeORM
+
+`supabase_admin` connection, bypasses RLS. For RLS-respecting queries, the same transaction-with-SET-LOCAL pattern as Prisma and Drizzle:
+
+```typescript
+await AppDataSource.transaction(async (tx) => {
+  await tx.query("SET LOCAL ROLE authenticated");
+  await tx.query(
+    "SET LOCAL request.jwt.claims = $1::jsonb",
+    [JSON.stringify({ sub: userId, role: "authenticated" })],
+  );
+
+  return tx.getRepository(User).find({ where: { id: userId } });
+});
+```
+
+Inside the transaction, RLS applies. The `tx.query` here is the raw-SQL escape hatch on the transactional connection.
+
+## TypeORM in NestJS
+
+In a NestJS project, the standard wiring is `TypeOrmModule.forRoot()` in your app module:
+
+```typescript
+import { Module } from "@nestjs/common";
+import { TypeOrmModule } from "@nestjs/typeorm";
+
+@Module({
+  imports: [
+    TypeOrmModule.forRoot({
+      type: "postgres",
+      url: process.env.DATABASE_URL,
+      entities: [__dirname + "/**/*.entity.ts"],
+      migrationsRun: false,
+      poolSize: 10,
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+Then inject repositories into your services:
+
+```typescript
+@Injectable()
+export class UsersService {
+  constructor(@InjectRepository(User) private users: Repository<User>) {}
+
+  findById(id: string) {
+    return this.users.findOne({ where: { id } });
+  }
+}
+```
+
+NestJS handles the request-scoped lifecycle, so you don't need to think about checkouts.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Connection pooling" href="/guides/connection-pooling">
+The PgBouncer constraints `poolSize: 10` and disabled-prepares work around.
+</Card>
+
+<Card title="Migrations" href="/guides/migrations">
+TypeORM's runner in the context of the other ORMs.
+</Card>
+
+<Card title="Direct Postgres" href="/guides/direct-postgres">
+For SQL TypeORM doesn't express — bulk imports, schema introspection.
+</Card>
+
+<Card title="Prisma" href="/guides/orm-prisma">
+The TypeScript ORM most teams default to today.
+</Card>
+
+</CardGroup>
