@@ -4,7 +4,7 @@ description: "How Powabase Storage organizes files into buckets, who can access 
 icon: "boxes-stacked"
 ---
 
-Powabase Storage is the Supabase Storage API (v1.33.0) running at `/storage/v1/*` on your project URL. It manages files in **buckets** backed by S3, with metadata mirrored into the `storage.buckets` and `storage.objects` tables in your project's Postgres so you can apply Row Level Security to file access just like any other table.
+Powabase Storage is the Supabase Storage API (v1.33.0) running at `/storage/v1/*` on your project URL. It manages files in **buckets** with metadata mirrored into the `storage.buckets` and `storage.objects` tables in your project's Postgres so you can apply Row Level Security to file access just like any other table. On managed cloud the backend is S3; on a self-hosted Docker deployment the backend is local-disk by default (set `STORAGE_BACKEND=s3` plus the matching credentials to use S3 instead).
 
 This page covers the conceptual model — buckets vs objects, public vs private, how the per-project S3 prefix works, and the size/MIME constraints. For the API surface, see [Storage Reference](/api-reference/storage). For uploads, see [Storage uploads](/guides/storage-uploads). For RLS on `storage.objects`, see [Storage policies](/guides/storage-policies).
 

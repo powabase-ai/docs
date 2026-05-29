@@ -237,7 +237,7 @@ Use this to confirm the postgres_changes subscription is actually live. A `syste
 
 ### phoenix heartbeat
 
-Client → server. Required every 30 seconds to keep the connection alive. After 60 seconds of silence, Realtime closes the connection.
+Client → server. The Phoenix Channels convention is a heartbeat every 30 seconds; if no heartbeat arrives for roughly two intervals (the Phoenix default — Powabase doesn't override it), Realtime closes the connection. Most clients send heartbeats automatically.
 
 ```json
 {

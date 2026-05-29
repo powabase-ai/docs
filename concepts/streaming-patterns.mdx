@@ -12,17 +12,33 @@ Server-Sent Events (SSE) provide a one-directional stream from server to client 
 
 | Event | Key Fields | Description |
 | --- | --- | --- |
-| start | run_id, session_id | Agent run has started — save session_id for multi-turn |
-| step_started | step | Agent is beginning a new reasoning step |
-| chunk | content | A piece of the agent's text response |
-| tool_call | tool_name, arguments | Agent is calling a tool with the given arguments |
-| tool_result | tool_name, result | Tool execution completed with this result |
-| reasoning | delta | An incremental piece of the model's reasoning trace (only when reasoning_requested=true) |
-| reasoning_summary | summary | Final summarised reasoning trace at the end of the step |
-| step_completed | step | Agent finished a reasoning step |
-| approval_requested | tool_name, tool_input | Tool call paused — waiting for approval via the approve endpoint |
-| complete | run_id | Agent run finished |
-| error | message | An error occurred during execution |
+| `start` | `run_id`, `session_id` | Agent run has started — save `session_id` for multi-turn |
+| `step_started` | `step` | Agent is beginning a new reasoning step |
+| `content_delta` | `delta` | A per-token piece of the agent's text response. Accumulated server-side into the persisted run; the platform forwards each delta as it arrives. |
+| `chunk` | `content` | Terminal text event with the final assembled response — emitted at the end of a non-ReAct (sync-style) generation |
+| `tool_call` | `tool_name`, `arguments` | Agent is calling a tool with the given arguments |
+| `tool_result` | `tool_name`, `result` | Tool execution completed with this result |
+| `reasoning_delta` | `delta` | Per-token piece of the model's reasoning trace (only when `reasoning_requested=true`). Forwarded but NOT persisted — use `reasoning` for the persisted trace. |
+| `reasoning` | `text` | Persisted reasoning segment — the canonical "what the model thought" event for replay |
+| `reasoning_summary` | `summary` | Final summarised reasoning trace at the end of the step |
+| `step_completed` | `step` | Agent finished a reasoning step |
+| `approval_requested` | `tool_name`, `tool_input` | Tool call paused — waiting for approval via the approve endpoint |
+| `context_handler_created` | `context_handler_id` | A context handler was created mid-run (e.g. by a knowledge_search tool call). Lets you display the citation panel for the run. |
+| `complete` | `run_id`, `content`, `usage` | Agent run finished |
+| `error` | `message` | An error occurred during execution |
+
+### Keepalive
+
+If no event has been emitted for 30 seconds, the stream sends `: keepalive\n\n` (an SSE comment line). Most SSE clients ignore comment lines automatically — if you're rolling your own parser, drop any line that starts with `:`.
+
+### Persisted vs. forwarded-only
+
+The platform distinguishes events that get written to the run record from events that are forwarded for UI ergonomics but not persisted:
+
+- **Forwarded only**: `content_delta`, `reasoning_delta` — these are per-token deltas; the assembled content / reasoning is persisted as one piece on `complete`.
+- **Persisted + forwarded**: everything else.
+
+If you replay a run via `GET /api/agents/runs/{run_id}`, you'll see the assembled content but not the individual deltas.
 
 ## Consuming SSE in Python
 
@@ -119,7 +135,21 @@ Orchestration streaming extends the agent event model with delegation events. Yo
 
 ## Workflow Streaming
 
-Workflow streaming sends events as each block executes: block_started, block_output, block_completed, and the final workflow result. This lets you show a progress indicator for each step in a multi-block workflow.
+Workflow streaming sends per-block events as the engine traverses the DAG. The agent-block and orchestration-block streams interleave their own content_delta / reasoning_delta events directly into the workflow stream (so a downstream client can render the agent's tokens live while still seeing block-level structure):
+
+| Event | Key Fields | When |
+| --- | --- | --- |
+| `workflow_start` | `execution_id` | The workflow execution has begun |
+| `block_started` | `block_id`, `block_type` | The engine is about to execute a block |
+| `block_chunk` | `block_id`, `delta` | A streaming block (agent / orchestration) produced output |
+| `content_delta` / `reasoning_delta` | `block_id`, `delta` | Forwarded from an agent/orchestration block inside the workflow — lets the UI render tokens live |
+| `block_output` | `block_id`, `output` | A block finished with this output, which downstream blocks may reference |
+| `block_completed` | `block_id` | A block has fully finished (including any post-processing) |
+| `block_error` | `block_id`, `error` | A block failed — by default, the workflow short-circuits unless the next block is in an error-handler position |
+| `workflow_complete` | `execution_id`, `result` | The whole execution finished |
+| `workflow_error` | `execution_id`, `error` | The execution failed at the top level |
+
+The block-level events let you build a step indicator that updates as the DAG advances; the forwarded content/reasoning deltas let you stream the agent's response within the same UI surface.
 
 <Tip>
 **Buffer handling**

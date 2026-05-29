@@ -39,6 +39,49 @@ When you execute a workflow, the engine evaluates blocks in topological order. E
 
 You can build workflows two ways. The programmatic approach uses the PUT /api/workflows/\{id\}/graph endpoint to define blocks and edges as JSON. The Copilot approach uses natural language — describe what you want, and the AI copilot generates the workflow graph for you. Both produce the same underlying graph structure.
 
+## Variables and references
+
+Workflow blocks pass data to downstream blocks through their `output`. To reference an upstream block's output from another block's config, use **angle-bracket reference syntax**:
+
+```
+<blockId.output>
+<blockId.output.field>
+<blockId.output.field.nested>
+```
+
+The resolver walks the dotted path against the upstream block's output dict. Block IDs may contain letters, digits, underscores, hyphens, and spaces, so `<Lookup Customer.output.email>` is valid.
+
+Two contexts:
+- **Inside a string** (most block configs): every `<blockId.output.field>` placeholder gets substituted as a string. `"Hello <fetch.output.name>!"` becomes `"Hello Alice!"`.
+- **Inside a JSON value** (e.g. `general_api` body, `code` inputs, agent block messages): if the entire string is one reference, the resolved value is returned **with its original type** (so you can pass a number, array, or object — not just a string). `"<extract.output.tags>"` returns `["foo", "bar"]` rather than `'["foo", "bar"]'`.
+
+The starter block's variables surface as `<starter.output.variableName>`, and you'll also see the older `{{variables.x}}` syntax in agent / code block templates — both work; the angle-bracket form is canonical and applies to every block.
+
+Unresolvable references (block not yet run, missing field) leave the placeholder string as-is so you can see what failed when inspecting block logs.
+
+For condition blocks, the expression evaluator uses a Python-safe AST subset — comparisons, BoolOp (`and`/`or`/`not`), BinOp (`+`/`-`/`*`/`/`), attribute access, and subscripting. Function calls are not permitted.
+
+## Scheduling
+
+When a workflow's starter block has `schedule_enabled: true` in its config, deploying the workflow materializes a `schedule_config` on the workflow row and Celery's scheduler tick (every 30 seconds) fires runs at the configured cadence.
+
+The starter block's config takes:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `schedule_enabled` | bool | Must be `true` for any scheduling to happen |
+| `schedule_type` | `"interval"` \| `"cron"` | Default `interval` |
+| `schedule_timezone` | IANA name | Default `UTC` |
+| `schedule_start_at` / `schedule_end_at` | ISO 8601 | Optional bounds; runs outside the window are skipped |
+| `schedule_max_runs` | int | Optional cap; once reached, the workflow stops being scheduled |
+| `schedule_interval_value` | int | For `interval` type. Minimum effective interval is **60 seconds** even if you set a smaller value |
+| `schedule_interval_unit` | `"minutes"` \| `"hours"` \| `"days"` | For `interval` type. Default `minutes` |
+| `schedule_cron` | cron expression | For `cron` type. Default `0 * * * *` (top of every hour). croniter syntax |
+
+On `/deploy`, the platform reads these from the starter block, normalizes them into `schedule_config` on the workflow row, resets `schedule_run_count` to 0, and the tick worker picks it up. `/undeploy` clears `schedule_config` and stops further scheduled runs.
+
+Scheduled runs execute as if invoked through `/execute` — the starter block's variables get whatever default values are configured (no per-run override is possible from the schedule itself).
+
 ## Deployment & Webhooks
 
 Workflows expose two activation modes for their webhook block:

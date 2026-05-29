@@ -64,7 +64,7 @@ A "tool" in conversation could mean any of these depending on context. When prec
 
 **Database URL**. Postgres connection string for direct SQL access via PgBouncer. Authenticates as `supabase_admin`. Full schema ownership.
 
-All five live in the Connect modal in the Studio.
+The Connect modal in the Studio surfaces the **Project URL**, **Anon Key**, **Service Role Key**, **JWT Secret**, and **Database URL**, plus nine driver-specific connection-string snippets (psql, URI, Node.js pg, Python psycopg2, Go database/sql, JDBC, .NET, PHP, SQLAlchemy). The **user access token** and **refresh token** are runtime outputs from GoTrue after sign-in — they don't appear in the modal because they don't exist until a user signs in.
 
 ## Schemas (the Postgres kind)
 
