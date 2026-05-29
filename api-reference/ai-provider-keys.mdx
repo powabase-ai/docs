@@ -163,6 +163,42 @@ curl -X POST '{BASE_URL}/api/ai-provider-keys/validate' -H "apikey: {API_KEY}" -
 
 </CodeGroup>
 
+### GET /api/ai-provider-keys/platform_supported
+
+Returns which providers the platform itself has keys for at this pod — the "AI-on-us" providers, where the platform pays for inference and bills you in credits instead of requiring your own key.
+
+The Studio's LLM Provider Keys settings page uses this to render "AI-on-us active" vs "BYOK required" badges per provider. It's also the right pre-flight check before pointing an agent at a model whose provider you haven't BYOK'd yet — if the provider is `platform_supported`, the model just works; otherwise the agent run will return `402 provider_key_decrypt_failed` until you upsert your own key.
+
+<Note>
+The path uses an **underscore** (`platform_supported`), not a hyphen. Hyphenating it 404s.
+</Note>
+
+<CodeGroup>
+
+```python Python
+response = requests.get(f"{BASE_URL}/api/ai-provider-keys/platform_supported", headers=headers)
+print(response.json())  # {"providers": ["openai", "anthropic"]}
+```
+
+```typescript TypeScript
+const res = await fetch(`${BASE_URL}/api/ai-provider-keys/platform_supported`, { headers });
+const { providers } = await res.json();
+```
+
+```bash cURL
+curl '{BASE_URL}/api/ai-provider-keys/platform_supported' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+**Response:**
+
+```json
+{ "providers": ["openai", "anthropic"] }
+```
+
+The list is a subset of `["openai", "anthropic", "google", "openrouter"]` — whichever ones the pod has a platform-side env-var key configured for.
+
 ## Error Responses
 
 Errors return `{"error": "<message>"}`; validation failures additionally include a `fields` map with the per-provider rejection reason.
