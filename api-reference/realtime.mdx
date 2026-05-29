@@ -1,0 +1,444 @@
+---
+title: "Realtime"
+description: "WebSocket protocol for subscribing to Broadcast, Presence, and Postgres Changes events, plus the REST endpoint for server-side message emission."
+icon: "satellite-dish"
+---
+
+The Realtime API is Supabase Realtime v2.65.3, mounted at two endpoints on every project:
+
+- **WebSocket:** `wss://{ref}.p.powabase.ai/realtime/v1/websocket` — for subscriptions.
+- **REST:** `https://{ref}.p.powabase.ai/realtime/v1/api` — for server-side broadcast.
+
+For the conceptual model, see [Realtime model](/concepts/realtime). For worked subscription patterns, see [Realtime subscriptions](/guides/realtime-subscriptions).
+
+## Authentication
+
+Realtime authenticates the WebSocket at upgrade time via query parameters. There are no headers on the WS handshake because most browser WebSocket APIs don't let you set them.
+
+```
+wss://{ref}.p.powabase.ai/realtime/v1/websocket?apikey=<TOKEN>&vsn=1.0.0
+```
+
+| Parameter | Required | Meaning |
+|---|---|---|
+| `apikey` | Yes | The Anon Key, a signed-in user's access token, or the Service Role Key |
+| `vsn` | Yes | Protocol version. Use `1.0.0`. |
+| `log_level` | No | `error`, `warn`, `info`, `debug`. Server-side logging verbosity for this connection. |
+
+The REST endpoint uses standard headers — `apikey` + `Authorization: Bearer <token>` — and requires the Service Role Key (not the Anon Key).
+
+## Frame format
+
+All WebSocket frames are Phoenix Channels JSON envelopes:
+
+```json
+{
+  "topic": "realtime:public:orders",
+  "event": "phx_join",
+  "payload": { ... },
+  "ref": "1"
+}
+```
+
+- **`topic`** — the channel name. Convention is `realtime:<schema>:<table>` for postgres_changes channels, or any arbitrary string for broadcast/presence.
+- **`event`** — what kind of frame (see below).
+- **`payload`** — event-specific data.
+- **`ref`** — client-chosen ID that the server echoes back on `phx_reply`. Useful for correlating sends with their acknowledgments.
+
+## WebSocket events
+
+### phx_join
+
+Client → server. Subscribes to a channel.
+
+```json
+{
+  "topic": "realtime:public:orders",
+  "event": "phx_join",
+  "payload": {
+    "config": {
+      "broadcast": { "self": false, "ack": true },
+      "presence": { "key": "<unique-key>" },
+      "postgres_changes": [
+        { "event": "*", "schema": "public", "table": "orders", "filter": "user_id=eq.<uuid>" }
+      ],
+      "private": false
+    }
+  },
+  "ref": "1"
+}
+```
+
+All three config sections are optional. Omit them entirely and you get a bare channel you can broadcast to without receiving any of the three event types — useful for chat-room-style one-way emit.
+
+**`config.broadcast`:**
+- `self` (bool, default `false`) — receive your own broadcast messages.
+- `ack` (bool, default `false`) — receive `phx_reply` confirming the broadcast was routed.
+
+**`config.presence`:**
+- `key` (string) — unique identifier for this presence (typically the user id). Used for dedupe across multiple connections.
+
+**`config.postgres_changes`** — array of filter specs:
+- `event` (string) — `INSERT`, `UPDATE`, `DELETE`, or `*` for all three.
+- `schema` (string) — target schema. `public` is the common case.
+- `table` (string) — target table.
+- `filter` (string, optional) — column equality in PostgREST-style syntax (e.g., `user_id=eq.<uuid>`, `status=eq.active`).
+
+**`config.private`** (bool, default `false`) — when `true`, Realtime checks the SELECT policy on `realtime.messages` before letting you join. Without a passing policy, the join returns an error.
+
+### phx_reply
+
+Server → client. Acknowledgment for a `phx_join`, broadcast, or other client-initiated frame.
+
+```json
+{
+  "topic": "realtime:public:orders",
+  "event": "phx_reply",
+  "payload": {
+    "status": "ok",  // or "error"
+    "response": { ... }
+  },
+  "ref": "1"
+}
+```
+
+The `ref` matches the client's send. On error, `response` includes `{ reason: "<machine-readable>" }`.
+
+### postgres_changes
+
+Server → client. A row change matching a previously-subscribed postgres_changes config.
+
+```json
+{
+  "topic": "realtime:public:orders",
+  "event": "postgres_changes",
+  "payload": {
+    "data": {
+      "schema": "public",
+      "table": "orders",
+      "commit_timestamp": "2026-05-29T12:00:00Z",
+      "eventType": "INSERT",
+      "new": { "id": "...", "user_id": "...", "amount": 100 },
+      "old": { },
+      "errors": null
+    }
+  },
+  "ref": null
+}
+```
+
+For `UPDATE`, both `new` and `old` are populated. For `DELETE`, only `old` is. The columns the client sees depend on the table's REPLICA IDENTITY — `DEFAULT` shows changed columns plus the primary key on UPDATE; `FULL` shows every column. To set `FULL`:
+
+```sql
+ALTER TABLE public.orders REPLICA IDENTITY FULL;
+```
+
+### broadcast
+
+Client → server, and server → client. Custom messages on the channel.
+
+Client send:
+
+```json
+{
+  "topic": "chat:room-42",
+  "event": "broadcast",
+  "payload": {
+    "type": "broadcast",
+    "event": "chat_message",
+    "payload": { "user_id": "...", "text": "hello" }
+  },
+  "ref": "5"
+}
+```
+
+Server delivery (to other subscribers):
+
+```json
+{
+  "topic": "chat:room-42",
+  "event": "broadcast",
+  "payload": {
+    "event": "chat_message",
+    "payload": { "user_id": "...", "text": "hello" },
+    "type": "broadcast"
+  },
+  "ref": null
+}
+```
+
+The nested `event` field inside `payload` is your custom event type (e.g., `chat_message`, `typing`, `cursor_move`). The outer `event` is always `broadcast`.
+
+### presence_state
+
+Server → client. Initial snapshot of who's currently tracked in the channel, sent right after a successful `phx_join` with `presence` config.
+
+```json
+{
+  "topic": "presence:doc-abc",
+  "event": "presence_state",
+  "payload": {
+    "user-uuid-1": [{ "user_id": "...", "display_name": "Alice", ... }],
+    "user-uuid-2": [{ "user_id": "...", "display_name": "Bob", ... }]
+  },
+  "ref": null
+}
+```
+
+The top-level keys are the `key` values from each presence — typically user ids. The values are arrays because the same key can be tracked from multiple connections (e.g., two browser tabs by the same user).
+
+### presence_diff
+
+Server → client. Incremental changes to the presence state after the initial `presence_state`.
+
+```json
+{
+  "topic": "presence:doc-abc",
+  "event": "presence_diff",
+  "payload": {
+    "joins": { "user-uuid-3": [{ ... }] },
+    "leaves": { "user-uuid-2": [{ ... }] }
+  },
+  "ref": null
+}
+```
+
+Client → server, to update your own presence:
+
+```json
+{
+  "topic": "presence:doc-abc",
+  "event": "presence_diff",
+  "payload": { "action": "track", "data": { ... } },
+  "ref": "8"
+}
+```
+
+`action` is `track` or `untrack`. `data` is what other subscribers see in `presence_state`.
+
+### system
+
+Server → client. Notifications about the channel itself (subscribed, unsubscribed, errors).
+
+```json
+{
+  "topic": "realtime:public:orders",
+  "event": "system",
+  "payload": {
+    "extension": "postgres_changes",
+    "status": "ok",
+    "message": "Subscribed to PostgreSQL"
+  },
+  "ref": null
+}
+```
+
+Use this to confirm the postgres_changes subscription is actually live. A `system` frame with `status: "error"` here usually means the publication isn't set up — see [Realtime model](/concepts/realtime).
+
+### phoenix heartbeat
+
+Client → server. Required every 30 seconds to keep the connection alive. After 60 seconds of silence, Realtime closes the connection.
+
+```json
+{
+  "topic": "phoenix",
+  "event": "heartbeat",
+  "payload": {},
+  "ref": "9"
+}
+```
+
+The server responds with a `phx_reply` of `{ status: "ok" }`. If you don't get an OK within a few seconds, the connection is probably half-open — disconnect and reconnect.
+
+### phx_leave
+
+Client → server. Cleanly leave a channel without closing the WebSocket.
+
+```json
+{
+  "topic": "realtime:public:orders",
+  "event": "phx_leave",
+  "payload": {},
+  "ref": "10"
+}
+```
+
+### phx_close
+
+Server → client. Channel was closed (by you, by an error, or by the server). After this, send a new `phx_join` to re-subscribe.
+
+## REST: broadcast
+
+For server-side message emission. Use the Service Role Key.
+
+### POST /realtime/v1/api/broadcast
+
+Send one or more broadcast messages to channels.
+
+<ParamField body="messages" type="array" required>
+Array of message objects.
+</ParamField>
+
+Each message object:
+
+<ParamField body="messages[].topic" type="string" required>
+Channel name to broadcast on.
+</ParamField>
+
+<ParamField body="messages[].event" type="string" required>
+Your custom event type (matches the inner `event` field clients see).
+</ParamField>
+
+<ParamField body="messages[].payload" type="object" required>
+Your message data.
+</ParamField>
+
+<ParamField body="messages[].private" type="boolean">
+Default `false`. When `true`, only clients subscribed to a private version of the channel receive the message.
+</ParamField>
+
+<RequestExample>
+
+```json Request
+{
+  "messages": [
+    { "topic": "chat:room-42", "event": "system_announcement", "payload": { "text": "Server maintenance in 5 min" }, "private": false }
+  ]
+}
+```
+
+```json Multiple
+{
+  "messages": [
+    { "topic": "orders:user-1", "event": "new_order", "payload": { "order_id": "abc" } },
+    { "topic": "orders:user-2", "event": "new_order", "payload": { "order_id": "def" } }
+  ]
+}
+```
+
+</RequestExample>
+
+<CodeGroup>
+
+```python Python
+requests.post(
+    f"{BASE_URL}/realtime/v1/api/broadcast",
+    headers={"apikey": SERVICE_ROLE_KEY, "Authorization": f"Bearer {SERVICE_ROLE_KEY}", "Content-Type": "application/json"},
+    json={"messages": [
+        {"topic": "chat:room-42", "event": "system_announcement", "payload": {"text": "Maintenance in 5 min"}},
+    ]},
+)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL_HTTP}/realtime/v1/api/broadcast`, {
+  method: "POST",
+  headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+  body: JSON.stringify({ messages: [{ topic: "chat:room-42", event: "system_announcement", payload: { text: "Maintenance in 5 min" } }] }),
+});
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/realtime/v1/api/broadcast' \
+  -H "apikey: <SERVICE_ROLE_KEY>" -H "Authorization: Bearer <SERVICE_ROLE_KEY>" -H "Content-Type: application/json" \
+  -d '{"messages":[{"topic":"chat:room-42","event":"system_announcement","payload":{"text":"Maintenance in 5 min"}}]}'
+```
+
+</CodeGroup>
+
+**Response:** `{ "message": "ok" }` on success. The endpoint is fire-and-forget — it doesn't tell you how many subscribers received the message.
+
+## SQL: realtime.send() and realtime.broadcast_changes()
+
+The Realtime image installs two functions in the `realtime` schema that let your Postgres triggers emit broadcast messages directly:
+
+### realtime.send(payload jsonb, event text, topic text, private boolean default false)
+
+Send a single broadcast message from SQL. Equivalent to a single-message POST to `/realtime/v1/api/broadcast`.
+
+```sql
+PERFORM realtime.send(
+  payload  => jsonb_build_object('order_id', NEW.id, 'amount', NEW.amount),
+  event    => 'order_created',
+  topic    => 'orders:' || NEW.user_id::text,
+  private  => true
+);
+```
+
+### realtime.broadcast_changes(topic text, event text, op text, table text, schema text, new record, old record, level text default 'topic')
+
+Higher-level wrapper for "broadcast this row change." Designed to be called from a trigger function (see [Realtime model](/concepts/realtime) for a worked trigger example).
+
+The `level` parameter is the channel-privacy level:
+- `'topic'` (default) — sends to a private channel; subscribers need a passing RLS policy on `realtime.messages` to receive.
+- Any other string — treated as public.
+
+## Channel-private auth: realtime.messages
+
+Private channels gate join with a SELECT policy on `realtime.messages`. The function `realtime.topic()` returns the channel name being checked, which lets the policy condition the decision on the topic:
+
+```sql
+-- Only members of the room can join the room channel
+CREATE POLICY only_room_members ON realtime.messages
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.room_members
+      WHERE user_id = auth.uid()
+        AND room_id::text = split_part(realtime.topic(), ':', 2)
+    )
+  );
+```
+
+For more patterns, see the [RLS Cookbook](/guides/rls-policies).
+
+## Error responses
+
+WebSocket errors arrive as `phx_reply` frames with `payload.status: "error"`:
+
+| Reason (in `payload.response.reason`) | When |
+|---|---|
+| `unauthorized` | The JWT failed signature verification or has expired |
+| `unmatched_topic` | The topic shape doesn't match a known pattern (e.g., empty string) |
+| `invalid_join_payload` | The `config` block is malformed |
+| `private_unauthorized` | `private: true` but no matching SELECT policy on `realtime.messages` |
+| `pg_publication_missing` | Subscribed to `postgres_changes` but `supabase_realtime` publication doesn't exist |
+| `pg_filter_invalid` | The `filter` syntax doesn't parse (e.g., wrong operator) |
+
+WebSocket connection errors:
+
+| HTTP status | Reason | When |
+|---|---|---|
+| 403 | `TenantNotFound` | Kong didn't preserve the Host header. Self-hosted only; on Powabase managed cloud this is a platform bug. |
+| 401 | Bad apikey query param | The `apikey` is missing, malformed, or rejected |
+
+REST errors: standard JSON shape, `{ "error": "<message>" }`.
+
+## Service versions and notes
+
+- Realtime: `v2.65.3`
+- Both routes (`/realtime/v1/` and `/realtime/v1/api`) use Kong's `preserve_host: true` to let Realtime parse `tenant_id` from the Host header.
+- Per-project Realtime pods are seeded with `SEED_SELF_HOST=true`, so the tenant is created on first connect rather than requiring an out-of-band provisioning step.
+- The Realtime `DB_ENC_KEY` is shared across Powabase deployments — it's an internal multi-tenant encryption key, not a per-project secret. Not user-relevant.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Realtime model" href="/concepts/realtime">
+The conceptual underpinning: three channels, auth, the publication gotcha.
+</Card>
+
+<Card title="Realtime subscriptions" href="/guides/realtime-subscriptions">
+Three worked patterns in TypeScript with the protocol details from this page applied.
+</Card>
+
+<Card title="RLS Cookbook" href="/guides/rls-policies">
+The policies that gate private channels and the underlying tables for Postgres Changes.
+</Card>
+
+<Card title="Auth Reference" href="/api-reference/auth">
+Where the access tokens that authenticate Realtime connections come from.
+</Card>
+
+</CardGroup>

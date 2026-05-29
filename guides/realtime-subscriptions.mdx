@@ -1,0 +1,314 @@
+---
+title: "Realtime subscriptions"
+description: "Three worked patterns: a live-updating list driven by postgres_changes, a presence-based 'who's online' indicator, and a Broadcast chat."
+icon: "satellite-dish"
+---
+
+These recipes assume you've read [Realtime model](/concepts/realtime) and have either the Anon Key (for unauthenticated demos) or a user access token (for production patterns). They use TypeScript in the browser as the main example since Realtime is overwhelmingly a client-side tool; the Python and cURL approaches at the bottom of each section show how to verify and drive Realtime from outside the browser when you need to.
+
+For the WebSocket protocol details (frame shapes, error responses), see [Realtime Reference](/api-reference/realtime). For the conceptual underpinning, see [Realtime model](/concepts/realtime).
+
+## Setup
+
+All three recipes share the same connection setup. We're using a tiny WebSocket helper rather than the upstream `@supabase/realtime-js` library because Powabase doesn't ship a first-party SDK yet — once you have a working WS client, the protocol from there is straightforward.
+
+```typescript
+const BASE_URL = "wss://{ref}.p.powabase.ai";
+const ANON_KEY = "<your anon key>";
+
+function connect(token: string = ANON_KEY): WebSocket {
+  const url = `${BASE_URL}/realtime/v1/websocket?apikey=${token}&vsn=1.0.0`;
+  return new WebSocket(url);
+}
+
+// Phoenix-style frame format
+function send(ws: WebSocket, ref: string, topic: string, event: string, payload: object) {
+  ws.send(JSON.stringify({ topic, event, payload, ref }));
+}
+```
+
+The `vsn=1.0.0` parameter tells Realtime which protocol version to use. The frames are Phoenix Channels JSON envelopes: `{ topic, event, payload, ref }`. The `ref` is your client-generated request ID — Realtime echoes it back so you can correlate replies.
+
+## Recipe 1 — Live-updating list with Postgres Changes
+
+A todo list where INSERT/UPDATE/DELETE on `public.todos` automatically updates the UI. The classic Postgres Changes pattern.
+
+**Step 1: enable Realtime for the table** (one-time setup, in SQL):
+
+```sql
+-- Add public.todos to the supabase_realtime publication. If the publication
+-- doesn't exist yet, create it.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    CREATE PUBLICATION supabase_realtime;
+  END IF;
+END $$;
+
+ALTER PUBLICATION supabase_realtime ADD TABLE public.todos;
+```
+
+**Step 2: configure RLS on `public.todos`** so the channel only forwards the user's own rows. This is the same own-rows pattern from the [RLS Cookbook](/guides/rls-policies):
+
+```sql
+ALTER TABLE public.todos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY own_todos_read ON public.todos
+  FOR SELECT TO authenticated
+  USING (owner_id = auth.uid());
+-- (plus INSERT/UPDATE/DELETE policies — see the cookbook)
+```
+
+**Step 3: subscribe from the browser** using the signed-in user's access token. This is the part most apps spend time on.
+
+```typescript
+const accessToken = localStorage.getItem("powabase_access_token");
+const ws = connect(accessToken);
+
+let myRef = 1;
+const nextRef = () => String(myRef++);
+
+ws.addEventListener("open", () => {
+  // Join the channel. Topic is arbitrary, but the convention is "realtime:<schema>:<table>".
+  send(ws, nextRef(), "realtime:public:todos", "phx_join", {
+    config: {
+      postgres_changes: [
+        {
+          event: "*",  // INSERT, UPDATE, DELETE, or "*" for all three
+          schema: "public",
+          table: "todos",
+        },
+      ],
+    },
+  });
+});
+
+ws.addEventListener("message", (e) => {
+  const msg = JSON.parse(e.data);
+
+  if (msg.event === "phx_reply" && msg.payload.status === "ok") {
+    console.log("Joined channel:", msg.topic);
+    return;
+  }
+
+  if (msg.event === "postgres_changes") {
+    const { eventType, new: newRow, old: oldRow } = msg.payload.data;
+    switch (eventType) {
+      case "INSERT": addTodoToUI(newRow); break;
+      case "UPDATE": updateTodoInUI(newRow); break;
+      case "DELETE": removeTodoFromUI(oldRow.id); break;
+    }
+  }
+});
+
+// Heartbeat — Realtime expects one every 30s, kills the connection after 60s of silence
+setInterval(() => {
+  send(ws, nextRef(), "phoenix", "heartbeat", {});
+}, 30_000);
+```
+
+The `phx_join` frame opens the subscription. The `postgres_changes` config tells Realtime which events to forward; you can add a `filter` field for column equality (e.g., `filter: "user_id=eq.<uuid>"`) but in this case the RLS policy already restricts to the user's own rows, so an extra filter is redundant.
+
+**Step 4: handle reconnects.** If the WebSocket drops mid-session, your client loses everything that happened during the gap. The pattern is to refetch on reconnect — assume the local state may be stale and reissue the original "load all todos" query, then resume the subscription. Realtime is not a durable queue.
+
+## Recipe 2 — Presence: who's online
+
+For a collaborative document where you show avatars of everyone currently viewing the page. Each user broadcasts their own presence state; everyone sees the union.
+
+```typescript
+const ws = connect(accessToken);
+const channelName = `presence:doc-${docId}`;
+
+ws.addEventListener("open", () => {
+  // Join with a presence config — no postgres_changes here
+  send(ws, nextRef(), channelName, "phx_join", {
+    config: { presence: { key: userId } },
+  });
+});
+
+ws.addEventListener("message", (e) => {
+  const msg = JSON.parse(e.data);
+
+  if (msg.event === "phx_reply" && msg.payload.status === "ok" && msg.topic === channelName) {
+    // We're joined. Track our presence.
+    send(ws, nextRef(), channelName, "presence_diff", {
+      action: "track",
+      data: {
+        user_id: userId,
+        display_name: userDisplayName,
+        cursor_color: pickColor(userId),
+        joined_at: new Date().toISOString(),
+      },
+    });
+    return;
+  }
+
+  if (msg.event === "presence_state") {
+    // Initial snapshot of everyone currently in the channel
+    const everyone = msg.payload;  // { user_id: [presence_data, ...] }
+    setOnlineUsers(Object.values(everyone).flat());
+  }
+
+  if (msg.event === "presence_diff") {
+    // Incremental updates
+    const { joins, leaves } = msg.payload;
+    handlePresenceDiff(joins, leaves);
+  }
+});
+
+// Untrack on tab close so others see us leave promptly
+window.addEventListener("beforeunload", () => {
+  send(ws, nextRef(), channelName, "presence_diff", { action: "untrack" });
+});
+```
+
+**Two things to know.** First, presence is **per-channel, not per-connection** — if a user opens two tabs, they appear twice in the presence list unless you dedupe by `user_id` client-side. Second, `untrack` only fires when the tab closes cleanly. If the user kills the tab or loses connectivity, Realtime infers the leave from a heartbeat timeout (about 60 seconds), so the avatar lingers briefly.
+
+For "real-time cursor positions on top of a shared document," combine Presence (to know who's online) with Broadcast (to send the position updates without storing them). Each cursor move emits a broadcast event with `{ user_id, x, y }`; the receivers update each user's cursor based on the latest position they've seen.
+
+## Recipe 3 — Broadcast chat
+
+A chat room where every message goes to every subscriber. No persistence — refresh the page and the history is gone. Real apps would also write messages to a table for history, but the broadcast pattern is the right starting point.
+
+```typescript
+const ws = connect(accessToken);
+const channelName = `chat:room-${roomId}`;
+
+ws.addEventListener("open", () => {
+  send(ws, nextRef(), channelName, "phx_join", {
+    config: { broadcast: { self: false, ack: true } },
+  });
+});
+
+// Send a message
+function sendMessage(text: string) {
+  send(ws, nextRef(), channelName, "broadcast", {
+    type: "broadcast",
+    event: "chat_message",
+    payload: { user_id: userId, display_name: userDisplayName, text, at: Date.now() },
+  });
+}
+
+ws.addEventListener("message", (e) => {
+  const msg = JSON.parse(e.data);
+
+  if (msg.event === "broadcast" && msg.payload.event === "chat_message") {
+    appendMessageToUI(msg.payload.payload);
+  }
+});
+```
+
+**Two config options worth knowing.** `self: false` means the sender doesn't receive their own messages — usually what you want, since you're already showing them the message you sent. `ack: true` means Realtime sends a `phx_reply` confirming the broadcast was delivered to its routing layer (doesn't confirm individual subscribers received it).
+
+For a private chat room (only authenticated users in the room can read messages), wrap the join in a private channel:
+
+```typescript
+send(ws, nextRef(), channelName, "phx_join", {
+  config: {
+    broadcast: { self: false, ack: true },
+    private: true,  // Realtime will check realtime.messages RLS
+  },
+});
+```
+
+And define the RLS policy that gates who can join:
+
+```sql
+CREATE POLICY only_room_members ON realtime.messages
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.room_members
+      WHERE user_id = auth.uid()
+        AND room_id::text = (string_to_array(realtime.topic(), ':'))[2]
+    )
+  );
+```
+
+`realtime.topic()` returns the channel name being checked; we split it on `:` and look up membership. The pattern is straight out of the [RLS Cookbook](/guides/rls-policies) — Realtime is just one more table to write policies against.
+
+## REST broadcast (sending from a backend)
+
+For server-side message emission — webhook handlers, scheduled jobs — use the REST broadcast endpoint instead of opening a WebSocket from your backend:
+
+<CodeGroup>
+
+```python Python
+import requests
+
+requests.post(
+    f"https://{ref}.p.powabase.ai/realtime/v1/api/broadcast",
+    headers={
+        "apikey": SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+    },
+    json={
+        "messages": [
+            {
+                "topic": "chat:room-42",
+                "event": "system_announcement",
+                "payload": {"text": "Server maintenance in 5 min"},
+                "private": False,
+            },
+        ],
+    },
+)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL_HTTP}/realtime/v1/api/broadcast`, {
+  method: "POST",
+  headers: {
+    apikey: SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    messages: [
+      { topic: "chat:room-42", event: "system_announcement", payload: { text: "Maintenance in 5 min" }, private: false },
+    ],
+  }),
+});
+```
+
+```bash cURL
+curl -X POST 'https://{ref}.p.powabase.ai/realtime/v1/api/broadcast' \
+  -H "apikey: <SERVICE_ROLE_KEY>" \
+  -H "Authorization: Bearer <SERVICE_ROLE_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"topic":"chat:room-42","event":"system_announcement","payload":{"text":"Maintenance in 5 min"},"private":false}]}'
+```
+
+</CodeGroup>
+
+The endpoint takes an array, so you can fan out to multiple channels in one call. Use the Service Role Key — only it can broadcast on behalf of the server.
+
+## Common failure modes
+
+- **`403 TenantNotFound` on WS upgrade.** Only happens with self-hosted Realtime where Kong isn't preserving the Host header. On Powabase managed cloud, you should never see this. If you do, file a support ticket.
+- **`401` immediately after `phx_join` on a private channel.** Your RLS policy on `realtime.messages` denied the join. Test the policy in psql with the role+claims set, same as the [RLS Testing](/guides/rls-testing) flow.
+- **Joined OK but no `postgres_changes` events arrive.** Either (a) the table isn't in the `supabase_realtime` publication, (b) RLS on the underlying table denies SELECT for your role, or (c) the filter syntax is wrong. Check the publication first: `SELECT * FROM pg_publication_tables WHERE pubname = 'supabase_realtime';`.
+- **WebSocket closes after 60 seconds of silence.** You're not sending heartbeats. Add the `setInterval` from the recipes above.
+- **Reconnect storms after a deploy.** Realtime pods restart during deploys; clients reconnect immediately and pile on. Add exponential backoff with jitter to your reconnect logic — start at 1s, double up to 30s, jitter ±25%.
+
+## Next steps
+
+<CardGroup cols={2}>
+
+<Card title="Realtime model" href="/concepts/realtime">
+The three channel types, auth, and the publication-setup gotcha.
+</Card>
+
+<Card title="Realtime Reference" href="/api-reference/realtime">
+WebSocket protocol details and the REST broadcast endpoint.
+</Card>
+
+<Card title="RLS Cookbook" href="/guides/rls-policies">
+The patterns that gate private channels (via realtime.messages RLS) and underlying tables for Postgres Changes.
+</Card>
+
+<Card title="Connection pooling" href="/guides/connection-pooling">
+Why you can't use LISTEN/NOTIFY as a Realtime alternative through the pooler.
+</Card>
+
+</CardGroup>
