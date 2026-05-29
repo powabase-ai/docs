@@ -193,6 +193,34 @@ curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/sources/{indexed_source_id}/ca
 
 </CodeGroup>
 
+### DELETE /api/knowledge-bases/{id}/sources/{indexed_source_id}
+
+Remove a source from a knowledge base. Cascades to delete the source's chunks, so the source no longer contributes to retrieval in this KB. The underlying Source itself is not deleted — only its link to this KB and the chunks indexed for it. Returns 204 on success and 404 if no `indexed_sources` row matches the given pair.
+
+<ParamField path="id" type="string" required>
+KB ID
+</ParamField>
+
+<ParamField path="indexed_source_id" type="string" required>
+The `indexed_sources.id` returned when the source was added (not the source UUID itself).
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+requests.delete(f"{BASE_URL}/api/knowledge-bases/{kb_id}/sources/{indexed_source_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/sources/${indexedSourceId}`, { method: "DELETE", headers });
+```
+
+```bash cURL
+curl -X DELETE '{BASE_URL}/api/knowledge-bases/{id}/sources/{indexed_source_id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
 ### POST /api/knowledge-bases/{id}/reindex
 
 Re-index sources in the knowledge base. The body is optional — empty body re-indexes every source. Pass `indexed_source_ids` to re-index a specific subset, or `failed_only: true` to retry only sources currently in `failed` status.
