@@ -70,15 +70,6 @@
         "tab": "Platform",
         "groups": [
           {
-            "group": "Getting Started",
-            "pages": [
-              "concepts/platform-overview",
-              "guides/auth-connection",
-              "guides/quickstart",
-              "concepts/platform-comparison"
-            ]
-          },
-          {
             "group": "Architecture",
             "pages": [
               "concepts/architecture",
