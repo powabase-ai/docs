@@ -4,6 +4,10 @@ description: "Understand the control plane / data plane split, per-project isola
 icon: "server"
 ---
 
+<Note>
+New to Powabase? Start with [Platform overview](/concepts/platform-overview) and [Auth & Connection](/guides/auth-connection) for the basics, then return here for the infrastructure deep-dive.
+</Note>
+
 ## Control Plane vs Data Plane
 
 The platform uses a two-tier architecture. A single shared Control Plane manages organizations, projects, users, and authentication. It provisions a fully isolated Data Plane for each project — including its own Postgres database, API gateway, auth service, storage, and AI service.
