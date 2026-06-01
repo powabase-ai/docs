@@ -11,7 +11,7 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Documentation",
+        "tab": "AI",
         "groups": [
           {
             "group": "Getting Started",
@@ -25,15 +25,12 @@
           {
             "group": "Concepts",
             "pages": [
-              "concepts/architecture",
               "concepts/sources-extraction",
               "concepts/knowledge-bases-indexing",
               "concepts/agents-tools",
               "concepts/orchestrations-concept",
               "concepts/workflows-concept",
-              "concepts/streaming-patterns",
-              "concepts/database-access",
-              "concepts/ai-coding-assistants"
+              "concepts/streaming-patterns"
             ]
           },
           {
@@ -46,7 +43,8 @@
               "guides/workflows-programmatic",
               "guides/workflows-copilot",
               "guides/streaming-guide",
-              "guides/advanced-agent-config"
+              "guides/advanced-agent-config",
+              "concepts/ai-coding-assistants"
             ]
           },
           {
@@ -69,12 +67,28 @@
         ]
       },
       {
-        "tab": "BaaS",
+        "tab": "Platform",
         "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "concepts/platform-overview",
+              "guides/auth-connection",
+              "guides/quickstart",
+              "concepts/platform-comparison"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "concepts/architecture",
+              "concepts/database-access",
+              "concepts/schemas"
+            ]
+          },
           {
             "group": "Database",
             "pages": [
-              "concepts/schemas",
               "concepts/ai-schema-postgrest",
               "guides/ai-schema-recipes",
               "guides/connection-pooling",
