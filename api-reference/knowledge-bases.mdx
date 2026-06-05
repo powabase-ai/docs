@@ -32,18 +32,56 @@ curl '{BASE_URL}/api/knowledge-bases' -H "apikey: {API_KEY}" -H "Authorization: 
 
 ### POST /api/knowledge-bases
 
-Create a new knowledge base.
+Create a new knowledge base. Only `name` is required. You can also pass `indexing_config` (how sources are chunked/embedded) and `retrieval_config` (how the KB is searched) — anything you supply is merged over the strategy's defaults rather than replacing them. The retrieval-side features — **reranking**, **query enrichment**, and **multimodal retrieval** — all live inside `retrieval_config` and are persisted on the KB, so the minimal example and the fully-configured example below differ only in how much of that object you fill in.
 
 <RequestExample>
 
-```json Request
+```json Minimal
 {
   "name": "Product Docs",
   "description": "Product documentation"
 }
 ```
 
+```json Fully configured
+{
+  "name": "Product Docs",
+  "description": "Product documentation",
+  "indexing_config": {
+    "strategy": "chunk_embed",
+    "chunk_size": 2000,
+    "overlap": 50,
+    "embedding_model": "text-embedding-3-small"
+  },
+  "retrieval_config": {
+    "method": "hybrid",
+    "top_k": 5,
+    "vector_weight": 0.5,
+    "context_mode": "image",
+    "reranker": {
+      "model": "cohere/rerank-english-v3.0",
+      "candidate_count": 20
+    },
+    "query_enrichment": {
+      "enabled": true,
+      "model": "gpt-5-mini"
+    }
+  }
+}
+```
+
 </RequestExample>
+
+| `retrieval_config` field | Type | Notes |
+| --- | --- | --- |
+| `method` | string | `vector_search` / `full_text` / `hybrid` / `tree_search`. |
+| `top_k` | int | Results returned after any reranking. |
+| `vector_weight` | float | Hybrid only — balance of semantic vs keyword (default `0.5`). |
+| `context_mode` | string | `text` (default) or `image` for multimodal retrieval. All strategies except Doc2JSON. |
+| `reranker` | object | `{ model, candidate_count }`. Present ⇒ reranking on; omit ⇒ off. |
+| `query_enrichment` | object | `{ enabled, model }`. LLM query rewriting; `enabled` defaults to `false`. |
+
+All of these are editable later via `PATCH` (see below). Reranking, query enrichment, and `context_mode` take effect immediately on the next search — no reindex. Changing `indexing_config` (chunking, embedding model, strategy) requires a reindex to take effect. See [Knowledge bases & indexing](/concepts/knowledge-bases-indexing) for the per-strategy `indexing_config` fields.
 
 <CodeGroup>
 
@@ -87,11 +125,26 @@ curl '{BASE_URL}/api/knowledge-bases/{id}' -H "apikey: {API_KEY}" -H "Authorizat
 
 ### PATCH /api/knowledge-bases/{id}
 
-Update knowledge base configuration or strategy.
+Update knowledge base configuration or strategy. Accepts the same `name`, `description`, `indexing_config`, and `retrieval_config` fields as create. Send the full `retrieval_config` object you want — it is stored as-is. Reranking, query enrichment, and `context_mode` changes apply to the next search immediately; `indexing_config` changes need a reindex to take effect.
 
 <ParamField path="id" type="string" required>
 KB ID
 </ParamField>
+
+<RequestExample>
+
+```json Enable reranking + query enrichment on an existing KB
+{
+  "retrieval_config": {
+    "method": "hybrid",
+    "top_k": 5,
+    "reranker": { "model": "voyage/rerank-2.5", "candidate_count": 30 },
+    "query_enrichment": { "enabled": true }
+  }
+}
+```
+
+</RequestExample>
 
 <CodeGroup>
 
@@ -542,7 +595,9 @@ KB ID
 | `filter_metadata` | object | Narrow to chunks whose enrichment-metadata fields match. Keys are field names from the KB's enrichment config (see `/enrichment`); values can be scalars or `{ "op": "...", "value": ... }` shapes. |
 | `source_ids` | array of UUIDs | Restrict to chunks from this set of sources only. Useful for "search inside one specific document." |
 
-Per-request overrides for retrieval tuning are also accepted: `vector_weight` (hybrid only), `context_mode` (e.g. surrounding-chunks context), `ts_language` (full-text language for stemming), reranker fields. These override the KB's stored `retrieval_config` for this one request only.
+Per-request overrides for retrieval tuning are also accepted: `vector_weight` (hybrid only), `context_mode` (`text` or `image` — see [Multimodal Retrieval](/concepts/knowledge-bases-indexing#multimodal-retrieval)), `ts_language` (full-text language for stemming), and reranker fields. These override the KB's stored `retrieval_config` for this one request only.
+
+The reranker, query-enrichment, and multimodal (`context_mode`) behaviors are all properties stored on the KB's `retrieval_config` — set them at creation or change them later with `PATCH`. See the create body below and the [knowledge bases concept guide](/concepts/knowledge-bases-indexing#reranking) for the full field reference.
 
 <CodeGroup>
 

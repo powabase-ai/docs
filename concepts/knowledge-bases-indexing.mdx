@@ -518,20 +518,100 @@ Tree Search reads from the page_index_toc and page_index_nodes tables. It is onl
 
 ## Reranking
 
-Reranking is an optional second stage that improves retrieval precision. The initial retrieval (vector, hybrid, or full-text) fetches a broad candidate pool — by default 20 items (the candidate_count parameter). A cross-encoder reranker then re-scores each candidate by evaluating the query-document pair jointly. Cross-encoders are more accurate than bi-encoder embeddings because they see the query and document together, but they can't be used for initial retrieval because they don't produce storable vectors. After reranking, the top_k results are returned to the caller.
+Reranking is an optional second stage that improves retrieval precision. The initial retrieval (vector, hybrid, or full-text) fetches a broad candidate pool — by default 20 items (the `candidate_count` parameter). A cross-encoder reranker then re-scores each candidate by evaluating the query-document pair jointly. Cross-encoders are more accurate than bi-encoder embeddings because they see the query and document together, but they can't be used for initial retrieval because they don't produce storable vectors. After reranking, the `top_k` results are returned to the caller.
 
-| Reranker | Provider | Notes |
+Reranking is a property of the knowledge base, configured under `retrieval_config.reranker`. It is **enabled whenever `reranker.model` is set** and disabled when the `reranker` object is absent. Because it lives on the KB, you can set it at creation time or change it later with `PATCH /api/knowledge-bases/{id}` — no reindex needed, since reranking happens at query time.
+
+```json
+"retrieval_config": {
+  "method": "hybrid",
+  "top_k": 5,
+  "reranker": {
+    "model": "cohere/rerank-english-v3.0",
+    "candidate_count": 20
+  }
+}
+```
+
+| Field | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `model` | string | `cohere/rerank-english-v3.0` | Reranker model identifier. Presence of this field is what enables reranking. |
+| `candidate_count` | int | `20` | How many candidates Stage 1 fetches before reranking down to `top_k`. Higher = better recall, more latency. |
+
+The reranker is applied as a strict two-stage pipeline: Stage 1 retrieves `candidate_count` items using the configured `method`, Stage 2 re-scores them and truncates to `top_k`. If the reranker call fails, retrieval falls back to the Stage 1 results truncated to `top_k` (fail-open). Each rerank is billed as a `reranker_call`.
+
+| Reranker model | Provider | Notes |
 | --- | --- | --- |
-| Rerank English v3.0 (default) | Cohere | High quality, English-optimized |
-| Rerank Multilingual v3.0 | Cohere | Multilingual support |
-| Jina Reranker v2 Base Multilingual | Jina AI | Multilingual, competitive quality |
-| Rerank 2.5 | Voyage | Strong general-purpose reranker |
-| Rerank 2.5 Lite | Voyage | Lighter variant, lower cost |
+| `cohere/rerank-english-v3.0` (default) | Cohere | High quality, English-optimized |
+| `cohere/rerank-multilingual-v3.0` | Cohere | Multilingual support |
+| `jina_ai/jina-reranker-v2-base-multilingual` | Jina AI | Multilingual, competitive quality |
+| `voyage/rerank-2.5` | Voyage | Strong general-purpose reranker |
+| `voyage/rerank-2.5-lite` | Voyage | Lighter variant, lower cost |
+| `zerank-1` / `zerank-2` | ZeroEntropy | Dedicated reranking models (model strings starting with `zerank` route to the ZeroEntropy client) |
+
+Other LiteLLM-compatible rerankers (Together AI, Azure AI, self-hosted VLLM via a `hosted_vllm/` prefix) also work. Always treat `GET /api/config/kb-defaults` as the authoritative list of selectable rerankers rather than hardcoding this table.
 
 <Info>
 **Reranker API keys are platform-managed**
 
-Reranker API keys (Cohere, Jina, Voyage) are configured at the platform level by your administrator, not per-organization. If reranking returns errors, contact your platform admin to verify the reranker provider key is configured.
+Reranker API keys (Cohere, Jina, Voyage, ZeroEntropy) are configured at the platform level by your administrator, not per-organization. If reranking returns errors, contact your platform admin to verify the reranker provider key is configured.
+</Info>
+
+## Query Enrichment
+
+Query enrichment is an optional LLM step that rewrites the user's raw query before retrieval to improve recall. It is a property of the knowledge base, configured under `retrieval_config.query_enrichment`, and is **off by default** — you opt in per KB.
+
+```json
+"retrieval_config": {
+  "method": "hybrid",
+  "query_enrichment": {
+    "enabled": true,
+    "model": "gpt-5-mini"
+  }
+}
+```
+
+| Field | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `false` | Turns LLM query enrichment on for this KB. |
+| `model` | string | `gpt-5-mini` | LLM used to rewrite the query (temperature 0). |
+
+When enabled, the LLM rewrites each query into two variants and retrieval uses whichever fits each signal:
+
+- **`enriched_query`** — a semantically rich restatement, used for the vector-search embedding.
+- **`keyword_query`** — OR-joined keywords and synonyms, used for BM25 full-text scoring.
+
+If a session history is available (e.g. an agent conversation), the last few turns are passed in so the LLM can resolve pronouns and ellipsis — turning a follow-up like "what about pricing?" into "What are the AWS cloud pricing options?". The enrichment result is returned in the search/context response under `query_enrichment` (`original_query`, `enriched_query`, `keyword_query`, `model`, `method: "llm_enrichment"`), so you can inspect exactly what was searched. Each enrichment is billed as a `query_enrichment` action.
+
+<Info>
+**When to enable query enrichment**
+
+Enable it for **conversational / multi-turn** retrieval where follow-up queries depend on prior context, or when terse keyword queries benefit from synonym expansion on hybrid/full-text KBs. Skip it for simple single-shot lookups — it adds an LLM call (latency + cost) to every search. It is **automatically skipped for `tree_search`** KBs, which already do their own LLM-based document/section selection. For `full_text` and `hybrid`, even when LLM enrichment is off, a fast tokenization-based context builder still folds recent conversation into the keyword query — that is not the same as (nor billed like) LLM enrichment.
+</Info>
+
+## Multimodal Retrieval
+
+By default, retrieval returns the **text** of matched chunks. Setting `retrieval_config.context_mode` to `"image"` switches a knowledge base into multimodal retrieval: instead of (or alongside) text, the platform attaches the **original page images** of the matched content and passes them to the LLM as multimodal content blocks. This preserves layout, tables, charts, stamps, and handwriting that text extraction flattens or loses.
+
+```json
+"retrieval_config": {
+  "method": "hybrid",
+  "top_k": 5,
+  "context_mode": "image"
+}
+```
+
+| Field | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `context_mode` | string | `text` | `text` returns extracted text; `image` returns page-image content blocks for the matched items. |
+| `image_delivery` | string | platform default (`base64`) | How images are delivered — inline `base64` data URIs or signed URLs. |
+
+`context_mode` is a **retrieval-time** option and is available for **all indexing strategies except Doc2JSON** — `chunk_embed`, `full_document`, `page_index`, and `graph_index` all support it. (Doc2JSON has its own indexing-time `use_images` option instead; see its section above.) It works by resolving the page-image derivatives that were rendered when the source was extracted, so it requires those page images to exist. If a matched item has no page image available, that item gracefully falls back to its text. Like the other retrieval settings, `context_mode` lives on the KB record and can be set at creation or changed later via `PATCH` without reindexing.
+
+<Info>
+**Multimodal retrieval needs a vision-capable agent model**
+
+The matched page images are only useful if the consuming model can see images. When you attach a multimodal KB to an agent, give the agent a vision-capable model (e.g. a GPT-4o / GPT-5 class model). A text-only model will silently ignore the image blocks — a common cause of an agent that "has the document" but answers as if it didn't.
 </Info>
 
 ## Embedding Models
