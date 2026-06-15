@@ -1,0 +1,145 @@
+---
+title: "Bring your own LLM"
+description: "Point agents, copilots, and indexing jobs at any LiteLLM-supported model — including OpenRouter models like DeepSeek — using the correct provider key and model-string format."
+icon: "plug"
+---
+
+Powabase resolves every model through [LiteLLM](https://docs.litellm.ai/), so the `model` string you pass anywhere — an agent, an orchestration, an indexing job — is a **LiteLLM model ID**. This guide covers the two things you need to get right: registering the provider key, and formatting the model string for that provider.
+
+<Note>
+**Prerequisites:**
+
+- Authentication configured (see the [Connect & authenticate](/guides/auth-connection) guide)
+- An API key for the upstream provider you want to use (OpenAI, Anthropic, Google, or OpenRouter)
+</Note>
+
+## Model-string format
+
+The prefix tells LiteLLM which provider to route to. Bare IDs route to first-party OpenAI/Anthropic; everything else is prefixed.
+
+| Provider | Format | Example |
+| --- | --- | --- |
+| OpenAI | bare ID | `gpt-4o`, `gpt-5.4-mini`, `o4-mini` |
+| Anthropic | bare ID | `claude-sonnet-4-6` |
+| Google (Gemini) | `gemini/<model>` | `gemini/gemini-2.5-pro` |
+| OpenRouter | `openrouter/<org>/<model>` | `openrouter/qwen/qwen3-235b-a22b-2507` |
+
+<Warning>
+**OpenRouter slugs must match LiteLLM's cost-map keys, not OpenRouter's own slugs.** LiteLLM's `openrouter/...` identifiers occasionally differ from the slugs shown on OpenRouter's website or `/api/v1/models`. If a model errors with a routing or cost-lookup failure, the slug is the first thing to check — confirm it exists as a key in LiteLLM's [model cost map](https://github.com/BerriAI/litellm/blob/main/litellm/model_prices_and_context_window_backup.json) (search for `openrouter/`).
+</Warning>
+
+<Tip>
+The `model` field on an **agent** is passed straight through to LiteLLM and is **not** restricted to the model picker shown in Studio. The curated dropdown only gates the Studio UI and the `AGENT_DEFAULT_MODEL` setting — via the API you can set any LiteLLM-resolvable model string. It must, however, support **function calling** if the agent has tools or a knowledge base; a non-tool model fails on its first tool call.
+</Tip>
+
+## Which keys do you need?
+
+Four providers accept a bring-your-own-key (BYOK) credential: `openai`, `anthropic`, `google`, `openrouter`. Register one with the [AI Provider Keys API](/api-reference/ai-provider-keys), then point your model string at it.
+
+If a provider is also **AI-on-us** on your pod (the platform has a server-side key for it), you can skip BYOK and pay in credits instead. Check which providers are covered:
+
+```bash cURL
+curl '{BASE_URL}/api/ai-provider-keys/platform_supported' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+# {"providers": ["openai", "anthropic"]}
+```
+
+OpenRouter is rarely AI-on-us, so for OpenRouter models you almost always need your own key. Without a usable key, agent runs fail with `402 provider_key_decrypt_failed`. See the [billing model](/concepts/billing-model#byok-provider-keys-and-ai-on-us) for how BYOK and credits interact.
+
+## Worked example: DeepSeek via OpenRouter
+
+<Steps>
+
+<Step title="Register your OpenRouter key">
+
+<CodeGroup>
+
+```python Python
+requests.post(
+    f"{BASE_URL}/api/ai-provider-keys",
+    headers=headers,
+    json={"provider": "openrouter", "api_key": "sk-or-..."},
+)
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/ai-provider-keys' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"provider": "openrouter", "api_key": "sk-or-..."}'
+```
+
+</CodeGroup>
+
+The platform validates the key against the provider before storing it. A hard rejection (bad credential) returns `400` and stores nothing.
+
+</Step>
+
+<Step title="Create an agent pointed at the DeepSeek model">
+
+Use the `openrouter/<org>/<model>` format. DeepSeek's OpenRouter org is `deepseek`:
+
+<CodeGroup>
+
+```python Python
+agent = requests.post(
+    f"{BASE_URL}/api/agents",
+    headers=headers,
+    json={
+        "name": "DeepSeek Agent",
+        "model": "openrouter/deepseek/deepseek-chat",
+        "system_prompt": "You are a helpful assistant.",
+    },
+).json()
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/agents' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "DeepSeek Agent", "model": "openrouter/deepseek/deepseek-chat"}'
+```
+
+</CodeGroup>
+
+<Note>
+`openrouter/deepseek/deepseek-chat` follows the documented format, but confirm the exact slug against LiteLLM's cost map (see the warning above) — DeepSeek publishes several models (e.g. chat vs. reasoner), and the LiteLLM key is what the platform routes on. If you give the agent tools, pick a DeepSeek model that supports function calling.
+</Note>
+
+</Step>
+
+<Step title="Run it">
+
+Run the agent as usual — the platform decrypts your OpenRouter key at call time and routes the request through LiteLLM.
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/agents/{agent_id}/run' \
+  -H "apikey: {API_KEY}" \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello!"}'
+```
+
+If you see `402 provider_key_decrypt_failed`, the OpenRouter key is missing or unreadable — re-register it in step 1.
+
+</Step>
+
+</Steps>
+
+## Related
+
+<CardGroup cols={2}>
+<Card title="AI provider keys reference" icon="key" href="/api-reference/ai-provider-keys">
+Store, validate, rotate, and inspect per-project provider credentials.
+</Card>
+<Card title="Build an agent" icon="robot" href="/guides/build-agent">
+Create an agent, assign tools and a knowledge base, then stream a conversation.
+</Card>
+<Card title="Billing model" icon="credit-card" href="/concepts/billing-model">
+How AI-on-us credits and BYOK keys interact, and the 402/503 error shapes.
+</Card>
+<Card title="Settings reference" icon="sliders" href="/api-reference/settings">
+Defaults like `AGENT_DEFAULT_MODEL` and the curated model choices.
+</Card>
+</CardGroup>

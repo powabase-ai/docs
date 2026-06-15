@@ -47,7 +47,7 @@ Create a new agent.
 }
 ```
 
-The body honors `name` (required), `model`, `system_prompt`, and `settings` (object). Top-level fields like `temperature` are silently dropped — anything model-tuning related must be nested in `settings`.
+The body honors `name` (required), `model`, `system_prompt`, and `settings` (object). Top-level fields like `temperature` are silently dropped — anything model-tuning related must be nested in `settings`. `model` is a LiteLLM model ID passed through unchanged (e.g. `gpt-4o`, `claude-sonnet-4-6`, `openrouter/<org>/<model>`); see [Bring your own LLM](/guides/byollm) for the per-provider format and key requirements.
 
 </RequestExample>
 
@@ -493,29 +493,78 @@ curl -X DELETE '{BASE_URL}/api/agents/{id}/mcp-servers/{server_id}' -H "apikey: 
 
 ## Hooks
 
+Intercept agent execution at lifecycle boundaries. For the full event/type semantics, the webhook request/response contract, and the streaming caveat, see [Hooks & Middleware](/concepts/agents-tools#hooks--middleware).
+
 ### POST /api/agents/{id}/hooks
 
-Add a hook to the agent (pre/post execution events).
+Add a hook to the agent.
 
 <ParamField path="id" type="string" required>
 Agent ID
 </ParamField>
 
+<ParamField body="event" type="string" required>
+When the hook fires. One of: `OnRunStart`, `PreToolUse`, `OnDelegation`, `PostToolUse`, `PreResponse`, `OnRunComplete`. Stored verbatim and **not** validated — an unrecognized value is saved but never fires.
+</ParamField>
+
+<ParamField body="type" type="string" required>
+What the hook does. One of: `http` (POST to a webhook URL), `rule` (local condition evaluation), `approval` (human-in-the-loop gate). Also stored verbatim and not validated.
+</ParamField>
+
+<ParamField body="config" type="object" required>
+Type-specific configuration (may be `{}`). For `http`: `url` (required), optional `headers`, `timeout_seconds` (default 5). For `approval`: optional `message`, `timeout` (default 300). For `rule`: a `condition` string or a `rules` array.
+</ParamField>
+
+<ParamField body="matcher" type="string">
+Tool name to target. Omit to match all tools (or for non-tool events).
+</ParamField>
+
+<ParamField body="enabled" type="boolean" default="true">
+Whether the hook is active.
+</ParamField>
+
+<ParamField body="position" type="integer" default="0">
+Execution order among the agent's hooks (ascending).
+</ParamField>
+
+<Note>
+Hooks are immutable — there is no update endpoint. To change a hook, `DELETE` it and create a new one.
+</Note>
+
 <CodeGroup>
 
 ```python Python
-response = requests.post(f"{BASE_URL}/api/agents/{agent_id}/hooks", headers=headers, json={"event": "before_run", "type": "webhook", "config": {"url": "https://example.com/hook"}})
+# An HTTP hook that POSTs to your webhook before every tool call
+response = requests.post(f"{BASE_URL}/api/agents/{agent_id}/hooks", headers=headers, json={"event": "PreToolUse", "type": "http", "config": {"url": "https://example.com/hook"}})
 ```
 
 ```typescript TypeScript
-await fetch(`${BASE_URL}/api/agents/${agentId}/hooks`, { method: "POST", headers, body: JSON.stringify({ event: "before_run", type: "webhook", config: { url: "https://example.com/hook" } }) });
+await fetch(`${BASE_URL}/api/agents/${agentId}/hooks`, { method: "POST", headers, body: JSON.stringify({ event: "PreToolUse", type: "http", config: { url: "https://example.com/hook" } }) });
 ```
 
 ```bash cURL
-curl -X POST '{BASE_URL}/api/agents/{id}/hooks' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"event": "before_run", "type": "webhook", "config": {"url": "..."}}'
+curl -X POST '{BASE_URL}/api/agents/{id}/hooks' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"event": "PreToolUse", "type": "http", "config": {"url": "https://example.com/hook"}}'
 ```
 
 </CodeGroup>
+
+<ResponseExample>
+
+```json 201
+{
+  "id": "hook_...",
+  "agent_id": "agent_...",
+  "event": "PreToolUse",
+  "matcher": null,
+  "type": "http",
+  "config": { "url": "https://example.com/hook" },
+  "enabled": true,
+  "position": 0,
+  "created_at": "2026-01-01T00:00:00Z"
+}
+```
+
+</ResponseExample>
 
 ### GET /api/agents/{id}/hooks
 

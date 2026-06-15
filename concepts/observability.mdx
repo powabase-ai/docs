@@ -58,7 +58,7 @@ The agentic `/api/*` surface has logging for AI resources:
 - **`GET /api/sessions/{id}/runs/{run_id}/retrieved-context`** — what context the agent saw on a specific run, useful for debugging "why did it answer that way".
 - **`GET /api/workflows/{id}/executions/{execution_id}/logs`** — per-block logs from a workflow execution.
 
-These are the right place to look for "why did this specific operation fail" debugging. They don't aggregate across operations — for that, you'd query directly against `ai.*` via PostgREST. See [ai-schema recipes Recipe 2](/guides/ai-schema-recipes#recipe-2-usage-analytics-on-agent_runs) for the usage-analytics pattern.
+These are the right place to look for "why did this specific operation fail" debugging. They don't aggregate across operations — for that, you'd query directly against `ai.*` via PostgREST. See [ai-schema recipes Recipe 2](/guides/ai-schema-recipes#recipe-2--usage-analytics-on-agent_runs) for the usage-analytics pattern.
 
 ## Status and incidents
 

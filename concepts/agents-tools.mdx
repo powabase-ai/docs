@@ -86,21 +86,64 @@ Every agent conversation happens within a session. A session stores a sequence o
 
 ## Hooks & Middleware
 
-Hooks let you intercept agent execution at key points with three types of middleware: HTTP webhooks, rule-based policies, and human approval gates. Each hook is configured with an event (when it fires), a type (what it does), an optional matcher (which tool to target), and a config object.
+Hooks let you intercept agent execution at **discrete lifecycle boundaries** with three types of middleware: HTTP webhooks, rule-based policies, and human approval gates. Each hook is configured with an `event` (when it fires), a `type` (what it does), an optional `matcher` (which tool to target by name), and a `config` object.
 
-| Event | When It Fires | Can Block? | Can Modify? |
+| Event | When it fires | Can block? | Can modify? |
 | --- | --- | --- | --- |
-| OnRunStart | Before the agent begins processing | Yes (blocks entire run) | No |
-| PreToolUse | Before each tool execution | Yes (returns error to LLM) | Yes (can replace tool arguments) |
-| PostToolUse | After each tool execution | No | Yes (can replace tool result) |
-| PreResponse | After the ReAct loop, before returning content | Yes (replaces response with blocked message) | Yes (can modify final content) |
-| OnRunComplete | After successful completion (fire-and-forget) | No | No |
+| `OnRunStart` | Before the run begins processing | Yes (fails the entire run) | No |
+| `PreToolUse` | Before each tool execution | Yes (returns an error to the LLM) | Yes (`modified_input` replaces the tool arguments) |
+| `OnDelegation` | Before a delegate-tool call, in multi-agent setups (fires after `PreToolUse`, only for delegate tools) | Yes (blocks the delegation) | No |
+| `PostToolUse` | After each tool execution | No | Yes (`modified_output` replaces the tool result) |
+| `PreResponse` | After the ReAct loop, before returning the final content | Yes (replaces the response with a blocked message) | Yes (`modified_output` replaces the final content) |
+| `OnRunComplete` | After successful completion (fire-and-forget) | No | No |
 
-| Hook Type | Behavior |
+| Hook type | Behavior |
 | --- | --- |
-| http | POSTs event data to a webhook URL. Response can allow, deny, or modify. Fail-open on error (non-200 or timeout). Default 5-second timeout. |
-| rule | Evaluates conditions against tool arguments. Supports operators: CONTAINS, STARTS_WITH, MATCHES (regex), IN. First matching deny rule wins. |
-| approval | Pauses execution and emits an approval_requested SSE event. Blocks until the approve endpoint is called or 300-second timeout expires. |
+| `http` | POSTs the event payload to a webhook URL and applies the JSON response (see contract below). Fail-open on any error (non-200, timeout, or unreachable). Timeout defaults to 5s (`config.timeout_seconds`); custom `config.headers` are sent with the request, and the URL is SSRF-validated. |
+| `rule` | Evaluates conditions locally against the tool arguments (or, for output events, `{"output": ...}`). Supports operators `CONTAINS`, `STARTS_WITH`, `MATCHES` (regex), and `IN`. First matching deny rule wins. |
+| `approval` | Pauses execution and emits an `approval_requested` SSE event. Blocks until the approve endpoint is called or `config.timeout` (default 300s) expires. |
+
+<Warning>
+**Hooks are not stream middleware.** Every event fires at a lifecycle boundary — they do not see the token stream chunk-by-chunk. Even `PreResponse` runs *after* the ReAct loop completes, on the fully assembled content; by then a streaming client has already received every `chunk` event, so a hook cannot rewrite, inject, or intercept tokens mid-stream. If you need to transform streamed output (e.g. rewriting inline markers into rich content as it flows to the client), do it in your own application or proxy layer that sits between Powabase's SSE stream and your end users — not in a hook.
+</Warning>
+
+### HTTP hook contract
+
+When an `http` hook fires, Powabase sends a `POST` to `config.url` with this body:
+
+```json
+{
+  "event": "PreToolUse",
+  "tool_name": "database_query",
+  "data": { "query": "SELECT ..." },
+  "output": "..."
+}
+```
+
+`tool_name` is `""` for non-tool events (`OnRunStart`, `PreResponse`, `OnRunComplete`). `data` carries the event's input — the tool arguments for tool events, `{"message": "<user input>"}` for `OnRunStart`, `{}` for `PreResponse`. `output` is present only when there is one (`PostToolUse` → the tool result, `PreResponse` → the assembled content).
+
+Your endpoint must return `200` with a JSON body; any other status (or a timeout/error) is treated as **allow** (fail-open):
+
+```json
+{
+  "action": "allow",
+  "message": "optional reason, surfaced when action is deny",
+  "modified_input": { "query": "SELECT ... LIMIT 100" },
+  "modified_output": "redacted result"
+}
+```
+
+- `action` defaults to `"allow"`; return `"deny"` to block (only on blockable events — see the table).
+- `modified_input` replaces the tool arguments (`PreToolUse` only).
+- `modified_output` replaces the tool result (`PostToolUse`) or the final content (`PreResponse`).
+
+### Hook record fields
+
+A hook is created with `event` and `type` (both required) and a `config` object (required, may be `{}`). Optional: `matcher` (a tool name; omit to match all tools), `enabled` (default `true`), and `position` (an integer that orders hook execution, default `0`). Hooks are immutable once created — to change one, delete it and add a new one. See the [Agents API reference](/api-reference/agents#hooks) for the CRUD endpoints.
+
+<Note>
+The API stores `event` and `type` exactly as sent and does **not** validate them against the lists above. A hook with an unrecognized event or type is created successfully but **never fires** — so a typo fails silently. Use the exact values documented here.
+</Note>
 
 ## Human-in-the-Loop Approval
 
