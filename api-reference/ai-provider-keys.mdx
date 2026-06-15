@@ -8,6 +8,19 @@ Each project stores its own set of model-provider API keys (OpenAI, Anthropic, G
 
 When you set a key, the platform calls the provider to validate it. Soft failures (provider down, transient network issue) still store the key with `is_valid: false`; hard failures (provider rejects the credential) reject the request without storing anything.
 
+## Model-string format
+
+A stored key is selected by the **provider prefix** of the `model` string you pass to an agent, indexing job, or other consumer. Powabase routes models through LiteLLM, so these are LiteLLM model IDs:
+
+| Provider | Format | Example |
+| --- | --- | --- |
+| `openai` | bare ID | `gpt-4o` |
+| `anthropic` | bare ID | `claude-sonnet-4-6` |
+| `google` | `gemini/<model>` | `gemini/gemini-2.5-pro` |
+| `openrouter` | `openrouter/<org>/<model>` | `openrouter/qwen/qwen3-235b-a22b-2507` |
+
+OpenRouter slugs must match LiteLLM's `openrouter/...` cost-map keys, which can differ from OpenRouter's own slugs. For a full walkthrough — including DeepSeek and the function-calling requirement for agents — see [Bring your own LLM](/guides/byollm).
+
 ## Common Patterns
 
 Configure keys once after creating a project, then let agents and indexing jobs pick them up automatically. Use the batch PUT endpoint when wiring keys from a setup script. Use the `/validate` endpoint to test a key before storing it (e.g. in an admin UI).

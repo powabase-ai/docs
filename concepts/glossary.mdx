@@ -34,7 +34,7 @@ They're named identically and easily confused. The agentic kind is "things calli
 
 ## Hooks
 
-**Agent hook** (in `ai.hooks`). Lifecycle callback on an agent — PreToolUse, PostToolUse, plus the approval flow. Configured at agent-create time, fires during agent runs.
+**Agent hook** (in `ai.hooks`). Lifecycle callback on an agent at one of six events — `OnRunStart`, `PreToolUse`, `OnDelegation`, `PostToolUse`, `PreResponse`, `OnRunComplete` — in one of three types (`http`, `rule`, `approval`, the last being the human-approval flow). Added to an agent via the hooks API, fires during agent runs. See [Hooks & Middleware](/concepts/agents-tools#hooks--middleware).
 
 **Database trigger function** ("trigger hook" in some Postgres docs). A function that runs on table changes, via `CREATE TRIGGER`. Sometimes loosely called a "hook." Different mechanism, different surface.
 

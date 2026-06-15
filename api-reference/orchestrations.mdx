@@ -354,7 +354,13 @@ curl '{BASE_URL}/api/orchestrations/runs/{run_id}' -H "apikey: {API_KEY}" -H "Au
 
 ## Hooks
 
-Orchestration hooks fire at lifecycle events (e.g. `before_run`, `after_run`) and can call out to webhooks or other handler types. Hooks fire in `position` order; setting `enabled: false` keeps the row but skips execution.
+These endpoints register hooks against an orchestration using the same `ai.hooks` model as [agent hooks](/api-reference/agents#hooks) — `event`, `type`, `config`, `matcher`, `enabled`, and `position`.
+
+<Warning>
+**Orchestration hooks are not executed yet.** The CRUD endpoints below work — you can create, list, and delete hook rows — but the orchestration engine does not currently fire them at runtime, so a registered hook has no effect on an orchestration run today. Register them only for forward-compatibility. When execution lands, orchestration hooks will follow the [agent hook contract](/concepts/agents-tools#hooks--middleware) (events such as `OnRunStart`/`OnRunComplete`, types `http`/`rule`/`approval`). The `event` and `type` you send are stored verbatim and not validated.
+
+Note also that hooks attached to a **member agent** do not fire while that agent runs *inside* an orchestration — only [standalone agent runs](/api-reference/agents#hooks) execute hooks today. If you rely on an agent's approval or policy hook, run that agent directly rather than as part of an orchestration until this lands.
+</Warning>
 
 ### POST /api/orchestrations/{id}/hooks
 
@@ -362,10 +368,10 @@ Add a hook.
 
 <ParamField path="id" type="string" required>Orchestration ID</ParamField>
 
-<ParamField body="event" type="string" required>Lifecycle event name (e.g. `before_run`, `after_run`).</ParamField>
-<ParamField body="type" type="string" required>Hook handler type (e.g. `webhook`).</ParamField>
-<ParamField body="config" type="object" required>Handler-specific configuration (for `webhook` type, includes `url`).</ParamField>
-<ParamField body="matcher" type="object">Optional condition narrowing when the hook fires.</ParamField>
+<ParamField body="event" type="string" required>Lifecycle event name. Stored verbatim; not validated.</ParamField>
+<ParamField body="type" type="string" required>Hook handler type — `http`, `rule`, or `approval` (see the agent hook contract).</ParamField>
+<ParamField body="config" type="object" required>Handler-specific configuration (for `http`, includes `url`).</ParamField>
+<ParamField body="matcher" type="string">Optional filter narrowing when the hook fires.</ParamField>
 <ParamField body="enabled" type="boolean">Defaults to `true`.</ParamField>
 <ParamField body="position" type="integer">Execution order within the event. Defaults to `0`.</ParamField>
 
@@ -373,8 +379,8 @@ Add a hook.
 
 ```json Request
 {
-  "event": "after_run",
-  "type": "webhook",
+  "event": "OnRunComplete",
+  "type": "http",
   "config": { "url": "https://example.com/orch-hook" },
   "enabled": true,
   "position": 0
@@ -386,15 +392,15 @@ Add a hook.
 <CodeGroup>
 
 ```python Python
-requests.post(f"{BASE_URL}/api/orchestrations/{orch_id}/hooks", headers=headers, json={"event": "after_run", "type": "webhook", "config": {"url": "https://example.com/hook"}})
+requests.post(f"{BASE_URL}/api/orchestrations/{orch_id}/hooks", headers=headers, json={"event": "OnRunComplete", "type": "http", "config": {"url": "https://example.com/hook"}})
 ```
 
 ```typescript TypeScript
-await fetch(`${BASE_URL}/api/orchestrations/${orchId}/hooks`, { method: "POST", headers, body: JSON.stringify({ event: "after_run", type: "webhook", config: { url: "https://example.com/hook" } }) });
+await fetch(`${BASE_URL}/api/orchestrations/${orchId}/hooks`, { method: "POST", headers, body: JSON.stringify({ event: "OnRunComplete", type: "http", config: { url: "https://example.com/hook" } }) });
 ```
 
 ```bash cURL
-curl -X POST '{BASE_URL}/api/orchestrations/{id}/hooks' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"event": "after_run", "type": "webhook", "config": {"url": "..."}}'
+curl -X POST '{BASE_URL}/api/orchestrations/{id}/hooks' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"event": "OnRunComplete", "type": "http", "config": {"url": "..."}}'
 ```
 
 </CodeGroup>

@@ -39,6 +39,7 @@
               "guides/upload-document",
               "guides/create-knowledge-base",
               "guides/build-agent",
+              "guides/byollm",
               "guides/orchestration",
               "guides/workflows-programmatic",
               "guides/workflows-copilot",

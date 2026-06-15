@@ -104,7 +104,7 @@ Add an HTTP webhook hook that fires before each tool call. Use hooks to log tool
 **Endpoint:** `POST /api/agents/{id}/hooks`
 
 <Note>
-Hook events: PreToolUse (before tool execution), PostToolUse (after tool execution). Use the optional matcher field to target a specific tool by name.
+This example uses `PreToolUse`, but hooks fire at six lifecycle events — `OnRunStart`, `PreToolUse`, `OnDelegation`, `PostToolUse`, `PreResponse`, `OnRunComplete` — and come in three types (`http`, `rule`, `approval`). Use the optional `matcher` field to target a specific tool by name. See [Hooks & Middleware](/concepts/agents-tools#hooks--middleware) for the full event semantics and the webhook request/response contract.
 </Note>
 
 <CodeGroup>

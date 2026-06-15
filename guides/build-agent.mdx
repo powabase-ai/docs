@@ -21,6 +21,10 @@ Define the agent with a name, LLM model, and system prompt that describes its be
 
 **Endpoint:** `POST /api/agents`
 
+<Note>
+`model` is a LiteLLM model ID. Bare IDs (`gpt-4o`, `claude-sonnet-4-6`) route to OpenAI/Anthropic; other providers are prefixed (`gemini/...`, `openrouter/...`). The field is not limited to the Studio model picker, but a provider you haven't [registered a key](/api-reference/ai-provider-keys) for (and that isn't AI-on-us) returns `402 provider_key_decrypt_failed`. See [Bring your own LLM](/guides/byollm) for the formats and an OpenRouter/DeepSeek example.
+</Note>
+
 <CodeGroup>
 
 ```python Python
