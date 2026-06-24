@@ -21,7 +21,8 @@ A non-exhaustive list of billable operations. Each shows up as a `post_charge` c
 | `workflow_block_<type>` | Per workflow block (`agent`, `code`, `general_api`, `platform_api`, etc.) — failed blocks aren't billed |
 | `indexing_<strategy>` | Per 1K tokens indexed (ChunkEmbed, PageIndex, GraphIndex, Doc2JSON, FullDocument) |
 | `extraction` | Per page of OCR / text extraction |
-| `web_search` / `web_scrape` | Each call to the web tools |
+| `web_search` / `web_scrape` | Each call to the web tools (standard search / scrape) |
+| `web_search_deep` / `web_search_deep_reasoning` | A `web_search` call run with `search_type: "deep"` or `"deep-reasoning"` — Exa's agentic deep search, billed at higher tiers than a standard `web_search` |
 | `metadata_enrichment` | Per chunk during enrichment runs |
 | `knowledge_search` | Per call to `/api/knowledge-bases/{id}/search` |
 
