@@ -36,12 +36,30 @@ The platform provides eight builtin tools. Assign them to an agent by name via P
 | code_execute | Run Python or JavaScript in a sandboxed environment | Delegated to external sandbox service. Default 30-second timeout, configurable per call. |
 | storage_read | List and download files from project storage buckets | Binary files return a signed URL instead of content. Supports list (with prefix/limit/offset) and download operations. |
 | storage_write | Upload text content to project storage buckets | UTF-8 text content only. Returns path and file size. |
-| web_search | Search the web using Exa.ai with neural/keyword modes, domain filters, date ranges, and content depth control | Results capped at 20K-50K chars by content mode. 1-10 results. Requires EXA_API_KEY. |
+| web_search | Search the web using Exa.ai. Five `search_type` modes (`auto`, `neural`, `keyword`, plus the agentic `deep` and `deep-reasoning` tiers), domain filters, date ranges, category filter, and content depth control | Results capped at 20K-50K chars by content mode. 1-10 results. Requires EXA_API_KEY. `deep` / `deep-reasoning` are slower and bill at higher tiers — see below. |
 | web_scrape | Extract content from web pages as clean markdown, with optional AI vision image analysis | Results capped at 200K chars. Supports markdown/HTML/links formats. include_images uses gpt-4.1-mini vision. Direct image URLs bypass Firecrawl. Requires FIRECRAWL_API_KEY. |
 
 <Warning>
 **`http_request` has no SSRF protection.** Unlike Custom Tools (below), the builtin `http_request` tool calls the URL the agent supplies directly, with no allow-list and no validation against internal addresses. An agent given `http_request` can reach RFC1918 ranges, `localhost`, and cloud metadata endpoints (e.g. `169.254.169.254`). Only enable `http_request` for agents whose model + prompt you trust, or use a Custom Tool with a fixed `endpoint` instead — Custom Tools enforce SSRF via `validate_url` on the endpoint URL.
 </Warning>
+
+#### Web search modes (`search_type`)
+
+The `web_search` tool accepts a `search_type` argument that selects how Exa runs the query. The first three are standard single-pass searches; the last two run Exa's **agentic deep search**, which iterates over multiple queries and reads more pages to produce higher-quality results — at the cost of latency and credits.
+
+| `search_type` | What it does | Relative cost |
+| --- | --- | --- |
+| `auto` *(default)* | Exa picks neural or keyword per query | Standard |
+| `neural` | Semantic / meaning-based search | Standard |
+| `keyword` | Exact term matching | Standard |
+| `deep` | Agentic deep search — slower, broader, higher quality | Higher |
+| `deep-reasoning` | Agentic deep search with an added reasoning pass — slowest and highest quality | Highest |
+
+The other `web_search` arguments apply to every mode: `num_results` (1–10, default 5), `include_domains` / `exclude_domains`, `start_date` / `end_date` (ISO 8601 published-date bounds), `category` (`company`, `news`, `research paper`, `tweet`, `github`, `wikipedia`, `personal site`), and `content_mode` (`highlights` default, `compact_text`, or `full_text`).
+
+<Note>
+**Billing follows the mode.** A standard search bills the `web_search` action; `deep` bills `web_search_deep` and `deep-reasoning` bills `web_search_deep_reasoning`, both priced higher than a standard search. The tier is resolved from the actual `search_type` sent to Exa — including when you pin `search_type` in an agent's tool config — so a deep search always bills the deep rate, never the standard one. Exact per-action prices live on the [pricing page](https://powabase.ai). If the search fails for a platform-side reason (5xx, 429, timeout, or a missing `EXA_API_KEY`), the call is **not** billed; only tenant-fault 4xx errors stay billed.
+</Note>
 
 #### Tool prerequisites
 

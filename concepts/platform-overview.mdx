@@ -1,137 +1,137 @@
 ---
 title: "Platform Overview"
-description: "Powabase is a multi-tenant AI Backend-as-a-Service that provides a unified REST API for building production AI applications. It combines three core modules — Context Engineering, Agent Orchestration, and Workflow Automation — that work independently or together."
+description: "Powabase is a complete, fully managed backend — database, auth, storage, and AI — that your favorite coding agent can build on top of. Point Claude Code, Cursor, Copilot, or an AI app builder like Replit, Base44, or Lovable at your project, and ship a real app without standing up any infrastructure."
 icon: "book-open"
 ---
 
 ## What is Powabase?
 
-Powabase is the infrastructure layer for AI-powered applications. Most teams building with LLMs end up assembling the same stack: a vector database for RAG, an agent framework for tool use, a workflow engine for automation, an auth layer, a file storage service, and a database — then writing the glue code to connect them. Powabase replaces that entire stack with a single API.
+Powabase is the backend for your app — a single, fully managed service that gives you a Postgres database, user authentication, file storage, realtime, and a full suite of AI features behind one API. You don't deploy or operate anything. You create a project, copy two values, and start building.
 
-Unlike frameworks like LangChain or Agno that give you libraries to run in your own infrastructure, Powabase is a fully managed backend — you don't deploy or operate anything. Unlike workflow-only tools like n8n or Dify, the platform provides deep AI primitives (multiple indexing strategies, four retrieval algorithms, ReAct agents with tool execution, multi-agent orchestration) alongside automation. And unlike Supabase, which provides a general-purpose backend, Powabase is purpose-built for AI workloads with first-class support for embeddings, vector search, LLM sessions, and streaming.
+The thing that makes Powabase a great fit for how people build today: **you don't have to write the backend by hand.** Your coding agent can. Powabase speaks the same conventions the popular tools already know, so an agent like Claude Code, Cursor, or GitHub Copilot — or an AI app builder like Replit, Base44, Lovable, or Bolt — can wire your frontend up to a production backend for you. Powabase becomes the one-stop-shop backend your app talks to; your agent writes the code that talks to it.
 
-Each project gets a fully isolated stack: its own Postgres database with pgvector, API gateway, auth service, file storage, and AI service worker. There is no shared state between projects — isolation is enforced at the infrastructure level.
+If you can copy a URL and an API key, you have everything you need to get started. The rest is your agent's job.
 
-## Three Core Modules
+## Build with the coding agent you already use
 
-The platform is organized around three modules that can be used independently or composed together. A simple project might use only Context Engineering for document search. A chatbot uses Context Engineering + Agent Orchestration. A fully automated pipeline uses all three — ingesting documents, reasoning over them with agents, and triggering downstream workflows.
+You don't need to be a backend engineer to build on Powabase. You need the tool you're already using.
 
-### 1. Context Engineering Suite (RAG-as-a-Service)
+Every Powabase project exposes its connection details in one place — the **Connect modal** in the Studio. It gives you a Project URL and an API key (plus ready-to-paste connection strings in nine languages). Those two values are the entire handshake between your app and your backend.
 
-The Context Engineering suite handles the entire RAG pipeline: document ingestion, content extraction, indexing, and retrieval. Upload any document — PDFs, Word files, images, spreadsheets — and the platform extracts text (with OCR for scanned pages), then indexes it using the strategy you choose. This isn't a one-size-fits-all chunking pipeline. The platform offers multiple indexing strategies and four retrieval algorithms, each designed for different document types and query patterns.
+<Steps>
 
-| Indexing Strategy | What It Does | Best For |
-| --- | --- | --- |
-| ChunkEmbed | Splits text into overlapping chunks and generates vector embeddings | General RAG — most documents, fastest and cheapest |
-| PageIndex | Builds a hierarchical document tree with LLM-generated summaries | Long structured PDFs (legal, compliance, specs) |
-| GraphIndex | Extends PageIndex with entity extraction and cross-reference enrichment | Dense cross-referenced documents (regulations, codebases) |
-| Doc2JSON | Extracts structured fields from documents using a user-defined schema | Invoices, forms, resumes — structured data extraction |
+<Step title="Grab your project's connection details">
+Open the Studio, click **Connect** in your project header, and copy the **Project URL** and an **API key**. That's the only setup step.
+</Step>
 
-| Retrieval Method | How It Works | Best For |
-| --- | --- | --- |
-| Vector Search | Cosine similarity over embeddings | Fast semantic matching |
-| Full-Text Search | BM25 keyword scoring | Exact phrases, error codes, IDs |
-| Hybrid Search | Vector + BM25 fused via Reciprocal Rank Fusion | Production RAG (recommended default) |
-| Tree Search | LLM reasons over document structure to select sections | PageIndex KBs — complex structural queries |
+<Step title="Hand them to your coding agent">
+Tell your agent what you're building and paste in the connection details. For example: *"I'm using Powabase as my backend. Here's my Project URL and API key. Add sign-up and login, store user profiles, and let users upload files."* The agent reads these docs, understands the API, and writes the integration code.
+</Step>
 
-The suite also supports cross-encoder reranking (Cohere, Jina, Voyage, and more) for precision-critical applications, three chunking strategies (recursive, fixed-size, markdown-header), configurable embedding models, and project-level defaults for all parameters. This depth of control is what separates RAG-as-a-Service from a basic vector store.
+<Step title="Ship">
+Review what your agent produced, run it, and iterate. Because Powabase is fully managed, there's nothing to deploy or scale on the backend — the project is already live.
+</Step>
+
+</Steps>
+
+<Tip>
+**Already using an AI app builder?** Tools like Replit, Base44, Lovable, and Bolt know how to talk to a Supabase-style backend. Powabase is built on those same building blocks and follows the same API conventions — so anywhere a tool expects that kind of backend, you can give it your Powabase Project URL and key instead, and the database, auth, and storage just work. See [Migrating from Supabase](/guides/migrating-from-supabase) for the specifics.
+</Tip>
+
+It works this smoothly for a simple reason: every endpoint follows consistent, predictable patterns — the same authentication, the same error format, the same streaming protocol everywhere. That consistency is exactly what an AI assistant needs to generate code that runs the first time.
 
 <CardGroup cols={2}>
 
-<Card title="Knowledge Bases & Indexing" href="/concepts/knowledge-bases-indexing">
-Deep dive into every indexing strategy, retrieval algorithm, and configuration option.
+<Card title="Build with AI Coding Assistants" href="/concepts/ai-coding-assistants">
+How to give Claude Code, Cursor, Copilot, and others the context to build on Powabase.
 </Card>
 
-<Card title="Sources & Extraction" href="/concepts/sources-extraction">
-How document ingestion and text extraction works.
+<Card title="Auth & Connection" href="/guides/auth-connection">
+Open the Connect modal, find your URL and keys, and make your first request.
 </Card>
 
 </CardGroup>
 
-### 2. Agent Orchestration
+## One backend for the whole app
 
-Agents are LLM-powered conversational entities that use a ReAct (Reason + Act) loop to handle complex tasks. Each agent has a system prompt, a set of tools, optional knowledge bases, and session-based memory. When a user sends a message, the agent reasons about what to do, calls tools as needed, observes the results, and iterates until it can respond — all streamed in real-time via Server-Sent Events.
+Most apps need the same handful of backend pieces. Powabase includes all of them in every project, so you're not stitching together five services and writing glue code to connect them:
 
-Tools come in three forms: builtin tools (database query, database write, HTTP requests, code execution, storage read/write, web search, web scrape), custom tools (your own endpoints that the platform calls with tool arguments), and MCP servers (external tool providers that the agent discovers at runtime via the Model Context Protocol). For high-stakes operations, the approval flow pauses execution before a tool call and waits for human approval via the API — enabling human-in-the-loop patterns for production deployments.
+| You need… | Powabase gives you… |
+| --- | --- |
+| A database | Postgres with `pgvector`, plus instant REST access to your own tables |
+| User accounts | A full auth system — email/password, OAuth providers, JWTs |
+| File storage | Upload, serve, and secure files with signed URLs |
+| Live updates | Realtime subscriptions for changes as they happen |
+| AI features | Document search (RAG), agents, and automated workflows — built in |
 
-Multi-agent orchestrations take this further: a coordinator agent analyzes incoming messages and delegates subtasks to specialized entity agents based on their role descriptions. Each entity runs independently with its own tools and knowledge bases, and the coordinator synthesizes their results. This enables domain-specialized teams — a billing agent, a technical support agent, and a sales agent all coordinated by a single orchestration endpoint.
+The database, auth, and storage surfaces follow the same conventions as Supabase, so the patterns you (or your agent) already know carry straight over. The difference is everything in that last row: AI is a first-class part of the backend, not something you bolt on later.
+
+## The AI features that set Powabase apart
+
+When your app needs to do more than store and serve data — when it needs to understand documents, hold a conversation, or automate a multi-step process — those capabilities are already in the box. You can ignore them until you need them, and reach for only the ones a given feature requires.
 
 <CardGroup cols={2}>
 
+<Card title="Context Engineering (RAG)" href="/concepts/knowledge-bases-indexing">
+Upload PDFs, Word docs, images, or spreadsheets and get search that understands them — extraction, indexing, and retrieval handled for you, with multiple strategies for different document types.
+</Card>
+
 <Card title="Agents & Tools" href="/concepts/agents-tools">
-The ReAct loop, tool types, sessions, MCP, hooks, and approval flows.
+LLM-powered agents that reason, call tools (database, web search, your own endpoints, MCP servers), and stream answers in real time — with optional human approval for high-stakes actions.
 </Card>
 
 <Card title="Multi-Agent Orchestration" href="/concepts/orchestrations-concept">
-The coordinator pattern for multi-agent collaboration.
+A coordinator that routes work to specialized agents — a billing agent, a support agent, a sales agent — all behind one endpoint.
+</Card>
+
+<Card title="Workflow Automation" href="/concepts/workflows-concept">
+DAG-based pipelines for the steps you know in advance, with AI reasoning inside each step. Trigger them manually, by webhook, or on a schedule.
 </Card>
 
 </CardGroup>
 
-### 3. Workflow Automation
-
-Workflows are DAG-based automation pipelines for semi-deterministic tasks. Unlike agents (which decide what to do), workflows follow a fixed graph of blocks and edges — but individual blocks can contain LLM calls, agent runs, or code execution, so the output is still dynamic. Workflows are ideal when you know the steps but the content within each step requires AI reasoning: classify an email, extract fields, route to the right team, send a notification.
-
-Each workflow is built from composable blocks: starter (manual/API trigger with typed inputs), webhook (HTTP trigger from external systems), agent (run an existing agent with a message), orchestration (delegate to a multi-agent coordinator), code (execute Python or JavaScript), condition (branch the flow based on expressions), split (parallel fan-out execution), platform_api (call platform resources like knowledge base search or agent runs), general_api (call external HTTP APIs), and response (return results). Blocks reference upstream outputs using template syntax, creating a data pipeline through the graph.
-
-Workflows support three trigger mechanisms: manual execution via the API, webhook triggers from external systems (Stripe events, GitHub hooks, form submissions), and scheduled execution via interval timers or cron expressions. Once deployed, a workflow becomes a persistent automation that runs unattended. The AI Copilot can also generate workflow graphs from natural language descriptions, accelerating development.
-
-<CardGroup cols={2}>
-
-<Card title="Workflows" href="/concepts/workflows-concept">
-Block types, graph execution, deployment, and webhooks.
-</Card>
-
-<Card title="Streaming & SSE" href="/concepts/streaming-patterns">
-Real-time events for agents, orchestrations, and workflows.
-</Card>
-
-</CardGroup>
-
-## How the Modules Work Together
-
-The three modules are designed to compose. A knowledge base created in the Context Engineering suite can be attached to an agent in the Agent Orchestration module — the agent automatically gets a search tool that queries the KB during conversations. An agent can be used as a block in a workflow, bringing LLM reasoning into a deterministic pipeline. A workflow can call the Platform API block to search knowledge bases, run agents, or query the database programmatically. And webhooks connect workflows to external systems, closing the loop between your AI backend and the rest of your infrastructure.
+These compose. A knowledge base can back an agent; an agent can be a step in a workflow; a workflow can search a knowledge base or call your database. You use as much or as little as your app needs.
 
 <Tip>
-**Example: End-to-end document processing**
-
-A webhook-triggered workflow receives a customer question → a platform_api block searches a knowledge base for relevant context → an agent block reasons over the context and drafts a response → a condition block checks confidence → a general_api block posts the answer to Slack or escalates to a human. Each step is a block in the workflow graph, combining all three modules.
+**Example: a support assistant in three pieces.** Upload your help docs into a knowledge base, attach it to an agent so it answers grounded in your content, and wrap that agent in a workflow that escalates to a human when confidence is low. Each piece is a few API calls — and your coding agent can write all of them.
 </Tip>
 
-Of course, not all use cases require all modules. The platform is designed to be versatile. You use only the parts you need in order to build your app.
+## Per-project isolation
 
-## Per-Project Infrastructure
-
-Every project gets a fully isolated infrastructure stack: Postgres with pgvector (your database — both the AI schema and your own tables), Kong API gateway (routing and auth), GoTrue (user authentication), Storage API (file management), and a dedicated AI service worker (document extraction, indexing, agent execution). You get direct PostgREST access to your public schema for building application features alongside AI capabilities, and a full auth system for managing end users.
+Every project gets its own fully isolated stack: a dedicated Postgres database with `pgvector`, an API gateway, an auth service, file storage, and an AI service worker. There's no shared state between projects — isolation is enforced at the infrastructure level — so what you build is genuinely yours, and ready for production from day one.
 
 <CardGroup cols={2}>
 
 <Card title="Architecture" href="/concepts/architecture">
-Control plane, data plane, per-project isolation, and database schemas.
+The control plane, data plane, and how each project's stack fits together.
 </Card>
 
 <Card title="Database Access" href="/concepts/database-access">
-Direct PostgREST access to your project database.
+Direct PostgREST and Postgres access to your project database.
 </Card>
 
 </CardGroup>
 
-## Getting Started
+## Getting started
 
-The fastest way to see the platform in action is the Quickstart guide, which builds a RAG agent end-to-end in about 5 minutes. If you prefer to understand the architecture first, start with the Architecture page. If you want to explore a specific module, jump directly to its concept page above.
+The fastest path is to open the Connect modal, hand the details to your coding agent, and describe what you want to build. If you'd rather see the API directly, the Quickstart builds a working RAG agent end-to-end in about five minutes.
 
 <CardGroup cols={2}>
+
+<Card title="Auth & Connection" href="/guides/auth-connection">
+Find your Project URL and keys, and make your first authenticated request.
+</Card>
 
 <Card title="Quickstart" href="/guides/quickstart">
 Build an end-to-end RAG agent in 5 minutes.
 </Card>
 
-<Card title="Auth & Connection" href="/guides/auth-connection">
-Open the Connect modal, pick the right key, and make your first request.
+<Card title="Build with AI Coding Assistants" href="/concepts/ai-coding-assistants">
+Give your agent the context to build complete integrations.
 </Card>
 
-<Card title="Architecture" href="/concepts/architecture">
-Understand the control plane, data plane, and per-project isolation.
+<Card title="How Powabase Compares" href="/concepts/platform-comparison">
+Where Powabase fits next to Supabase, LangChain, and other tools.
 </Card>
 
 </CardGroup>
