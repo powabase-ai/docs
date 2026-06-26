@@ -14,7 +14,7 @@ An Agent wraps an LLM with a system prompt, temperature, a set of tools, and opt
   <img src="/diagrams/agent-react-loop.svg" alt="ReAct loop diagram: User Message → LLM (Reason) → Tool Call? If yes → Execute Tool → Tool Result → back to LLM. If no → Generate Response → Stream to User." />
 </Frame>
 
-Each iteration of the loop is a step. Within a step, the agent can call multiple tools — concurrency-safe tools (like knowledge base search) run in parallel via a thread pool, while other tools execute sequentially. If the agent makes the same tool call with identical arguments three times in a row, the platform detects a doom loop and terminates the run. During streaming, each step is visible as SSE events: step_started, tool_call, tool_result, step_completed, and chunk events for the final response.
+Each iteration of the loop is a step. Within a step, the agent can call multiple tools: concurrency-safe tools (like knowledge base search) run in parallel via a thread pool, while other tools execute sequentially. If the agent makes the same tool call with identical arguments three times in a row, the platform detects a doom loop and terminates the run. During streaming, each step is visible as SSE events: step_started, tool_call, tool_result, step_completed, and chunk events for the final response.
 
 ### Context Management
 
@@ -26,7 +26,7 @@ Agents can use three categories of tools: builtin tools provided by the platform
 
 ### Builtin Tools
 
-The platform provides eight builtin tools. Assign them to an agent by name via POST /api/agents/\{id\}/tools. The database tools include schema-level access control — when assigning them, you configure which schemas and tables the agent can access.
+The platform provides eight builtin tools. Assign them to an agent by name via POST /api/agents/\{id\}/tools. The database tools include schema-level access control: when assigning them, you configure which schemas and tables the agent can access.
 
 | Tool | Description | Constraints |
 | --- | --- | --- |
@@ -40,12 +40,12 @@ The platform provides eight builtin tools. Assign them to an agent by name via P
 | web_scrape | Extract content from web pages as clean markdown, with optional AI vision image analysis | Results capped at 200K chars. Supports markdown/HTML/links formats. include_images uses gpt-4.1-mini vision. Direct image URLs bypass Firecrawl. Requires FIRECRAWL_API_KEY. |
 
 <Warning>
-**`http_request` has no SSRF protection.** Unlike Custom Tools (below), the builtin `http_request` tool calls the URL the agent supplies directly, with no allow-list and no validation against internal addresses. An agent given `http_request` can reach RFC1918 ranges, `localhost`, and cloud metadata endpoints (e.g. `169.254.169.254`). Only enable `http_request` for agents whose model + prompt you trust, or use a Custom Tool with a fixed `endpoint` instead — Custom Tools enforce SSRF via `validate_url` on the endpoint URL.
+**`http_request` has no SSRF protection.** Unlike Custom Tools (below), the builtin `http_request` tool calls the URL the agent supplies directly, with no allow-list and no validation against internal addresses. An agent given `http_request` can reach RFC1918 ranges, `localhost`, and cloud metadata endpoints (e.g. `169.254.169.254`). Only enable `http_request` for agents whose model + prompt you trust, or use a Custom Tool with a fixed `endpoint` instead. Custom Tools enforce SSRF via `validate_url` on the endpoint URL.
 </Warning>
 
 #### Web search modes (`search_type`)
 
-The `web_search` tool accepts a `search_type` argument that selects how Exa runs the query. The first three are standard single-pass searches; the last two run Exa's **agentic deep search**, which iterates over multiple queries and reads more pages to produce higher-quality results — at the cost of latency and credits.
+The `web_search` tool accepts a `search_type` argument that selects how Exa runs the query. The first three are standard single-pass searches; the last two run Exa's **agentic deep search**, which iterates over multiple queries and reads more pages for higher-quality results, at the cost of latency and credits.
 
 | `search_type` | What it does | Relative cost |
 | --- | --- | --- |
@@ -58,7 +58,7 @@ The `web_search` tool accepts a `search_type` argument that selects how Exa runs
 The other `web_search` arguments apply to every mode: `num_results` (1–10, default 5), `include_domains` / `exclude_domains`, `start_date` / `end_date` (ISO 8601 published-date bounds), `category` (`company`, `news`, `research paper`, `tweet`, `github`, `wikipedia`, `personal site`), and `content_mode` (`highlights` default, `compact_text`, or `full_text`).
 
 <Note>
-**Billing follows the mode.** A standard search bills the `web_search` action; `deep` bills `web_search_deep` and `deep-reasoning` bills `web_search_deep_reasoning`, both priced higher than a standard search. The tier is resolved from the actual `search_type` sent to Exa — including when you pin `search_type` in an agent's tool config — so a deep search always bills the deep rate, never the standard one. Exact per-action prices live on the [pricing page](https://powabase.ai). If the search fails for a platform-side reason (5xx, 429, timeout, or a missing `EXA_API_KEY`), the call is **not** billed; only tenant-fault 4xx errors stay billed.
+**Billing follows the mode.** A standard search bills the `web_search` action; `deep` bills `web_search_deep` and `deep-reasoning` bills `web_search_deep_reasoning`, both priced higher than a standard search. The tier is resolved from the actual `search_type` sent to Exa, including when you pin `search_type` in an agent's tool config, so a deep search always bills the deep rate, never the standard one. Exact per-action prices live on the [pricing page](https://powabase.ai). If the search fails for a platform-side reason (5xx, 429, timeout, or a missing `EXA_API_KEY`), the call is **not** billed; only tenant-fault 4xx errors stay billed.
 </Note>
 
 #### Tool prerequisites
@@ -74,7 +74,7 @@ Some builtin tools need an API key or sandbox configured before they'll work. If
 | `web_search` | `EXA_API_KEY` setting | Studio → Settings → Tools, or `PUT /api/settings/EXA_API_KEY` |
 | `web_scrape` | `FIRECRAWL_API_KEY` setting (and optional `VISION_MODEL` if `include_images: true`) | Studio → Settings → Tools, or `PUT /api/settings/FIRECRAWL_API_KEY`. `VISION_MODEL` defaults to `gpt-4.1-mini`. |
 
-If you're enabling these via API rather than the Studio, set them with `PUT /api/settings/{key}` — see [Settings API](/api-reference/settings).
+If you're enabling these via API rather than the Studio, set them with `PUT /api/settings/{key}`. See [Settings API](/api-reference/settings).
 
 ### Custom Tools
 
@@ -84,11 +84,11 @@ Custom tools call your own HTTP endpoints. You define the tool with a name, desc
 
 MCP (Model Context Protocol) servers let you connect agents to external tool providers. Add an MCP server URL to your agent, and at the start of each run the platform sends a `tools/list` JSON-RPC request to discover available tools. Discovered tools are namespaced (`mcp__{server_name}__{tool_name}`) and added to the agent's tool set alongside builtin and custom tools. Tool calls are executed via `tools/call` JSON-RPC requests. Timeout is 30 seconds for both discovery and per tool call.
 
-**Transport:** the platform's MCP client speaks JSON-RPC over **HTTP POST** to the server URL. (The DB schema accepts a `transport` field with default `http`; other values like `sse` are stored but not consumed by the current client.) Use a server that exposes JSON-RPC over HTTP — most MCP server frameworks do this by default.
+**Transport:** the platform's MCP client speaks JSON-RPC over **HTTP POST** to the server URL. (The DB schema accepts a `transport` field with default `http`; other values like `sse` are stored but not consumed by the current client.) Use a server that exposes JSON-RPC over HTTP; most MCP server frameworks do this by default.
 
 **Headers:** any `headers` you configure on the server (typically for auth) are sent on both `tools/list` and `tools/call` requests. There's no per-call header injection.
 
-**enabled flag:** if you set `enabled: false` on an MCP server, discovery skips it entirely — its tools aren't added and no `tools/call` requests fire. Use this to temporarily disconnect a server without removing it.
+**enabled flag:** if you set `enabled: false` on an MCP server, discovery skips it entirely: its tools aren't added and no `tools/call` requests fire. Use this to temporarily disconnect a server without removing it.
 
 **Failure handling:** if `tools/list` fails (network error, non-200, JSON-RPC error), the agent run **continues without that server's tools** (fail-open). The failure is logged but not surfaced as a run error.
 
@@ -100,7 +100,7 @@ When you link a knowledge base to an agent, the platform automatically creates a
 
 ## Sessions & Memory
 
-Every agent conversation happens within a session. A session stores a sequence of runs, each containing the user input, assistant response, tool calls, tool results, and usage statistics. When you pass a session_id with a new message, the platform loads all completed runs from that session and reconstructs the full message history for the LLM. Sessions persist until explicitly deleted, enabling long-running multi-turn conversations. New sessions are created automatically if no session_id is provided — the start SSE event returns the generated session_id for future use.
+Every agent conversation happens within a session. A session stores a sequence of runs, each containing the user input, assistant response, tool calls, tool results, and usage statistics. When you pass a session_id with a new message, the platform loads all completed runs from that session and reconstructs the full message history for the LLM. Sessions persist until explicitly deleted, enabling long-running multi-turn conversations. New sessions are created automatically if no session_id is provided; the start SSE event returns the generated session_id for future use.
 
 ## Hooks & Middleware
 
@@ -122,7 +122,7 @@ Hooks let you intercept agent execution at **discrete lifecycle boundaries** wit
 | `approval` | Pauses execution and emits an `approval_requested` SSE event. Blocks until the approve endpoint is called or `config.timeout` (default 300s) expires. |
 
 <Warning>
-**Hooks are not stream middleware.** Every event fires at a lifecycle boundary — they do not see the token stream chunk-by-chunk. Even `PreResponse` runs *after* the ReAct loop completes, on the fully assembled content; by then a streaming client has already received every `chunk` event, so a hook cannot rewrite, inject, or intercept tokens mid-stream. If you need to transform streamed output (e.g. rewriting inline markers into rich content as it flows to the client), do it in your own application or proxy layer that sits between Powabase's SSE stream and your end users — not in a hook.
+**Hooks are not stream middleware.** Every event fires at a lifecycle boundary; they do not see the token stream chunk-by-chunk. Even `PreResponse` runs *after* the ReAct loop completes, on the fully assembled content; by then a streaming client has already received every `chunk` event, so a hook cannot rewrite, inject, or intercept tokens mid-stream. If you need to transform streamed output (e.g. rewriting inline markers into rich content as it flows to the client), do it in your own application or proxy layer that sits between Powabase's SSE stream and your end users, not in a hook.
 </Warning>
 
 ### HTTP hook contract
@@ -138,7 +138,7 @@ When an `http` hook fires, Powabase sends a `POST` to `config.url` with this bod
 }
 ```
 
-`tool_name` is `""` for non-tool events (`OnRunStart`, `PreResponse`, `OnRunComplete`). `data` carries the event's input — the tool arguments for tool events, `{"message": "<user input>"}` for `OnRunStart`, `{}` for `PreResponse`. `output` is present only when there is one (`PostToolUse` → the tool result, `PreResponse` → the assembled content).
+`tool_name` is `""` for non-tool events (`OnRunStart`, `PreResponse`, `OnRunComplete`). `data` carries the event's input: the tool arguments for tool events, `{"message": "<user input>"}` for `OnRunStart`, `{}` for `PreResponse`. `output` is present only when there is one (`PostToolUse` → the tool result, `PreResponse` → the assembled content).
 
 Your endpoint must return `200` with a JSON body; any other status (or a timeout/error) is treated as **allow** (fail-open):
 
@@ -151,16 +151,16 @@ Your endpoint must return `200` with a JSON body; any other status (or a timeout
 }
 ```
 
-- `action` defaults to `"allow"`; return `"deny"` to block (only on blockable events — see the table).
+- `action` defaults to `"allow"`; return `"deny"` to block (only on blockable events; see the table).
 - `modified_input` replaces the tool arguments (`PreToolUse` only).
 - `modified_output` replaces the tool result (`PostToolUse`) or the final content (`PreResponse`).
 
 ### Hook record fields
 
-A hook is created with `event` and `type` (both required) and a `config` object (required, may be `{}`). Optional: `matcher` (a tool name; omit to match all tools), `enabled` (default `true`), and `position` (an integer that orders hook execution, default `0`). Hooks are immutable once created — to change one, delete it and add a new one. See the [Agents API reference](/api-reference/agents#hooks) for the CRUD endpoints.
+A hook is created with `event` and `type` (both required) and a `config` object (required, may be `{}`). Optional: `matcher` (a tool name; omit to match all tools), `enabled` (default `true`), and `position` (an integer that orders hook execution, default `0`). Hooks are immutable once created: to change one, delete it and add a new one. See the [Agents API reference](/api-reference/agents#hooks) for the CRUD endpoints.
 
 <Note>
-The API stores `event` and `type` exactly as sent and does **not** validate them against the lists above. A hook with an unrecognized event or type is created successfully but **never fires** — so a typo fails silently. Use the exact values documented here.
+The API stores `event` and `type` exactly as sent and does **not** validate them against the lists above. A hook with an unrecognized event or type is created successfully but **never fires**, so a typo fails silently. Use the exact values documented here.
 </Note>
 
 ## Human-in-the-Loop Approval
@@ -179,7 +179,7 @@ The streaming endpoint (POST /api/agents/\{id\}/run/stream) returns Server-Sent 
 
 ## Sync (Non-Streaming) Run
 
-The sync endpoint (POST /api/agents/\{id\}/run) runs the agent without streaming and returns the full response as JSON. In this mode, no tools are loaded and no ReAct loop runs — the agent makes a single LLM call with the conversation context. This is useful for simple question-answering where tool use isn't needed.
+The sync endpoint (POST /api/agents/\{id\}/run) runs the agent without streaming and returns the full response as JSON. In this mode, no tools are loaded and no ReAct loop runs: the agent makes a single LLM call with the conversation context. This is useful for simple question-answering where tool use isn't needed.
 
 ## Limits & Safeguards
 

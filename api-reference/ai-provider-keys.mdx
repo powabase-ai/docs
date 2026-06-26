@@ -4,13 +4,13 @@ description: "Store, validate, and rotate per-project credentials for OpenAI, An
 icon: "key"
 ---
 
-Each project stores its own set of model-provider API keys (OpenAI, Anthropic, Google, OpenRouter). Keys are encrypted at rest and decrypted only when an agent, workflow, or indexing job needs them. Stored keys are returned masked — the full secret is never echoed back.
+Each project stores its own set of model-provider API keys (OpenAI, Anthropic, Google, OpenRouter). Keys are encrypted at rest and decrypted only when an agent, workflow, or indexing job needs them. Stored keys are returned masked; the full secret is never echoed back.
 
 When you set a key, the platform calls the provider to validate it. Soft failures (provider down, transient network issue) still store the key with `is_valid: false`; hard failures (provider rejects the credential) reject the request without storing anything.
 
 ## Model-string format
 
-A stored key is selected by the **provider prefix** of the `model` string you pass to an agent, indexing job, or other consumer. Powabase routes models through LiteLLM, so these are LiteLLM model IDs:
+A stored key is selected by the **provider prefix** of the `model` string you pass to an agent, indexing job, or other consumer. Powabase routes models through LiteLLM, so these are LiteLLM model IDs.
 
 | Provider | Format | Example |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ A stored key is selected by the **provider prefix** of the `model` string you pa
 | `google` | `gemini/<model>` | `gemini/gemini-2.5-pro` |
 | `openrouter` | `openrouter/<org>/<model>` | `openrouter/qwen/qwen3-235b-a22b-2507` |
 
-OpenRouter slugs must match LiteLLM's `openrouter/...` cost-map keys, which can differ from OpenRouter's own slugs. For a full walkthrough — including DeepSeek and the function-calling requirement for agents — see [Bring your own LLM](/guides/byollm).
+OpenRouter slugs must match LiteLLM's `openrouter/...` cost-map keys, which can differ from OpenRouter's own slugs. For a full walkthrough, including DeepSeek and the function-calling requirement for agents, see [Bring your own LLM](/guides/byollm).
 
 ## Common Patterns
 
@@ -27,7 +27,7 @@ Configure keys once after creating a project, then let agents and indexing jobs 
 
 ### GET /api/ai-provider-keys
 
-List all configured provider keys. Each entry includes `id`, `provider`, `masked_key` (the only representation of the secret ever returned by the API), `is_valid`, `last_validated_at`, `created_at`, and `updated_at`.
+List all configured provider keys. Each entry includes `id`, `provider`, `masked_key` (the only representation of the secret the API ever returns), `is_valid`, `last_validated_at`, `created_at`, and `updated_at`.
 
 <CodeGroup>
 
@@ -83,7 +83,7 @@ curl -X POST '{BASE_URL}/api/ai-provider-keys' -H "apikey: {API_KEY}" -H "Author
 
 ### PUT /api/ai-provider-keys
 
-Batch upsert. Pass any subset of providers. Null or empty values are no-ops (won't clear existing keys — use DELETE for that). On any hard-fail validation, the entire batch is rolled back.
+Batch upsert. Pass any subset of providers. Null or empty values are no-ops (won't clear existing keys; use DELETE for that). On any hard-fail validation, the entire batch is rolled back.
 
 <RequestExample>
 
@@ -178,9 +178,9 @@ curl -X POST '{BASE_URL}/api/ai-provider-keys/validate' -H "apikey: {API_KEY}" -
 
 ### GET /api/ai-provider-keys/platform_supported
 
-Returns which providers the platform itself has keys for at this pod — the "AI-on-us" providers, where the platform pays for inference and bills you in credits instead of requiring your own key.
+Returns which providers the platform itself has keys for at this pod: the "AI-on-us" providers, where the platform pays for inference and bills you in credits instead of requiring your own key.
 
-The Studio's LLM Provider Keys settings page uses this to render "AI-on-us active" vs "BYOK required" badges per provider. It's also the right pre-flight check before pointing an agent at a model whose provider you haven't BYOK'd yet — if the provider is `platform_supported`, the model just works; otherwise the agent run will return `402 provider_key_decrypt_failed` until you upsert your own key.
+The Studio's LLM Provider Keys settings page uses this to render "AI-on-us active" vs "BYOK required" badges per provider. It's also a pre-flight check before pointing an agent at a model whose provider you haven't BYOK'd yet: if the provider is `platform_supported`, the model works; otherwise the agent run returns `402 provider_key_decrypt_failed` until you upsert your own key.
 
 <Note>
 The path uses an **underscore** (`platform_supported`), not a hyphen. Hyphenating it 404s.
@@ -210,7 +210,7 @@ curl '{BASE_URL}/api/ai-provider-keys/platform_supported' -H "apikey: {API_KEY}"
 { "providers": ["openai", "anthropic"] }
 ```
 
-The list is a subset of `["openai", "anthropic", "google", "openrouter"]` — whichever ones the pod has a platform-side env-var key configured for.
+The list is a subset of `["openai", "anthropic", "google", "openrouter"]`: whichever ones the pod has a platform-side env-var key configured for.
 
 ## Error Responses
 

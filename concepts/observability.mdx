@@ -4,7 +4,7 @@ description: "What's user-callable for monitoring your project's health, and wha
 icon: "chart-line"
 ---
 
-Powabase's observability surface today is intentionally minimal at the user-callable layer. Most platform-side telemetry — request histograms, per-pod metrics, error rates, latency percentiles — lives behind the platform's internal monitoring stack and isn't exposed at your project URL. This page documents what *is* user-accessible, what's coming from the Studio side, and what stays internal.
+Powabase's observability surface today is intentionally minimal at the user-callable layer. Most platform-side telemetry (request histograms, per-pod metrics, error rates, latency percentiles) lives behind the platform's internal monitoring stack and isn't exposed at your project URL. This page documents what *is* user-accessible, what's coming from the Studio side, and what stays internal.
 
 For service-level health, see the [Status page](https://status.powabase.ai). For per-resource observability inside the AI surface (run logs, execution histories), see the relevant API reference pages.
 
@@ -12,14 +12,14 @@ For service-level health, see the [Status page](https://status.powabase.ai). For
 
 ### GET /api/health
 
-The one public health endpoint. Returns 200 OK when the project's API service is reachable through Kong. Lightweight — useful as a synthetic uptime check.
+The one public health endpoint. Returns 200 OK when the project's API service is reachable through Kong. Lightweight, useful as a synthetic uptime check.
 
 ```bash
 curl 'https://{ref}.p.powabase.ai/api/health'
 # → 200 {"status": "healthy", "service": "project-service"}
 ```
 
-No auth required. Don't poll faster than once every 30 seconds — the endpoint is meant for monitoring, not stress testing.
+No auth required. Don't poll faster than once every 30 seconds; the endpoint is meant for monitoring, not stress testing.
 
 That's the entire public observability API surface.
 
@@ -27,18 +27,18 @@ That's the entire public observability API surface.
 
 The Studio at [app.powabase.ai](https://app.powabase.ai) has three observability views for each project, fed by control-plane endpoints (`/api/platform/projects/<ref>/observability/*`) that aren't exposed externally:
 
-- **Project overview** — aggregate request counts, error rates, recent activity timeline.
-- **Extraction queue** — for the AI surface specifically — which source extractions are pending / running / failed.
-- **Health checks** — per-service status (Postgres, GoTrue, Storage, etc.) inside your project's stack.
+- **Project overview:** aggregate request counts, error rates, recent activity timeline.
+- **Extraction queue:** for the AI surface specifically, which source extractions are pending / running / failed.
+- **Health checks:** per-service status (Postgres, GoTrue, Storage, etc.) inside your project's stack.
 
-These are Studio-facing views, not API endpoints you can programmatically query against your project URL. The data feeding them comes from Prometheus metrics scraped from each service's internal `/metrics` endpoint — but those `/metrics` endpoints are not routed through Kong and not accessible from outside the cluster.
+These are Studio-facing views, not API endpoints you can programmatically query against your project URL. The data feeding them comes from Prometheus metrics scraped from each service's internal `/metrics` endpoint, but those `/metrics` endpoints are not routed through Kong and not accessible from outside the cluster.
 
 ## What's NOT externally accessible
 
 Honest list, because expectations matter:
 
 - **No `/metrics` Prometheus endpoint** on your project URL. The project API ships `prometheus_flask_exporter` internally but the route isn't in Kong's allowlist. Self-hosted deployments can change this; managed cloud doesn't.
-- **No structured request log API.** If you want to know "what requests did my project receive in the last 24 hours?", the answer today is "check the Studio's overview page" — there's no programmatic export.
+- **No structured request log API.** If you want to know "what requests did my project receive in the last 24 hours?", the answer today is "check the Studio's overview page." There's no programmatic export.
 - **No tail-style log streaming.** No `/logs/follow` WebSocket, no log shipping endpoint. Workflow execution logs are queryable via `/api/workflows/{id}/executions/{execution_id}/logs` (see [Workflows reference](/api-reference/workflows)) but that's the only piece.
 - **No per-endpoint latency histograms exposed.** Internal histograms exist (Prometheus-style) but aren't user-callable.
 
@@ -46,31 +46,31 @@ If your use case needs production-grade observability of your Powabase project (
 
 1. **Hit `/api/health` from your own monitoring tool.** Datadog Synthetics, BetterUptime, or anything that pings URLs on a schedule.
 2. **Instrument your own application.** The auth/storage/PostgREST calls go through your code; you can wrap them in metrics emission to whatever you already use.
-3. **Use the agentic API's existing logs.** Run histories, execution logs, session messages — all queryable per resource.
+3. **Use the agentic API's existing logs.** Run histories, execution logs, and session messages are all queryable per resource.
 
 ## Per-resource observability inside the API
 
 The agentic `/api/*` surface has logging for AI resources:
 
-- **`GET /api/sources/{id}`** — extraction status, error message if extraction failed, task id.
-- **`GET /api/knowledge-bases/{id}/sources?status=failed`** — list failed indexed sources to find broken indexing runs.
-- **`GET /api/agents/runs/{run_id}`** — full run state including LLM steps, tool calls, retrieved context.
-- **`GET /api/sessions/{id}/runs/{run_id}/retrieved-context`** — what context the agent saw on a specific run, useful for debugging "why did it answer that way".
-- **`GET /api/workflows/{id}/executions/{execution_id}/logs`** — per-block logs from a workflow execution.
+- **`GET /api/sources/{id}`:** extraction status, error message if extraction failed, task id.
+- **`GET /api/knowledge-bases/{id}/sources?status=failed`:** list failed indexed sources to find broken indexing runs.
+- **`GET /api/agents/runs/{run_id}`:** full run state including LLM steps, tool calls, retrieved context.
+- **`GET /api/sessions/{id}/runs/{run_id}/retrieved-context`:** what context the agent saw on a specific run, useful for debugging "why did it answer that way".
+- **`GET /api/workflows/{id}/executions/{execution_id}/logs`:** per-block logs from a workflow execution.
 
-These are the right place to look for "why did this specific operation fail" debugging. They don't aggregate across operations — for that, you'd query directly against `ai.*` via PostgREST. See [ai-schema recipes Recipe 2](/guides/ai-schema-recipes#recipe-2--usage-analytics-on-agent_runs) for the usage-analytics pattern.
+These are the right place to look for "why did this specific operation fail" debugging. They don't aggregate across operations; for that, query directly against `ai.*` via PostgREST. See [ai-schema recipes Recipe 2](/guides/ai-schema-recipes#recipe-2--usage-analytics-on-agent_runs) for the usage-analytics pattern.
 
 ## Status and incidents
 
 Platform-wide incidents go on [status.powabase.ai](https://status.powabase.ai). Subscribe there for outage notifications.
 
-Per-project status (your specific project is healthy / degraded) isn't separately reported today — the assumption is that incidents affect everyone, and the platform's monitoring catches per-project issues before users do.
+Per-project status (your specific project is healthy / degraded) isn't separately reported today. The assumption is that incidents affect everyone, and the platform's monitoring catches per-project issues before users do.
 
 If you suspect your project is in a degraded state and the platform status page is green, the right move is to check `/api/health` from a couple of different network locations. Persistent failures: file a support ticket with your project ref.
 
 ## What's coming
 
-Realistic expectations: a programmatic observability API surface is on the platform team's radar but not committed. The most likely next addition is an exportable request-and-error log feed, similar to what the Studio's overview shows but accessible from your own monitoring tools. If you have a specific observability need, file it as a platform request — the more concrete the use case, the higher it ranks.
+A programmatic observability API surface is on the platform team's radar but not committed. The most likely next addition is an exportable request-and-error log feed, similar to what the Studio's overview shows but accessible from your own monitoring tools. If you have a specific observability need, file it as a platform request; the more concrete the use case, the higher it ranks.
 
 ## Next steps
 
@@ -85,7 +85,7 @@ What users get wrong that ends up looking like an observability problem.
 </Card>
 
 <Card title="ai-schema recipes" href="/guides/ai-schema-recipes">
-Where the closest thing to "query my project's telemetry" actually lives — direct queries against ai.*.
+Where the closest thing to "query my project's telemetry" actually lives: direct queries against ai.*.
 </Card>
 
 <Card title="Self-host enterprise" href="/guides/self-host-enterprise">
