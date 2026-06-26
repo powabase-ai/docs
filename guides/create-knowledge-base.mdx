@@ -4,7 +4,7 @@ description: "Index your documents for semantic search and retrieval-augmented g
 icon: "database"
 ---
 
-A knowledge base lets your agents search and retrieve relevant passages from your documents. This guide walks through creating a KB, adding a source, waiting for indexing, and testing semantic search.
+Knowledge bases give your AI agents the ability to search and retrieve relevant information from your documents. This guide walks through creating a KB, adding a source, waiting for indexing, and testing semantic search.
 
 <Note>
 **Prerequisites:**
@@ -77,6 +77,10 @@ curl -X POST '{BASE_URL}/api/knowledge-bases' \
 ```
 
 If you pass `indexing_config` or `retrieval_config` in the request, your values are merged over the strategy defaults. Omit either field to accept the defaults for `strategy` (default `chunk_embed`).
+
+<Tip>
+The retrieval features — [reranking](/concepts/knowledge-bases-indexing#reranking), [query enrichment](/concepts/knowledge-bases-indexing#query-enrichment), and [multimodal retrieval](/concepts/knowledge-bases-indexing#multimodal-retrieval) (`context_mode: "image"`) — all live inside `retrieval_config`, so you can turn them on here at creation or add them later with `PATCH /api/knowledge-bases/{id}` (no reindex required).
+</Tip>
 
 </Step>
 

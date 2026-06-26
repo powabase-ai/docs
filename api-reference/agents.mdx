@@ -4,7 +4,7 @@ description: "Create AI agents, assign tools and knowledge bases, configure MCP 
 icon: "robot"
 ---
 
-An agent wraps an LLM with a system prompt, tools, knowledge bases, and optional MCP servers. Agents run a ReAct loop to reason about user messages, call tools as needed, and generate streaming responses. Sessions maintain conversation history across turns.
+Agents are the conversational core of the platform. Each agent wraps an LLM with a system prompt, tools, knowledge bases, and optional MCP servers. Agents use a ReAct loop to reason about user messages, call tools as needed, and generate streaming responses. Sessions maintain conversation history across multiple turns.
 
 ## Common Patterns
 
@@ -47,7 +47,7 @@ Create a new agent.
 }
 ```
 
-The body honors `name` (required), `model`, `system_prompt`, and `settings` (object). Top-level fields like `temperature` are silently dropped; anything model-tuning related must be nested in `settings`.
+The body honors `name` (required), `model`, `system_prompt`, and `settings` (object). Top-level fields like `temperature` are silently dropped — anything model-tuning related must be nested in `settings`. `model` is a LiteLLM model ID passed through unchanged (e.g. `gpt-4o`, `claude-sonnet-4-6`, `openrouter/<org>/<model>`); see [Bring your own LLM](/guides/byollm) for the per-provider format and key requirements.
 
 </RequestExample>
 
@@ -214,19 +214,19 @@ The full `config_override` object. Tool-specific shape; for database tools inclu
 </ParamField>
 
 <Note>
-The body MUST use the key `config_override`. Passing `config` (or any other top-level key) is a silent no-op: the route returns 200 with the unchanged assignment because the handler only inspects `config_override`.
+The body MUST use the key `config_override`. Passing `config` (or any other top-level key) is a silent no-op — the route returns 200 with the unchanged assignment because the handler only inspects `config_override`.
 
 **How `config_override` works per tool type:**
 
-- **Database tools (`database_query`, `database_write`):** `config_override.schemas: { <schema>: [<table>, ...] }` controls which tables the agent can read/write. Schemas must be a dict, schema names must match `^[a-zA-Z_][a-zA-Z0-9_]{0,63}$`, system schemas (`ai`, `auth`, `storage`, `pg_*`, etc.) are rejected, and each value must be a list of valid table names.
+- **Database tools (`database_query`, `database_write`)** — `config_override.schemas: { <schema>: [<table>, ...] }` controls which tables the agent can read/write. Schemas must be a dict, schema names must match `^[a-zA-Z_][a-zA-Z0-9_]{0,63}$`, system schemas (`ai`, `auth`, `storage`, `pg_*`, etc.) are rejected, and each value must be a list of valid table names.
 
-- **All other builtin tools (`web_search`, `web_scrape`, `http_request`, `code_execute`, `storage_read`, `storage_write`):** any key in `config_override` whose name matches a parameter in the tool's `input_schema` is **force-injected into every call's arguments**. Keys not in the schema are silently dropped (no error, no warning). For example, setting `config_override: { "max_results": 3, "include_domains": ["example.com"] }` on a `web_search` assignment locks every search the agent does to 3 results from `example.com`.
+- **All other builtin tools (`web_search`, `web_scrape`, `http_request`, `code_execute`, `storage_read`, `storage_write`)** — any key in `config_override` whose name matches a parameter in the tool's `input_schema` is **force-injected into every call's arguments**. Keys not in the schema are silently dropped (no error, no warning). For example, setting `config_override: { "max_results": 3, "include_domains": ["example.com"] }` on a `web_search` assignment locks every search the agent does to 3 results from `example.com`.
 
-  This constrains a tool without changing what the agent is told about it: the LLM still sees the full schema, but its requested values for those keys are overridden.
+  This is how you constrain a tool without changing what the agent is told about it — the LLM still sees the full schema, but its requested values for those keys are overridden.
 
-- **Custom tools:** `config_override` is not used. Custom-tool behavior is controlled via the `Tool` row's own `config` (endpoint, method, headers) at create time.
+- **Custom tools** — `config_override` is not used. Custom-tool behavior is controlled via the `Tool` row's own `config` (endpoint, method, headers) at create time.
 
-- **MCP tools:** `config_override` is not used. MCP-tool behavior is controlled via the `AgentMcpServer` row's `headers` and `enabled` flag.
+- **MCP tools** — `config_override` is not used. MCP-tool behavior is controlled via the `AgentMcpServer` row's `headers` and `enabled` flag.
 </Note>
 
 <RequestExample>
@@ -493,29 +493,78 @@ curl -X DELETE '{BASE_URL}/api/agents/{id}/mcp-servers/{server_id}' -H "apikey: 
 
 ## Hooks
 
+Intercept agent execution at lifecycle boundaries. For the full event/type semantics, the webhook request/response contract, and the streaming caveat, see [Hooks & Middleware](/concepts/agents-tools#hooks--middleware).
+
 ### POST /api/agents/{id}/hooks
 
-Add a hook to the agent (pre/post execution events).
+Add a hook to the agent.
 
 <ParamField path="id" type="string" required>
 Agent ID
 </ParamField>
 
+<ParamField body="event" type="string" required>
+When the hook fires. One of: `OnRunStart`, `PreToolUse`, `OnDelegation`, `PostToolUse`, `PreResponse`, `OnRunComplete`. Stored verbatim and **not** validated — an unrecognized value is saved but never fires.
+</ParamField>
+
+<ParamField body="type" type="string" required>
+What the hook does. One of: `http` (POST to a webhook URL), `rule` (local condition evaluation), `approval` (human-in-the-loop gate). Also stored verbatim and not validated.
+</ParamField>
+
+<ParamField body="config" type="object" required>
+Type-specific configuration (may be `{}`). For `http`: `url` (required), optional `headers`, `timeout_seconds` (default 5). For `approval`: optional `message`, `timeout` (default 300). For `rule`: a `condition` string or a `rules` array.
+</ParamField>
+
+<ParamField body="matcher" type="string">
+Tool name to target. Omit to match all tools (or for non-tool events).
+</ParamField>
+
+<ParamField body="enabled" type="boolean" default="true">
+Whether the hook is active.
+</ParamField>
+
+<ParamField body="position" type="integer" default="0">
+Execution order among the agent's hooks (ascending).
+</ParamField>
+
+<Note>
+Hooks are immutable — there is no update endpoint. To change a hook, `DELETE` it and create a new one.
+</Note>
+
 <CodeGroup>
 
 ```python Python
-response = requests.post(f"{BASE_URL}/api/agents/{agent_id}/hooks", headers=headers, json={"event": "before_run", "type": "webhook", "config": {"url": "https://example.com/hook"}})
+# An HTTP hook that POSTs to your webhook before every tool call
+response = requests.post(f"{BASE_URL}/api/agents/{agent_id}/hooks", headers=headers, json={"event": "PreToolUse", "type": "http", "config": {"url": "https://example.com/hook"}})
 ```
 
 ```typescript TypeScript
-await fetch(`${BASE_URL}/api/agents/${agentId}/hooks`, { method: "POST", headers, body: JSON.stringify({ event: "before_run", type: "webhook", config: { url: "https://example.com/hook" } }) });
+await fetch(`${BASE_URL}/api/agents/${agentId}/hooks`, { method: "POST", headers, body: JSON.stringify({ event: "PreToolUse", type: "http", config: { url: "https://example.com/hook" } }) });
 ```
 
 ```bash cURL
-curl -X POST '{BASE_URL}/api/agents/{id}/hooks' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"event": "before_run", "type": "webhook", "config": {"url": "..."}}'
+curl -X POST '{BASE_URL}/api/agents/{id}/hooks' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"event": "PreToolUse", "type": "http", "config": {"url": "https://example.com/hook"}}'
 ```
 
 </CodeGroup>
+
+<ResponseExample>
+
+```json 201
+{
+  "id": "hook_...",
+  "agent_id": "agent_...",
+  "event": "PreToolUse",
+  "matcher": null,
+  "type": "http",
+  "config": { "url": "https://example.com/hook" },
+  "enabled": true,
+  "position": 0,
+  "created_at": "2026-01-01T00:00:00Z"
+}
+```
+
+</ResponseExample>
 
 ### GET /api/agents/{id}/hooks
 
@@ -597,9 +646,9 @@ curl '{BASE_URL}/api/agents/{id}/sessions' -H "apikey: {API_KEY}" -H "Authorizat
 
 ### POST /api/agents/{id}/run
 
-Run agent synchronously, returning the full response as JSON. No streaming, no tools, no ReAct loop: a single LLM call against the conversation context. Use it for question-answering; if you need tool use, use `/run/stream`.
+Run agent synchronously, returning the full response as JSON. No streaming, no tools, no ReAct loop — a single LLM call against the conversation context. Useful for simple question-answering. If you need tool use, use `/run/stream`.
 
-The endpoint accepts the **same context-selection surface** as `/run/stream`: you can attach ad-hoc retrieval (`knowledge_bases`), a pre-built context (`context_handler_id`), a raw context string (`context_override`), or by-reference items (`context_items`). Only **one** context source may be provided per request; sending more than one returns 400.
+The endpoint accepts the **same context-selection surface** as `/run/stream`: you can attach ad-hoc retrieval (`knowledge_bases`), a pre-built context (`context_handler_id`), a raw context string (`context_override`), or by-reference items (`context_items`). Only **one** context source may be provided per request — sending more than one returns 400.
 
 <ParamField path="id" type="string" required>
 Agent ID
@@ -622,10 +671,10 @@ Agent ID
 | Body field | Type | Notes |
 | --- | --- | --- |
 | `message` | string (required) | User input |
-| `session_id` | string | Reuse a session for multi-turn. Omit to start a fresh session; `session_id` is returned. |
+| `session_id` | string | Reuse a session for multi-turn. Omit to start a fresh session — `session_id` is returned. |
 | `knowledge_bases` | array | Ad-hoc retrieval: `[{ id, top_k?, similarity_threshold?, filter_metadata?, retrieval_method? }]` |
 | `context_handler_id` | string | Use a pre-built context handler (see [Context Handlers](/api-reference/context-handlers)) |
-| `context_override` | string | Raw context string injected verbatim (skips retrieval) |
+| `context_override` | string | Raw context string injected verbatim — skips retrieval |
 | `context_items` | array | By-reference items: `[{ id, ... }]` or by-value items with `text` |
 | `max_context_tokens` | int | Truncate retrieved context to this token budget (default from agent settings or platform default) |
 | `citations_enabled` | bool | Append a citation instruction and parse `[1]`-style refs from the response (default `false`) |
@@ -650,7 +699,7 @@ curl -X POST '{BASE_URL}/api/agents/{id}/run' -H "apikey: {API_KEY}" -H "Authori
 
 ### POST /api/agents/{id}/run/stream
 
-Run agent with streaming SSE. Supports tools, the ReAct loop, and multi-turn via session_id. SSE event types include start, chunk, tool_call, tool_result, reasoning, reasoning_summary, and complete; the reasoning events surface the model's internal thought stream when reasoning is enabled. Set reasoning_requested=true to request reasoning output for this run.
+Run agent with streaming SSE. Supports tools, ReAct loop, and multi-turn via session_id. SSE event types include start, chunk, tool_call, tool_result, reasoning, reasoning_summary, and complete; the reasoning events surface the model's internal thought stream when reasoning is enabled. Set reasoning_requested=true to request reasoning output for this run.
 
 The streaming endpoint accepts the **same context-selection surface** as `/run` above (`knowledge_bases` / `context_handler_id` / `context_override` / `context_items`, mutually exclusive), plus all the same `max_context_tokens`, `citations_enabled`, `temperature`, and `response_format` fields. See [Streaming](/concepts/streaming-patterns) for the full SSE event catalog.
 
@@ -704,7 +753,7 @@ curl -N -X POST '{BASE_URL}/api/agents/{id}/run/stream' -H "apikey: {API_KEY}" -
 
 Fetch a single agent run by `run_id`, independent of session context. Returns: `id`, `run_id`, `session_id`, `parent_orchestration_run_id`, `parent_workflow_execution_id`, `status`, `input_messages`, `output_messages`, `content`, `usage`, `retrieved_context`, `error`, `started_at`, `completed_at`, `steps`, `events`, `tool_calls`, `reasoning_steps`, and `created_at`. The parent fields are `null` for top-level runs; `session_id` is `null` for delegated or workflow-block runs.
 
-For runs that belong to a session, ownership is enforced: the caller must own the session (or use a service-role key). To avoid leaking existence, ownership failures are returned as 404, not 403.
+For runs that belong to a session, ownership is enforced — the caller must own the session (or be using a service-role key). To avoid leaking existence, ownership failures are returned as 404, not 403.
 
 <ParamField path="run_id" type="string" required>Run ID</ParamField>
 

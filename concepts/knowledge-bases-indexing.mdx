@@ -1,16 +1,16 @@
 ---
 title: "Knowledge Bases & Indexing"
-description: "The platform's Context Engineering suite turns raw documents into searchable knowledge. Choose from five indexing strategies and four retrieval algorithms to build the right pipeline for your use case, from simple vector search to LLM-driven document reasoning."
+description: "The platform's Context Engineering suite turns raw documents into intelligent, searchable knowledge. Choose from five indexing strategies and four retrieval algorithms to build the right pipeline for your use case — from simple vector search to LLM-driven document reasoning."
 icon: "database"
 ---
 
 ## What is a Knowledge Base?
 
-A Knowledge Base (KB) is a container that holds one or more sources and makes their content searchable. When you add a source to a KB, the platform processes the extracted text using the configured indexing strategy and stores the results for retrieval. The indexing strategy determines how content is structured: simple chunking, hierarchical document trees, or structured JSON extraction. The retrieval strategy determines how queries find relevant content, ranging from fast vector similarity to LLM-driven reasoning over document structure.
+A Knowledge Base (KB) is a container that holds one or more sources and makes their content searchable. When you add a source to a KB, the platform processes the extracted text using the configured indexing strategy and stores the results for retrieval. The indexing strategy determines how content is structured — from simple chunking to hierarchical document trees to structured JSON extraction. The retrieval strategy determines how queries find relevant content — from fast vector similarity to LLM-driven reasoning over document structure.
 
 ## Indexing Pipeline
 
-The indexing pipeline runs automatically when you add a source to a knowledge base. What happens during indexing depends on the strategy. ChunkEmbed splits text and generates embeddings. Full Document generates one summary per document and returns the entire text on match. PageIndex builds a hierarchical tree with LLM-generated summaries. GraphIndex extends PageIndex with cross-reference detection and node embeddings. Doc2JSON extracts structured fields. You can reindex at any time to reprocess with different settings.
+The indexing pipeline runs automatically when you add a source to a knowledge base. What happens during indexing depends on the strategy: ChunkEmbed splits text and generates embeddings, Full Document generates one summary per document and returns the entire text on match, PageIndex builds a hierarchical tree with LLM-generated summaries, GraphIndex extends PageIndex with cross-reference detection and node embeddings, and Doc2JSON extracts structured fields. You can reindex at any time to reprocess with different settings.
 
 <Frame caption="Indexing pipeline: from source text to searchable knowledge">
   <img src="/diagrams/indexing-pipeline.svg" alt="Indexing pipeline: Source page texts → Indexing Strategy (ChunkEmbed, Full Document, PageIndex, GraphIndex, or Doc2JSON) → Storage (pgvector chunks, document summaries, tree nodes, or structured JSON)." />
@@ -30,7 +30,7 @@ The indexing strategy controls how source content is processed and stored. Each 
 
 ### ChunkEmbed (Default)
 
-The standard RAG approach. Text is split into overlapping chunks using a configurable chunking strategy, each chunk is embedded into a vector, and the vectors are stored in pgvector for similarity search. A BM25 sparse index is also built over the chunk text, enabling keyword-based full-text search alongside vector search. This is the fastest and cheapest indexing strategy: no LLM calls are needed, only an embedding API call.
+The standard RAG approach. Text is split into overlapping chunks using a configurable chunking strategy, each chunk is embedded into a vector, and the vectors are stored in pgvector for similarity search. A BM25 sparse index is also built over the chunk text, enabling keyword-based full-text search alongside vector search. This is the fastest and cheapest indexing strategy — no LLM calls are needed, only an embedding API call.
 
 ChunkEmbed pairs with vector search, hybrid search, or full-text search for retrieval. Hybrid search (which runs both vector and BM25 in parallel and fuses results) is the recommended default for production RAG applications.
 
@@ -39,7 +39,6 @@ ChunkEmbed pairs with vector search, hybrid search, or full-text search for retr
 ChunkEmbed uses the **markdown_header** chunker: it splits at Markdown headers (h1–h6), then subdivides each section by length using recursive chunking, and prepends the section header as context to each chunk. This works well across both Markdown-structured documents and unstructured prose (where it falls through to the recursive subdivision step).
 
 Chunk size and overlap control the tradeoff between precision and context. Smaller chunks (500–1000 tokens) give more precise retrieval but may lose surrounding context. Larger chunks (2000–4000 tokens) preserve context but can dilute relevance. The defaults (2000 tokens, 50 token overlap) work well for most use cases. Tune them via `indexing_config.chunk_size` and `indexing_config.chunk_overlap`.
-
 
 <CodeGroup>
 
@@ -97,14 +96,14 @@ curl -X POST '{BASE_URL}/api/knowledge-bases' \
 
 ### Full Document
 
-Full Document treats every source as a single retrievable unit. At indexing time, the platform makes one LLM call to generate a comprehensive summary of the document, embeds the summary, and stores the original full text in object storage with its path recorded in the database. A BM25 sparse index is also built over the summaries, so vector, full-text, and hybrid search are all supported. At query time, search runs against the summaries, but each match returns the **entire original document text**, not a chunk or section.
+Full Document treats every source as a single retrievable unit. At indexing time, the platform makes one LLM call to generate a comprehensive summary of the document, embeds the summary, and stores the original full text in object storage with its path recorded in the database. A BM25 sparse index is also built over the summaries, so vector, full-text, and hybrid search are all supported. At query time, search runs against the summaries — but each match returns the **entire original document text**, not a chunk or section.
 
-This makes Full Document the right choice when you want the agent to reason over whole documents rather than fragments: short legal cases, individual articles, policy memos, research papers, or any collection where each document is a self-contained unit small enough to fit in the agent's context window. Indexing is cheap (one LLM summary per document, no chunking work) and retrieval is fast (no LLM calls at query time, just standard vector or BM25 lookups).
+This makes Full Document the right choice when you want the agent to reason over whole documents rather than fragments — short legal cases, individual articles, policy memos, research papers, or any collection where each document is a self-contained unit small enough to fit in the agent's context window. Indexing is cheap (one LLM summary per document, no chunking work) and retrieval is fast (no LLM calls at query time, just standard vector or BM25 lookups).
 
 <Note>
 **Default top_k is 3**
 
-Because each result is a whole document, typically much larger than a single chunk, the default top_k is 3 instead of the usual 5. Tune this based on your average document size and the agent's context budget. Returning two or three documents is usually plenty; returning ten can easily exceed available context.
+Because each result is a whole document — typically much larger than a single chunk — the default top_k is 3 instead of the usual 5. Tune this based on your average document size and the agent's context budget. Returning two or three documents is usually plenty; returning ten can easily exceed available context.
 </Note>
 
 <Warning>
@@ -173,20 +172,20 @@ curl -X POST '{BASE_URL}/api/knowledge-bases' \
 
 ### PageIndex
 
-PageIndex uses an LLM to build a hierarchical tree of your document's structure: sections, subsections, and their content. The result is stored as two artifacts: a lightweight ToC (titles and LLM-generated summaries, no full text) and a flat list of section nodes (with the actual text). Retrieval works in two phases. An LLM first reasons over the lightweight ToC to identify relevant sections by structure, then the platform fetches the full text of those sections.
+PageIndex builds a hierarchical tree of your document's structure — sections, subsections, and their content — using LLM-powered analysis. The result is stored as two artifacts: a lightweight ToC (titles and LLM-generated summaries, no full text) and a flat list of section nodes (with the actual text). Retrieval works in two phases: an LLM first reasons over the lightweight ToC to identify relevant sections by structure, then the platform fetches the full text of those sections.
 
 PageIndex has two pipelines that are selected automatically. For Markdown content, it parses headers into a nested tree, splits oversized leaf nodes using LLM calls, and generates per-node summaries. For PDFs (when page_texts are provided), it scans the first pages for a table of contents, calibrates page-number offsets against actual headings, infers structure via LLM if no ToC is found, then assigns page text to tree nodes and merges small siblings. Both pipelines cap LLM concurrency at 7 calls by default to avoid rate limits.
 
 <Warning>
 **PageIndex is expensive to index**
 
-PageIndex makes many LLM calls during indexing: ToC detection, structure inference, oversized node splitting, and summary generation. A 100-page PDF may take several minutes and consume significant LLM tokens. Use this strategy when document structure matters for retrieval quality, such as compliance manuals, legal contracts, technical specifications, and academic papers.
+PageIndex makes many LLM calls during indexing — for ToC detection, structure inference, oversized node splitting, and summary generation. A 100-page PDF may take several minutes and consume significant LLM tokens. Use this strategy when document structure matters for retrieval quality — compliance manuals, legal contracts, technical specifications, academic papers.
 </Warning>
 
 <Warning>
 **PageIndex retrieval uses LLM reasoning, not vectors**
 
-Tree Search retrieval does not use vector similarity. It sends the document's structural outline (titles + summaries, no text) to an LLM and asks it to identify the most relevant sections. Each retrieval call incurs LLM cost and latency, typically 1–3 seconds per query. For high-throughput, latency-sensitive workloads, ChunkEmbed with hybrid search is more appropriate.
+Tree Search retrieval does not use vector similarity. It sends the document's structural outline (titles + summaries, no text) to an LLM and asks it to identify the most relevant sections. This means each retrieval call incurs LLM cost and latency — typically 1–3 seconds per query. For high-throughput, latency-sensitive workloads, ChunkEmbed with hybrid search is more appropriate.
 </Warning>
 
 <CodeGroup>
@@ -252,14 +251,14 @@ curl -X POST '{BASE_URL}/api/knowledge-bases' \
 
 ### GraphIndex
 
-GraphIndex builds on PageIndex with two additional stages: cross-reference enrichment and node embedding. In stage one, it runs the same PageIndex pipeline to build the hierarchical document tree. In stage two, an LLM analyzes each node's text against the full table of contents and identifies which other sections the node explicitly references: citations, mentions, dependencies, or cross-references (not structural parent/child relationships). These references are stored in each node's metadata. In stage three, each node's title and summary (plus its reference list) are embedded into a vector, and a BM25 sparse index is built over node text.
+GraphIndex builds on PageIndex with two additional stages: cross-reference enrichment and node embedding. In stage one, it runs the same PageIndex pipeline to build the hierarchical document tree. In stage two, an LLM analyzes each node's text against the full table of contents and identifies which other sections the node explicitly references — citations, mentions, dependencies, or cross-references (not structural parent/child relationships). These references are stored in each node's metadata. In stage three, each node's title and summary (plus its reference list) are embedded into a vector, and a BM25 sparse index is built over node text.
 
-The key advantage over plain PageIndex is retrieval flexibility. Because nodes have embeddings and a BM25 index, GraphIndex knowledge bases support vector search, hybrid search, and full-text search: the same fast retrieval methods as ChunkEmbed, but over structured document sections instead of arbitrary chunks. After the initial retrieval, graph expansion automatically pulls in first-degree referenced nodes (sections that the matched sections explicitly cite), enriching results with related context. This makes GraphIndex suited for documents with dense internal references, such as regulatory frameworks, technical standards, and codebases with cross-module dependencies.
+The key advantage over plain PageIndex is retrieval flexibility. Because nodes have embeddings and a BM25 index, GraphIndex knowledge bases support vector search, hybrid search, and full-text search — the same fast retrieval methods as ChunkEmbed but over structured document sections instead of arbitrary chunks. After the initial retrieval, graph expansion automatically pulls in first-degree referenced nodes (sections that the matched sections explicitly cite), enriching results with related context. This makes GraphIndex suited for documents with dense internal references — regulatory frameworks, technical standards, codebases with cross-module dependencies.
 
 <Warning>
 **GraphIndex is expensive to index, but cheap to retrieve**
 
-GraphIndex performs all the LLM work of PageIndex (tree building, node splitting, summary generation) plus one additional LLM call per node for cross-reference detection, plus embedding computation for every node. For a document with 50 sections, that means ~50 extra LLM calls on top of the PageIndex work. Enrichment concurrency is capped at 7 by default. Retrieval, though, is fast and cheap: it uses vector, hybrid, or full-text search over node embeddings (no LLM calls at query time). Use GraphIndex when you want structural awareness during indexing with fast, scalable retrieval.
+GraphIndex performs all the LLM work of PageIndex (tree building, node splitting, summary generation) plus one additional LLM call per node for cross-reference detection, plus embedding computation for every node. For a document with 50 sections, that means ~50 extra LLM calls on top of the PageIndex work. Enrichment concurrency is capped at 7 by default. However, unlike PageIndex, retrieval is fast and cheap — it uses vector, hybrid, or full-text search over node embeddings (no LLM calls at query time). Use GraphIndex when you want structural awareness during indexing with fast, scalable retrieval.
 </Warning>
 
 <CodeGroup>
@@ -336,7 +335,7 @@ curl -X POST '{BASE_URL}/api/knowledge-bases' \
 
 Doc2JSON extracts structured data from documents using a sliding-window LLM approach. You define a JSON schema with the fields you want to extract (names, types, descriptions, examples), and the platform slides a window across the document content. For each window, an LLM extracts a brief summary and fills in schema fields from the visible text. Extractions are merged across windows: scalar fields use last-value-wins, arrays accumulate new items, and objects are deep-merged. After all windows are processed, a final LLM call generates a combined document summary, which is embedded for vector retrieval.
 
-Doc2JSON supports two modes. Text mode (default) processes extracted text using token-based windows (default 4000 tokens, 200 overlap). Image mode processes page screenshots directly as multimodal content, which helps with documents whose layouts, tables, or forms lose their formatting during text extraction. In image mode, pages are grouped into windows (default 3 pages per window) and sent as images to the LLM.
+Doc2JSON supports two modes. Text mode (default) processes extracted text using token-based windows (default 4000 tokens, 200 overlap). Image mode processes page screenshots directly as multimodal content — useful for documents with complex layouts, tables, or forms where text extraction loses formatting. In image mode, pages are grouped into windows (default 3 pages per window) and sent as images to the LLM.
 
 <CodeGroup>
 
@@ -439,15 +438,15 @@ The retrieval strategy controls how queries find relevant content within a knowl
 
 ### Vector Search
 
-Vector search embeds the query using the same model as indexing, then finds the most similar chunk embeddings via cosine similarity in pgvector. It captures semantic meaning, so "How do I reset my credentials?" will match chunks about password resets even without shared keywords. Results are ranked by similarity score (higher = more relevant). An optional similarity_threshold filters out low-quality matches.
+Vector search embeds the query using the same model as indexing, then finds the most similar chunk embeddings via cosine similarity in pgvector. It captures semantic meaning — "How do I reset my credentials?" will match chunks about password resets even without shared keywords. Results are ranked by similarity score (higher = more relevant). An optional similarity_threshold filters out low-quality matches.
 
 ### Full-Text Search (BM25)
 
-Full-text search uses BM25 scoring, a keyword relevance algorithm that considers term frequency, document length, and inverse document frequency. Terms are stemmed using PostgreSQL's English dictionary (to_tsvector), so "running" matches "run". BM25 uses standard parameters: k1=1.2 for term frequency saturation and b=0.75 for length normalization. No API calls are needed; scoring runs entirely in PostgreSQL. This complements vector search by catching results that share keywords but may not be semantically close in embedding space.
+Full-text search uses BM25 scoring — a keyword relevance algorithm that considers term frequency, document length, and inverse document frequency. Terms are stemmed using PostgreSQL's English dictionary (to_tsvector), so "running" matches "run". BM25 uses standard parameters: k1=1.2 for term frequency saturation and b=0.75 for length normalization. No API calls are needed — scoring runs entirely in PostgreSQL. This complements vector search by catching results that share keywords but may not be semantically close in embedding space.
 
 ### Hybrid Search (Recommended)
 
-Hybrid search runs both vector search and full-text search in parallel, then fuses the results using Reciprocal Rank Fusion (RRF). RRF merges ranked lists without needing to normalize incompatible score ranges, because it uses rank positions rather than scores. The formula: rrf_score(d) = sum of weight / (k + rank) across all lists, with k=60 (the original RRF paper constant). The vector_weight parameter (default 0.5) balances the two signals: higher values favor semantic matches, lower values favor keyword matches. Results are normalized so the top result has score 1.0.
+Hybrid search runs both vector search and full-text search in parallel, then fuses the results using Reciprocal Rank Fusion (RRF). RRF merges ranked lists without needing to normalize incompatible score ranges — it uses rank positions, not scores. The formula: rrf_score(d) = sum of weight / (k + rank) across all lists, with k=60 (the original RRF paper constant). The vector_weight parameter (default 0.5) balances the two signals: higher values favor semantic matches, lower values favor keyword matches. Results are normalized so the top result has score 1.0.
 
 <CodeGroup>
 
@@ -507,7 +506,7 @@ curl -X POST '{BASE_URL}/api/knowledge-bases' \
 
 ### Tree Search
 
-Tree Search is a two-phase LLM-driven retrieval method for PageIndex and GraphIndex knowledge bases. In phase one, the LLM reviews compact summaries of each indexed document (name, description, top-level section titles) and selects which documents are relevant. In phase two, the LLM examines the selected documents' full ToC structure (section titles and summaries, no full text) and identifies the most relevant sections, returning up to top_k node IDs. The platform then fetches the full text of those sections from the database.
+Tree Search is a two-phase LLM-driven retrieval method for PageIndex and GraphIndex knowledge bases. In phase one, the LLM reviews compact summaries of each indexed document (name, description, top-level section titles) and selects which documents are relevant. In phase two, the LLM examines the selected documents' full ToC structure (section titles and summaries, no full text) and identifies the most relevant sections — returning up to top_k node IDs. The platform then fetches the full text of those sections from the database.
 
 For multi-document KBs, node IDs are globally prefixed (e.g., d0:0001, d1:0005) so the LLM can reference sections across documents. Response parsing is robust: it tries JSON first, then falls back to regex pattern matching, and validates all returned IDs against the actual tree structure to prevent hallucinated references.
 
@@ -519,25 +518,105 @@ Tree Search reads from the page_index_toc and page_index_nodes tables. It is onl
 
 ## Reranking
 
-Reranking is an optional second stage that improves retrieval precision. The initial retrieval (vector, hybrid, or full-text) fetches a broad candidate pool, by default 20 items (the candidate_count parameter). A cross-encoder reranker then re-scores each candidate by evaluating the query-document pair jointly. Cross-encoders are more accurate than bi-encoder embeddings because they see the query and document together, but they can't be used for initial retrieval because they don't produce storable vectors. After reranking, the top_k results are returned to the caller.
+Reranking is an optional second stage that improves retrieval precision. The initial retrieval (vector, hybrid, or full-text) fetches a broad candidate pool — by default 20 items (the `candidate_count` parameter). A cross-encoder reranker then re-scores each candidate by evaluating the query-document pair jointly. Cross-encoders are more accurate than bi-encoder embeddings because they see the query and document together, but they can't be used for initial retrieval because they don't produce storable vectors. After reranking, the `top_k` results are returned to the caller.
 
-| Reranker | Provider | Notes |
+Reranking is a property of the knowledge base, configured under `retrieval_config.reranker`. It is **enabled whenever `reranker.model` is set** and disabled when the `reranker` object is absent. Because it lives on the KB, you can set it at creation time or change it later with `PATCH /api/knowledge-bases/{id}` — no reindex needed, since reranking happens at query time.
+
+```json
+"retrieval_config": {
+  "method": "hybrid",
+  "top_k": 5,
+  "reranker": {
+    "model": "cohere/rerank-english-v3.0",
+    "candidate_count": 20
+  }
+}
+```
+
+| Field | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `model` | string | `cohere/rerank-english-v3.0` | Reranker model identifier. Presence of this field is what enables reranking. |
+| `candidate_count` | int | `20` | How many candidates Stage 1 fetches before reranking down to `top_k`. Higher = better recall, more latency. |
+
+The reranker is applied as a strict two-stage pipeline: Stage 1 retrieves `candidate_count` items using the configured `method`, Stage 2 re-scores them and truncates to `top_k`. If the reranker call fails, retrieval falls back to the Stage 1 results truncated to `top_k` (fail-open). Each rerank is billed as a `reranker_call`.
+
+| Reranker model | Provider | Notes |
 | --- | --- | --- |
-| Rerank English v3.0 (default) | Cohere | High quality, English-optimized |
-| Rerank Multilingual v3.0 | Cohere | Multilingual support |
-| Jina Reranker v2 Base Multilingual | Jina AI | Multilingual, competitive quality |
-| Rerank 2.5 | Voyage | Strong general-purpose reranker |
-| Rerank 2.5 Lite | Voyage | Lighter variant, lower cost |
+| `cohere/rerank-english-v3.0` (default) | Cohere | High quality, English-optimized |
+| `cohere/rerank-multilingual-v3.0` | Cohere | Multilingual support |
+| `jina_ai/jina-reranker-v2-base-multilingual` | Jina AI | Multilingual, competitive quality |
+| `voyage/rerank-2.5` | Voyage | Strong general-purpose reranker |
+| `voyage/rerank-2.5-lite` | Voyage | Lighter variant, lower cost |
+| `zerank-1` / `zerank-2` | ZeroEntropy | Dedicated reranking models (model strings starting with `zerank` route to the ZeroEntropy client) |
+
+Other LiteLLM-compatible rerankers (Together AI, Azure AI, self-hosted VLLM via a `hosted_vllm/` prefix) also work. Always treat `GET /api/config/kb-defaults` as the authoritative list of selectable rerankers rather than hardcoding this table.
 
 <Info>
 **Reranker API keys are platform-managed**
 
-Reranker API keys (Cohere, Jina, Voyage) are configured at the platform level by your administrator, not per-organization. If reranking returns errors, contact your platform admin to verify the reranker provider key is configured.
+Reranker API keys (Cohere, Jina, Voyage, ZeroEntropy) are configured at the platform level by your administrator, not per-organization. If reranking returns errors, contact your platform admin to verify the reranker provider key is configured.
+</Info>
+
+## Query Enrichment
+
+Query enrichment is an optional LLM step that rewrites the user's raw query before retrieval to improve recall. It is a property of the knowledge base, configured under `retrieval_config.query_enrichment`, and is **off by default** — you opt in per KB.
+
+```json
+"retrieval_config": {
+  "method": "hybrid",
+  "query_enrichment": {
+    "enabled": true,
+    "model": "gpt-5-mini"
+  }
+}
+```
+
+| Field | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `false` | Turns LLM query enrichment on for this KB. |
+| `model` | string | `gpt-5-mini` | LLM used to rewrite the query (temperature 0). |
+
+When enabled, the LLM rewrites each query into two variants and retrieval uses whichever fits each signal:
+
+- **`enriched_query`** — a semantically rich restatement, used for the vector-search embedding.
+- **`keyword_query`** — OR-joined keywords and synonyms, used for BM25 full-text scoring.
+
+If a session history is available (e.g. an agent conversation), the last few turns are passed in so the LLM can resolve pronouns and ellipsis — turning a follow-up like "what about pricing?" into "What are the AWS cloud pricing options?". The enrichment result is returned in the search/context response under `query_enrichment` (`original_query`, `enriched_query`, `keyword_query`, `model`, `method: "llm_enrichment"`), so you can inspect exactly what was searched. Each enrichment is billed as a `query_enrichment` action.
+
+<Info>
+**When to enable query enrichment**
+
+Enable it for **conversational / multi-turn** retrieval where follow-up queries depend on prior context, or when terse keyword queries benefit from synonym expansion on hybrid/full-text KBs. Skip it for simple single-shot lookups — it adds an LLM call (latency + cost) to every search. It is **automatically skipped for `tree_search`** KBs, which already do their own LLM-based document/section selection. For `full_text` and `hybrid`, even when LLM enrichment is off, a fast tokenization-based context builder still folds recent conversation into the keyword query — that is not the same as (nor billed like) LLM enrichment.
+</Info>
+
+## Multimodal Retrieval
+
+By default, retrieval returns the **text** of matched chunks. Setting `retrieval_config.context_mode` to `"image"` switches a knowledge base into multimodal retrieval: instead of (or alongside) text, the platform attaches the **original page images** of the matched content and passes them to the LLM as multimodal content blocks. This preserves layout, tables, charts, stamps, and handwriting that text extraction flattens or loses.
+
+```json
+"retrieval_config": {
+  "method": "hybrid",
+  "top_k": 5,
+  "context_mode": "image"
+}
+```
+
+| Field | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `context_mode` | string | `text` | `text` returns extracted text; `image` returns page-image content blocks for the matched items. |
+| `image_delivery` | string | platform default (`base64`) | How images are delivered — inline `base64` data URIs or signed URLs. |
+
+`context_mode` is a **retrieval-time** option and is available for **all indexing strategies except Doc2JSON** — `chunk_embed`, `full_document`, `page_index`, and `graph_index` all support it. (Doc2JSON has its own indexing-time `use_images` option instead; see its section above.) It works by resolving the page-image derivatives that were rendered when the source was extracted, so it requires those page images to exist. If a matched item has no page image available, that item gracefully falls back to its text. Like the other retrieval settings, `context_mode` lives on the KB record and can be set at creation or changed later via `PATCH` without reindexing.
+
+<Info>
+**Multimodal retrieval needs a vision-capable agent model**
+
+The matched page images are only useful if the consuming model can see images. When you attach a multimodal KB to an agent, give the agent a vision-capable model (e.g. a GPT-4o / GPT-5 class model). A text-only model will silently ignore the image blocks — a common cause of an agent that "has the document" but answers as if it didn't.
 </Info>
 
 ## Embedding Models
 
-Embeddings convert text into high-dimensional vectors that capture semantic meaning. The platform uses OpenAI's text-embedding-3-small by default (1536 dimensions). All chunks in a knowledge base must use the same embedding model; if you change the model, you must reindex. Embedding calls are batched at up to 250,000 tokens per API call for efficiency. The platform supports embedding models from multiple providers via LiteLLM. Select your preferred model in Settings > Knowledge Indexing.
+Embeddings convert text into high-dimensional vectors that capture semantic meaning. The platform uses OpenAI's text-embedding-3-small by default (1536 dimensions). All chunks in a knowledge base must use the same embedding model — if you change the model, you must reindex. Embedding calls are batched at up to 250,000 tokens per API call for efficiency. The platform supports embedding models from multiple providers via LiteLLM — select your preferred model in Settings > Knowledge Indexing.
 
 | Model | Provider | Dimensions | Tradeoff |
 | --- | --- | --- | --- |
@@ -560,7 +639,7 @@ OpenAI embeddings use the platform-managed OPENAI_API_KEY. For other providers (
 <Info>
 **HNSW index dimension limit**
 
-The platform uses pgvector HNSW indexes for fast approximate nearest-neighbor search. HNSW indexes support a maximum of 2000 dimensions. The default model text-embedding-3-small (1536 dimensions) fits within this limit and gets full HNSW acceleration. Models with more than 2000 dimensions (like text-embedding-3-large at 3072) fall back to sequential scan, which stays correct but runs significantly slower on large knowledge bases.
+The platform uses pgvector HNSW indexes for fast approximate nearest-neighbor search. HNSW indexes support a maximum of 2000 dimensions. The default model text-embedding-3-small (1536 dimensions) fits within this limit and gets full HNSW acceleration. Models with more than 2000 dimensions (like text-embedding-3-large at 3072) fall back to sequential scan — still correct but significantly slower for large knowledge bases.
 </Info>
 
 ## Searching a Knowledge Base
