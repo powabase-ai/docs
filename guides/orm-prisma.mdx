@@ -1,10 +1,10 @@
 ---
 title: "Prisma"
-description: "Use Prisma with Powabase's Postgres — connection setup with the pooler-required flags, a simple schema, queries, and migration workflow."
+description: "Use Prisma with Powabase's Postgres: connection setup with the pooler-required flags, a simple schema, queries, and migration workflow."
 icon: "boxes-packing"
 ---
 
-[Prisma](https://www.prisma.io/) is the most-used TypeScript ORM. It pairs well with Powabase: schema lives in `schema.prisma`, the generated client is fully typed, and Prisma Migrate handles schema evolution. The only Powabase-specific setup is the connection URL flags PgBouncer transaction-mode pooling needs.
+[Prisma](https://www.prisma.io/) is the most-used TypeScript ORM. It pairs well with Powabase: schema lives in `schema.prisma`, the generated client is fully typed, and Prisma Migrate handles schema evolution. The only Powabase-specific setup is the connection URL flags that PgBouncer transaction-mode pooling needs.
 
 For the broader pooler context, see [Connection pooling](/guides/connection-pooling). For migration mechanics, see [Migrations](/guides/migrations).
 
@@ -16,8 +16,8 @@ Copy the Database URL from the Connect modal, then add two query params:
 DATABASE_URL="postgresql://<ref>:<password>@db.p.powabase.ai:5432/<ref>?pgbouncer=true&connection_limit=1"
 ```
 
-- **`pgbouncer=true`** — disables Prisma's prepared-statement cache. PgBouncer in transaction mode breaks prepared statements; this flag flips Prisma to the simple query protocol.
-- **`connection_limit=1`** — prevents Prisma from opening more connections than your share of the project's pool (20 by default). Without it, Prisma may try to open many connections concurrently and saturate the pooler.
+- **`pgbouncer=true`** disables Prisma's prepared-statement cache. PgBouncer in transaction mode breaks prepared statements; this flag flips Prisma to the simple query protocol.
+- **`connection_limit=1`** prevents Prisma from opening more connections than your share of the project's pool (20 by default). Without it, Prisma may try to open many connections concurrently and saturate the pooler.
 
 Put both in `.env`. Don't commit the URL.
 
@@ -57,7 +57,7 @@ model Post {
 }
 ```
 
-The `@@map` and `@map` lines map TypeScript camelCase to SQL snake_case. Use them — PostgREST, your migrations, and any future raw SQL will all use the snake_case names.
+The `@@map` and `@map` lines map TypeScript camelCase to SQL snake_case. Use them: PostgREST, your migrations, and any future raw SQL will all use the snake_case names.
 
 ## Queries
 
@@ -105,7 +105,7 @@ npx prisma migrate dev --name add_users
 npx prisma migrate deploy
 ```
 
-`migrate dev` doesn't play well with the pooler — it tries to open a shadow database, and `connection_limit=1` can cause hangs. The pattern most teams use:
+`migrate dev` doesn't play well with the pooler: it tries to open a shadow database, and `connection_limit=1` can cause hangs. The pattern most teams use:
 
 1. Run `migrate dev` against a **local Postgres** during development (point `DATABASE_URL` at a local container, not Powabase).
 2. Commit the generated SQL migration files to your repo.
@@ -131,7 +131,7 @@ await prisma.$transaction(async (tx) => {
 });
 ```
 
-Inside the transaction, RLS applies as it would for any other `authenticated` request. **Both `SET LOCAL` statements must be inside the same transaction as the queries** — PgBouncer transaction mode is what makes this safe.
+Inside the transaction, RLS applies as it would for any other `authenticated` request. **Both `SET LOCAL` statements must be inside the same transaction as the queries.** PgBouncer transaction mode is what makes this safe.
 
 For most backend code, option 1 (direct PostgREST for RLS-required reads, Prisma for everything else) is cleaner than option 2.
 
@@ -144,7 +144,7 @@ Two paths:
 1. **Use Prisma's Data Proxy / Accelerate.** Prisma routes queries through a hosted connection pool. Compatible with serverless. Costs money.
 2. **Open and close per invocation.** Create `new PrismaClient()` at the top of the handler, `await prisma.$disconnect()` before returning. Burns the cold-start time on every invocation, but doesn't leak connections.
 
-For high-traffic serverless apps, neither option is great. Consider whether the Postgres-direct shape is the right one — for read-heavy workloads, PostgREST through Powabase's existing scale is often the simpler answer.
+For high-traffic serverless apps, neither option is great. Consider whether the Postgres-direct shape is the right one at all. For read-heavy workloads, PostgREST through Powabase's existing scale is often the simpler answer.
 
 ## Next steps
 
@@ -159,7 +159,7 @@ The migration patterns across all three ORMs we cover.
 </Card>
 
 <Card title="Direct Postgres" href="/guides/direct-postgres">
-For SQL Prisma doesn't express — bulk imports, schema introspection, etc.
+For SQL Prisma doesn't express: bulk imports, schema introspection, and the like.
 </Card>
 
 <Card title="Drizzle" href="/guides/orm-drizzle">

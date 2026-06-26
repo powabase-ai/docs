@@ -1,6 +1,6 @@
 ---
 title: "Studio SQL Editor"
-description: "Run ad-hoc SQL in the Studio against your project's Postgres — what it's good for, what it's not, the role it runs as, and how to save snippets."
+description: "Run ad-hoc SQL in the Studio against your project's Postgres: what it's good for, what it's not, the role it runs as, and how to save snippets."
 icon: "code"
 ---
 
@@ -14,21 +14,21 @@ In the Studio, under your project: **SQL Editor** in the left sidebar. You'll se
 
 ## What it's good for
 
-- **One-off queries** during development — "what rows does this query return?", "did my migration actually apply?"
-- **Inspecting schema** — `\d` doesn't work but `SELECT * FROM information_schema.tables WHERE table_schema = 'public'` does.
-- **Manual data fixes** — patching a few rows after a migration bug, removing test data.
-- **Testing RLS policies** before deploying — combine with the `SET LOCAL ROLE` pattern from [RLS Testing](/guides/rls-testing) to simulate a specific role.
-- **Saved snippets** — frequently-used queries (usage reports, debugging selectors) tucked into the sidebar so you don't retype them.
+- **One-off queries** during development: "what rows does this query return?", "did my migration actually apply?"
+- **Inspecting schema.** `\d` doesn't work but `SELECT * FROM information_schema.tables WHERE table_schema = 'public'` does.
+- **Manual data fixes:** patching a few rows after a migration bug, removing test data.
+- **Testing RLS policies** before deploying. Combine with the `SET LOCAL ROLE` pattern from [RLS Testing](/guides/rls-testing) to simulate a specific role.
+- **Saved snippets.** Frequently-used queries (usage reports, debugging selectors) tucked into the sidebar so you don't retype them.
 
 ## What it's not for
 
-- **Long-running migrations.** The editor times out at the pooler-level statement timeout (30 seconds on the `authenticator` role; higher as `supabase_admin` but still bounded). For long migrations, use a `.sql` file + `psql` from your laptop or CI.
-- **Production hot-fix workflow.** Running ad-hoc SQL in production is what mistakes are made of. Use it for inspection; gate writes behind your normal migration flow.
-- **Application traffic.** This is a Studio-internal tool, not an HTTP API. Don't try to drive it programmatically — it has no documented endpoint contract.
+- **Long-running migrations.** The editor times out at the pooler-level statement timeout (30 seconds on the `authenticator` role; higher as `supabase_admin` but still bounded). For long migrations, use a `.sql` file with `psql` from your laptop or CI.
+- **Production hot-fix workflow.** Running ad-hoc SQL in production is how mistakes get made. Use it for inspection; gate writes behind your normal migration flow.
+- **Application traffic.** This is a Studio-internal tool, not an HTTP API. Don't try to drive it programmatically; it has no documented endpoint contract.
 
 ## The role you run as
 
-The SQL Editor runs queries as the project's `postgres` superuser by default, which means **RLS is bypassed for editor queries**. This is why "I tested it in the SQL editor and it worked, but my app gets denied" is a common confusing moment — your app connects as `anon` or `authenticated`, and RLS applies there.
+The SQL Editor runs queries as the project's `postgres` superuser by default, which means **RLS is bypassed for editor queries**. This is why "I tested it in the SQL editor and it worked, but my app gets denied" trips people up: your app connects as `anon` or `authenticated`, and RLS applies there.
 
 To test as `anon` or `authenticated`, wrap your test in a transaction and `SET LOCAL ROLE`:
 
@@ -43,11 +43,11 @@ SELECT * FROM public.posts;  -- This now applies your RLS policies
 ROLLBACK;
 ```
 
-The `ROLLBACK` undoes the `SET LOCAL` changes. The pattern is the same as the [RLS Testing](/guides/rls-testing) recipes; the editor is just a different surface for running them.
+The `ROLLBACK` undoes the `SET LOCAL` changes. This is the same pattern as the [RLS Testing](/guides/rls-testing) recipes; the editor is just a different surface for running them.
 
 ## Snippets
 
-Click "New snippet" (or save the current query) and the Studio persists it under your account. Snippets are scoped per user — your team won't see them unless you share the snippet URL.
+Click "New snippet" (or save the current query) and the Studio persists it under your account. Snippets are scoped per user; your team won't see them unless you share the snippet URL.
 
 A few snippets worth saving for any project:
 

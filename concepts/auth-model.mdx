@@ -4,7 +4,7 @@ description: "How GoTrue issues JWT access and refresh tokens, what's in each on
 icon: "id-card"
 ---
 
-Powabase's auth layer is [GoTrue](https://github.com/supabase/gotrue) (v2.184.0) running at `/auth/v1/*` on your project URL. When a user signs in, GoTrue mints two JWTs — a short-lived access token and a longer-lived refresh token — and returns them to your client. The access token rides along with every subsequent API call as `Authorization: Bearer <token>`; the refresh token is exchanged for a new access token before the old one expires.
+Powabase's auth layer is [GoTrue](https://github.com/supabase/gotrue) (v2.184.0) running at `/auth/v1/*` on your project URL. When a user signs in, GoTrue mints two JWTs and returns them to your client: a short-lived access token and a longer-lived refresh token. The access token rides along with every subsequent API call as `Authorization: Bearer <token>`. The refresh token is exchanged for a new access token before the old one expires.
 
 This page covers what's in those tokens, how the token lifecycle works (especially refresh-token rotation), and how the resulting database role drives Row Level Security. For the API surface, see [Auth Reference](/api-reference/auth). For doing the signin flow, see [Signup, signin, magic link](/guides/auth-signup-signin).
 
@@ -23,11 +23,11 @@ GoTrue returns this shape after every successful sign-in / token refresh:
 }
 ```
 
-**Access token** — a signed JWT. Default lifetime: **1 hour** (`GOTRUE_JWT_EXP=3600`). Send it as the `Authorization` header on every API call (and as the `apikey` header — both must match). When PostgREST gets it, it verifies the signature against the project's JWT Secret, sets the database session role from the `role` claim, and stores the decoded payload as a session-local setting accessible via `auth.uid()`, `auth.jwt()`, `auth.role()`.
+**Access token**: a signed JWT. Default lifetime: **1 hour** (`GOTRUE_JWT_EXP=3600`). Send it as the `Authorization` header on every API call, and as the `apikey` header (both must match). When PostgREST gets it, it verifies the signature against the project's JWT Secret, sets the database session role from the `role` claim, and stores the decoded payload as a session-local setting accessible via `auth.uid()`, `auth.jwt()`, `auth.role()`.
 
-**Refresh token** — an opaque, single-use string (not a JWT). Default lifetime: **no expiration** as long as it gets used at least every refresh cycle, but each token can only be exchanged once. You call `POST /auth/v1/token?grant_type=refresh_token` with it before the access token expires; GoTrue returns a fresh access token + a new refresh token, and invalidates the old refresh token.
+**Refresh token**: an opaque, single-use string (not a JWT). Default lifetime: **no expiration** as long as it gets used at least every refresh cycle, but each token can only be exchanged once. You call `POST /auth/v1/token?grant_type=refresh_token` with it before the access token expires. GoTrue returns a fresh access token plus a new refresh token, and invalidates the old one.
 
-Most client SDKs (e.g., `supabase-js`) handle the refresh dance automatically — your code just sees a continuously-valid access token. If you're writing your own client, you need to track expiry and refresh in time.
+Most client SDKs (e.g., `supabase-js`) handle the refresh automatically, so your code just sees a continuously-valid access token. If you're writing your own client, you need to track expiry and refresh in time.
 
 ## Inside the access token
 
@@ -51,11 +51,11 @@ The JWT payload that PostgREST and your RLS policies see:
 
 The claims your policies will reach for:
 
-- **`sub`** — the user's UUID. Returned by `auth.uid()` in SQL.
-- **`role`** — `"authenticated"` for signed-in users, `"anon"` for unauthenticated requests using the Anon Key, `"service_role"` for the platform-issued Service Role Key. Drives `SET LOCAL ROLE` in PostgREST.
-- **`aud`** — always `"authenticated"` on Powabase (the project provisions GoTrue with `GOTRUE_JWT_AUD=authenticated`).
-- **`app_metadata`** — controlled by the platform/your backend (via `PUT /admin/users/{id}` with the Service Role key). Use for roles, feature flags, allowed orgs — anything end users shouldn't be able to change about themselves.
-- **`user_metadata`** — controlled by the user. Use for display name, avatar URL, preferences. Don't put anything security-sensitive here; the user can `PUT /auth/v1/user` to change it.
+- **`sub`**: the user's UUID. Returned by `auth.uid()` in SQL.
+- **`role`**: `"authenticated"` for signed-in users, `"anon"` for unauthenticated requests using the Anon Key, `"service_role"` for the platform-issued Service Role Key. Drives `SET LOCAL ROLE` in PostgREST.
+- **`aud`**: always `"authenticated"` on Powabase (the project provisions GoTrue with `GOTRUE_JWT_AUD=authenticated`).
+- **`app_metadata`**: controlled by the platform or your backend (via `PUT /admin/users/{id}` with the Service Role key). Use for roles, feature flags, allowed orgs, anything end users shouldn't be able to change about themselves.
+- **`user_metadata`**: controlled by the user. Use for display name, avatar URL, preferences. Don't put anything security-sensitive here; the user can `PUT /auth/v1/user` to change it.
 
 The full payload is reachable from SQL as `auth.jwt()` (returns `jsonb`).
 
@@ -64,10 +64,10 @@ The full payload is reachable from SQL as `auth.jwt()` (returns `jsonb`).
 Powabase has refresh token rotation enabled by default (`GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED=true`). Three implications:
 
 1. **Each refresh token is single-use.** Exchange it once; the next attempt with the same token returns `400 invalid_grant`.
-2. **The new refresh token must be persisted client-side.** If you lose it (e.g., user closes the tab before localStorage commits), the session is gone — re-authentication required.
-3. **There's a 10-second reuse interval** (`GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL=10`). If two refresh requests fire concurrently with the same token (a common race in SPAs), the second one within 10 seconds succeeds rather than 400ing. This forgives the common "double-refresh" race.
+2. **The new refresh token must be persisted client-side.** If you lose it (e.g., user closes the tab before localStorage commits), the session is gone and the user has to re-authenticate.
+3. **There's a 10-second reuse interval** (`GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL=10`). If two refresh requests fire concurrently with the same token (a common race in SPAs), the second one within 10 seconds succeeds rather than 400ing. This forgives the "double-refresh" race.
 
-The rotation is what makes refresh tokens safer than long-lived access tokens. If an attacker steals a refresh token, they can exchange it exactly once before the legitimate client tries and fails (which signals compromise). The 10-second grace window doesn't materially weaken this — the attacker still only gets one fresh access token, and the legitimate client immediately discovers the breach.
+Rotation is what makes refresh tokens safer than long-lived access tokens. If an attacker steals a refresh token, they can exchange it exactly once before the legitimate client tries and fails, which signals compromise. The 10-second grace window doesn't materially weaken this: the attacker still only gets one fresh access token, and the legitimate client immediately discovers the breach.
 
 ## The four roles
 
@@ -88,9 +88,9 @@ See [RLS Model](/concepts/rls-model) for the longer treatment of how policies us
 
 ## Email verification and the "autoconfirm" default
 
-Powabase projects ship with **`GOTRUE_MAILER_AUTOCONFIRM=true`** by default — new signups are confirmed immediately without an email verification step. That's the right setting for prototyping and for apps where you'll verify ownership another way (e.g., paid plans through Stripe). It's the wrong setting if you need to be sure users own their email address.
+Powabase projects ship with **`GOTRUE_MAILER_AUTOCONFIRM=true`** by default, so new signups are confirmed immediately without an email verification step. That's the right setting for prototyping and for apps where you'll verify ownership another way (e.g., paid plans through Stripe). It's the wrong setting if you need to be sure users own their email address.
 
-To turn it on, set `gotrue.autoConfirm: "false"` in your Helm overrides (self-hosted) or in the Studio's auth settings (managed), and configure SMTP credentials. After that, `POST /auth/v1/signup` returns a user record but no session — the user has to click the verification email link before they can sign in.
+To turn it on, set `gotrue.autoConfirm: "false"` in your Helm overrides (self-hosted) or in the Studio's auth settings (managed), and configure SMTP credentials. After that, `POST /auth/v1/signup` returns a user record but no session, and the user has to click the verification email link before they can sign in.
 
 SMTP is **not** configured by default. The platform won't try to send emails until you fill in `gotrue.smtpHost` and friends. While SMTP is unset, password recovery, magic links, and email verification silently no-op.
 
@@ -98,7 +98,7 @@ SMTP is **not** configured by default. The platform won't try to send emails unt
 
 TOTP MFA is enabled at the GoTrue level (`GOTRUE_MFA_TOTP_ENROLL_ENABLED=true` and `GOTRUE_MFA_TOTP_VERIFY_ENABLED=true`) but requires your app to drive the enrollment flow. The endpoint surface (`/auth/v1/factors`, `/auth/v1/factors/{id}/challenge`, etc.) is described in the [Auth Reference](/api-reference/auth). Up to 10 factors per user by default.
 
-Phone-based MFA (SMS) is off by default — turn it on and configure a Twilio account if you want it.
+Phone-based MFA (SMS) is off by default. Turn it on and configure a Twilio account if you want it.
 
 ## Rate limits
 
@@ -113,16 +113,16 @@ GoTrue enforces per-IP rate limits at the application layer. The defaults Powaba
 | OTP verify | 30 | per 5 minutes |
 | Anonymous user creation | 30 | per hour |
 
-Hitting a limit returns `429 over_email_send_rate_limit` (or similar). These are per-project and tunable in Helm overrides. For self-hosted deployments expecting traffic spikes, raise them; for managed-cloud projects, contact support.
+Hitting a limit returns `429 over_email_send_rate_limit` (or similar). These are per-project and tunable in Helm overrides. Raise them on self-hosted deployments expecting traffic spikes; for managed-cloud projects, contact support.
 
 ## What's *not* in the picture
 
 A few things to be explicit about because they trip people up:
 
-- **No anonymous sign-in by default.** The audit flagged this; the platform ships with `GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED=false`. If you want anonymous-then-upgrade flows, set it to `true` in Helm overrides. (Most apps don't need it; "Anon Key" is the unauthenticated mode.)
-- **No phone-based signup by default.** Same story — `GOTRUE_EXTERNAL_PHONE_ENABLED=false`. Enable it + Twilio creds if you want phone signup.
+- **No anonymous sign-in by default.** The platform ships with `GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED=false`. If you want anonymous-then-upgrade flows, set it to `true` in Helm overrides. (Most apps don't need it; "Anon Key" is the unauthenticated mode.)
+- **No phone-based signup by default.** Same story: `GOTRUE_EXTERNAL_PHONE_ENABLED=false`. Enable it plus Twilio creds if you want phone signup.
 - **No CAPTCHA by default.** `GOTRUE_SECURITY_CAPTCHA_ENABLED=false`. The hcaptcha provider is wired up; supply `securityCaptchaSecret` to enable.
-- **No password requirements enforced beyond GoTrue defaults.** That's at least 6 characters — there's no complexity rule. If you need stronger policies, validate client-side before submitting or via your own backend before calling GoTrue admin endpoints.
+- **No password requirements enforced beyond GoTrue defaults.** That's at least 6 characters, with no complexity rule. If you need stronger policies, validate client-side before submitting or via your own backend before calling GoTrue admin endpoints.
 
 ## Next steps
 

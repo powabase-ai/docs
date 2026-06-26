@@ -19,11 +19,11 @@ These extensions are available at project provision time without `CREATE EXTENSI
 | `pgcrypto` | `public` | Cryptographic functions (`gen_random_uuid`, `crypt`, `digest`, etc.) |
 | `uuid-ossp` | `extensions` | Alternative UUID generation (`uuid_generate_v4`, etc.) |
 | `pg_graphql` | preloaded library | GraphQL on top of Postgres, callable via `POST /rest/v1/rpc/graphql` |
-| `vault` | preloaded library | Encrypted secret storage. Available via direct Postgres only — no platform code uses it. |
+| `vault` | preloaded library | Encrypted secret storage. Available via direct Postgres only; no platform code uses it. |
 
 `pgcrypto`'s `gen_random_uuid()` is what your `CREATE TABLE ... id uuid DEFAULT gen_random_uuid()` columns use. No setup needed.
 
-`pg_net` is in the `extensions` schema (not `public`) so its functions don't pollute the default search path. Call them as `extensions.http_post(...)` or `SET search_path TO extensions, public` first.
+`pg_net` is in the `extensions` schema (not `public`) so its functions stay out of the default search path. Call them as `extensions.http_post(...)`, or `SET search_path TO extensions, public` first.
 
 ## You-can-install
 
@@ -33,7 +33,7 @@ The Postgres image (`supabase/postgres:15.8.1.085`) includes a long list of exte
 |---|---|---|
 | `pg_trgm` | `extensions` | Trigram similarity for fuzzy text matching, useful for autocomplete |
 | `unaccent` | `extensions` | Strip accents from text for diacritic-insensitive search |
-| `citext` | `extensions` | Case-insensitive text type — `WHERE email = 'foo@bar.com'` matches `Foo@Bar.com` |
+| `citext` | `extensions` | Case-insensitive text type: `WHERE email = 'foo@bar.com'` matches `Foo@Bar.com` |
 | `btree_gin`, `btree_gist` | `extensions` | GIN / GiST index support for scalar types alongside JSONB / tsvector |
 | `postgres_fdw` | `extensions` | Query a different Postgres database as if it were a local table |
 | `hstore` | `extensions` | Key-value type (less common now that JSONB exists, but still supported) |
@@ -47,7 +47,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS citext SCHEMA extensions;
 ```
 
-You'll need to be connected as `supabase_admin` (via the Database URL) — `anon`, `authenticated`, and `service_role` don't have CREATE on the database.
+You'll need to be connected as `supabase_admin` (via the Database URL); `anon`, `authenticated`, and `service_role` don't have CREATE on the database.
 
 ## Not available
 
@@ -59,7 +59,7 @@ Some extensions you might be looking for that aren't in the Powabase Postgres im
 | `pg_jsonschema` | Not present. Use CHECK constraints or application-level validation. |
 | `pgsodium` | Not enabled. Use `pgcrypto` for crypto, or move secrets to your application config. |
 | `postgis` | Not in the standard image. If you need it, contact support. |
-| `pgmq`, `pg_partman`, etc. | Various community extensions — file a platform request if you need one. |
+| `pgmq`, `pg_partman`, etc. | Various community extensions. File a platform request if you need one. |
 
 The platform team can add extensions on request for enterprise customers.
 
@@ -89,7 +89,7 @@ This shows extensions the image has shipped but you haven't installed. Run `CREA
 
 Extensions install their objects (functions, types, tables) into a schema. Powabase's convention is to put platform-preloaded extensions in `extensions` (for clean search_path defaults), with `vector` and `pgcrypto` in `public` (the standard Supabase pattern). Anything you `CREATE EXTENSION` yourself should also go in `extensions`.
 
-If you're getting "function does not exist" errors after installing an extension, check the schema — most extension functions don't end up in `public` and need to be qualified (`extensions.http_post(...)`) or have `extensions` added to your `search_path`.
+If you're getting "function does not exist" errors after installing an extension, check the schema. Most extension functions don't end up in `public` and need to be qualified (`extensions.http_post(...)`) or have `extensions` added to your `search_path`.
 
 ## Next steps
 

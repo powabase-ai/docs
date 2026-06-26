@@ -14,7 +14,7 @@ An Agent wraps an LLM with a system prompt, temperature, a set of tools, and opt
   <img src="/diagrams/agent-react-loop.svg" alt="ReAct loop diagram: User Message → LLM (Reason) → Tool Call? If yes → Execute Tool → Tool Result → back to LLM. If no → Generate Response → Stream to User." />
 </Frame>
 
-Each iteration of the loop is a step. Within a step, the agent can call multiple tools — concurrency-safe tools (like knowledge base search) run in parallel via a thread pool, while other tools execute sequentially. If the agent makes the same tool call with identical arguments three times in a row, the platform detects a doom loop and terminates the run. During streaming, each step is visible as SSE events: step_started, tool_call, tool_result, step_completed, and chunk events for the final response.
+Each iteration of the loop is a step. Within a step, the agent can call multiple tools. Concurrency-safe tools (like knowledge base search) run in parallel via a thread pool, while other tools execute sequentially. If the agent makes the same tool call with identical arguments three times in a row, the platform detects a doom loop and terminates the run. During streaming, each step is visible as SSE events: step_started, tool_call, tool_result, step_completed, and chunk events for the final response.
 
 ### Context Management
 
@@ -26,7 +26,7 @@ Agents can use three categories of tools: builtin tools provided by the platform
 
 ### Builtin Tools
 
-The platform provides eight builtin tools. Assign them to an agent by name via POST /api/agents/\{id\}/tools. The database tools include schema-level access control — when assigning them, you configure which schemas and tables the agent can access.
+The platform provides eight builtin tools. Assign them to an agent by name via POST /api/agents/\{id\}/tools. The database tools include schema-level access control: when assigning them, you configure which schemas and tables the agent can access.
 
 | Tool | Description | Constraints |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ The platform provides eight builtin tools. Assign them to an agent by name via P
 | web_scrape | Extract content from web pages as clean markdown, with optional AI vision image analysis | Results capped at 200K chars. Supports markdown/HTML/links formats. include_images uses gpt-4.1-mini vision. Direct image URLs bypass Firecrawl. Requires FIRECRAWL_API_KEY. |
 
 <Warning>
-**`http_request` has no SSRF protection.** Unlike Custom Tools (below), the builtin `http_request` tool calls the URL the agent supplies directly, with no allow-list and no validation against internal addresses. An agent given `http_request` can reach RFC1918 ranges, `localhost`, and cloud metadata endpoints (e.g. `169.254.169.254`). Only enable `http_request` for agents whose model + prompt you trust, or use a Custom Tool with a fixed `endpoint` instead — Custom Tools enforce SSRF via `validate_url` on the endpoint URL.
+**`http_request` has no SSRF protection.** Unlike Custom Tools (below), the builtin `http_request` tool calls the URL the agent supplies directly, with no allow-list and no validation against internal addresses. An agent given `http_request` can reach RFC1918 ranges, `localhost`, and cloud metadata endpoints (e.g. `169.254.169.254`). Only enable `http_request` for agents whose model and prompt you trust, or use a Custom Tool with a fixed `endpoint` instead. Custom Tools enforce SSRF via `validate_url` on the endpoint URL.
 </Warning>
 
 #### Tool prerequisites
@@ -60,7 +60,7 @@ If you're enabling these via API rather than the Studio, set them with `PUT /api
 
 ### Custom Tools
 
-Custom tools call your own HTTP endpoints. You define the tool with a name, description, JSON Schema for inputs, an endpoint URL, HTTP method, and optional headers. When the agent decides to use the tool, the platform POSTs the tool arguments as JSON to your endpoint and returns the response to the agent. Responses are capped at 10,000 characters. Timeout is 30 seconds. SSRF validation prevents the agent from calling internal network addresses.
+Custom tools call your own HTTP endpoints. You define the tool with a name, description, JSON Schema for inputs, an endpoint URL, HTTP method, and optional headers. When the agent decides to use the tool, the platform POSTs the tool arguments as JSON to your endpoint and returns the response to the agent. Responses are capped at 10,000 characters and the timeout is 30 seconds. SSRF validation prevents the agent from calling internal network addresses.
 
 ### MCP Servers
 
@@ -70,9 +70,9 @@ MCP (Model Context Protocol) servers let you connect agents to external tool pro
 
 **Headers:** any `headers` you configure on the server (typically for auth) are sent on both `tools/list` and `tools/call` requests. There's no per-call header injection.
 
-**enabled flag:** if you set `enabled: false` on an MCP server, discovery skips it entirely — its tools aren't added and no `tools/call` requests fire. Use this to temporarily disconnect a server without removing it.
+**enabled flag:** if you set `enabled: false` on an MCP server, discovery skips it entirely: its tools aren't added and no `tools/call` requests fire. Use this to temporarily disconnect a server without removing it.
 
-**Failure handling:** if `tools/list` fails (network error, non-200, JSON-RPC error), the agent run **continues without that server's tools** (fail-open). The failure is logged but not surfaced as a run error.
+**Failure handling:** if `tools/list` fails (network error, non-200, JSON-RPC error), the agent run **continues without that server's tools** (fail-open). The failure is logged, not surfaced as a run error.
 
 **Tool annotations:** the platform reads `annotations.readOnlyHint`, `destructiveHint`, and `openWorldHint` from each discovered tool and uses them for concurrency / safety planning. A `readOnlyHint: true` tool may be called in parallel with other read-only tools.
 
@@ -82,7 +82,7 @@ When you link a knowledge base to an agent, the platform automatically creates a
 
 ## Sessions & Memory
 
-Every agent conversation happens within a session. A session stores a sequence of runs, each containing the user input, assistant response, tool calls, tool results, and usage statistics. When you pass a session_id with a new message, the platform loads all completed runs from that session and reconstructs the full message history for the LLM. Sessions persist until explicitly deleted, enabling long-running multi-turn conversations. New sessions are created automatically if no session_id is provided — the start SSE event returns the generated session_id for future use.
+Every agent conversation happens within a session. A session stores a sequence of runs, each containing the user input, assistant response, tool calls, tool results, and usage statistics. When you pass a session_id with a new message, the platform loads all completed runs from that session and reconstructs the full message history for the LLM. Sessions persist until explicitly deleted, enabling long-running multi-turn conversations. New sessions are created automatically if no session_id is provided; the start SSE event returns the generated session_id for future use.
 
 ## Hooks & Middleware
 
@@ -118,7 +118,7 @@ The streaming endpoint (POST /api/agents/\{id\}/run/stream) returns Server-Sent 
 
 ## Sync (Non-Streaming) Run
 
-The sync endpoint (POST /api/agents/\{id\}/run) runs the agent without streaming and returns the full response as JSON. In this mode, no tools are loaded and no ReAct loop runs — the agent makes a single LLM call with the conversation context. This is useful for simple question-answering where tool use isn't needed.
+The sync endpoint (POST /api/agents/\{id\}/run) runs the agent without streaming and returns the full response as JSON. In this mode, no tools are loaded and no ReAct loop runs: the agent makes a single LLM call with the conversation context. This is useful for simple question-answering where tool use isn't needed.
 
 ## Limits & Safeguards
 

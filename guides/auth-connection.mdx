@@ -4,7 +4,7 @@ description: "Find your project's credentials in the Connect modal, pick the rig
 icon: "plug"
 ---
 
-Every Powabase project surfaces all of its connection details in one place: the **Connect modal** in the Studio. It gives you the Project URL, both API keys (Anon and Service Role), the JWT Secret, the Database URL, and ready-to-paste Postgres connection strings in nine driver formats. Open it once, copy what you need, and you're ready to call any part of the platform.
+Every Powabase project keeps its connection details in one place: the **Connect modal** in the Studio. It holds the Project URL, both API keys (Anon and Service Role), the JWT Secret, the Database URL, and ready-to-paste Postgres connection strings in nine driver formats. Open it once, copy what you need, and you can call any part of the platform.
 
 ## Open the Connect modal
 
@@ -14,14 +14,14 @@ In the Studio at [app.powabase.ai](https://app.powabase.ai), click the **Connect
   <img src="/images/connect-button.png" alt="Powabase Studio header with the Connect button highlighted in the top-right corner" />
 </Frame>
 
-The dialog has two tabs. **API Keys** lists everything you need to authenticate HTTP and Postgres clients. **Connection Strings** ships pre-filled snippets for psql, the generic URI, Node.js (pg), Python (psycopg2), Go (database/sql), JDBC, .NET, PHP, and SQLAlchemy — nine in all. Copy buttons sit next to every value, and secret fields hide by default — click the eye icon to reveal.
+The dialog has two tabs. **API Keys** lists everything you need to authenticate HTTP and Postgres clients. **Connection Strings** ships pre-filled snippets for psql, the generic URI, Node.js (pg), Python (psycopg2), Go (database/sql), JDBC, .NET, PHP, and SQLAlchemy: nine in all. Copy buttons sit next to every value. Secret fields hide by default; click the eye icon to reveal.
 
-<Frame caption="The API Keys tab — every credential your project exposes lives here.">
+<Frame caption="The API Keys tab: every credential your project exposes lives here.">
   <img src="/images/connect-modal.png" alt="Connect to your project modal, API Keys tab. Shows Project URL, Anon (Publishable) Key, and three masked fields: Service Role (Secret) Key, JWT Secret, and Database URL." />
 </Frame>
 
 <Tip>
-You can also open the modal by appending `?showConnect=true` to any project URL — handy for deep-linking from internal docs.
+You can also open the modal by appending `?showConnect=true` to any project URL, which is handy for deep-linking from internal docs.
 </Tip>
 
 ## What's in the modal, and where to use each value
@@ -34,7 +34,7 @@ You can also open the modal by appending `?showConnect=true` to any project URL 
 | **JWT Secret** | Verifying user-signed JWTs on your own backend | **No — server only** |
 | **Database URL** | Direct Postgres access (psql, migrations, ORMs, BI tools) | **No — server only** |
 
-The rest of this guide uses the **Service Role (Secret) Key** as `API_KEY` — it authenticates every endpoint under `/api/*`, which is what most of the platform docs assume.
+The rest of this guide uses the **Service Role (Secret) Key** as `API_KEY`. It authenticates every endpoint under `/api/*`, which is what most of the platform docs assume.
 
 <Warning>
 Never expose the Service Role key, JWT Secret, or Database URL to a browser, mobile app, or any environment outside your control. The Anon key is the only field in the modal safe to bundle into a client.
@@ -51,7 +51,7 @@ Every request to /api/* and /rest/v1/* needs **both** an `apikey` header and an 
 **Endpoint:** `Headers: apikey + Authorization`
 
 <Note>
-Sending only one of the two headers is the most common cause of 401 errors — PostgREST and Kong both reject the request.
+Sending only one of the two headers is the most common cause of 401 errors. PostgREST and Kong both reject the request.
 </Note>
 
 <CodeGroup>
@@ -144,7 +144,7 @@ curl '{BASE_URL}/api/agents' \
 
 <Step title="Connect directly to Postgres (optional)">
 
-For migrations, dashboards, ORMs, or any tool that speaks the Postgres wire protocol, grab the **Database URL** from the API Keys tab — or open the **Connection Strings** tab and copy a pre-built snippet in your language. Use this from servers and trusted environments only.
+For migrations, dashboards, ORMs, or any tool that speaks the Postgres wire protocol, grab the **Database URL** from the API Keys tab, or open the **Connection Strings** tab and copy a pre-built snippet in your language. Use this from servers and trusted environments only.
 
 **Endpoint:** `Postgres wire protocol`
 

@@ -8,7 +8,7 @@ Workflows are DAG-based automation pipelines that execute a fixed sequence of bl
 
 ## Common Patterns
 
-Create a workflow, define its graph with PUT /api/workflows/\{id\}/graph, then execute. For external triggers, deploy the workflow and arm it to get a webhook URL. Webhooks are single-use — re-arm after each trigger. Use the streaming endpoint for real-time block execution updates.
+Create a workflow, define its graph with PUT /api/workflows/\{id\}/graph, then execute. For external triggers, deploy the workflow and arm it to get a webhook URL. Webhooks are single-use, so re-arm after each trigger. Use the streaming endpoint for real-time block execution updates.
 
 ## CRUD
 
@@ -144,7 +144,7 @@ curl -X DELETE '{BASE_URL}/api/workflows/{id}' -H "apikey: {API_KEY}" -H "Author
 
 ### PUT /api/workflows/{id}/graph
 
-Save the complete graph — blocks and edges.
+Save the complete graph: blocks and edges.
 
 <ParamField path="id" type="string" required>
 Workflow ID
@@ -243,7 +243,7 @@ Workflow ID
 </ParamField>
 
 <Note>
-The response is `{"ok": true, "armed_until": "<iso8601>"}` — **not** a webhook id/secret. The `webhook_id` and `webhook_secret` live on the webhook block's config in the saved graph; fetch them with `GET /api/workflows/{id}` and read from the block whose `type == "webhook"`.
+The response is `{"ok": true, "armed_until": "<iso8601>"}`, **not** a webhook id/secret. The `webhook_id` and `webhook_secret` live on the webhook block's config in the saved graph; fetch them with `GET /api/workflows/{id}` and read from the block whose `type == "webhook"`.
 </Note>
 
 <CodeGroup>
@@ -279,7 +279,7 @@ Map of input variable names → values. Defaults to `{}` when omitted.
 </ParamField>
 
 <Note>
-`variables` is the canonical key. The route also accepts `input` as a legacy alias (`data.get("variables", data.get("input", {}))`) — prefer `variables` in new code.
+`variables` is the canonical key. The route also accepts `input` as a legacy alias (`data.get("variables", data.get("input", {}))`); prefer `variables` in new code.
 </Note>
 
 <RequestExample>
@@ -308,7 +308,7 @@ curl -X POST '{BASE_URL}/api/workflows/{id}/execute' -H "apikey: {API_KEY}" -H "
 
 ### POST /api/workflows/{id}/execute/stream
 
-Execute with streaming SSE. Same body shape as `/execute` — pass `variables` (canonical) or `input` (legacy alias).
+Execute with streaming SSE. Same body shape as `/execute`: pass `variables` (canonical) or `input` (legacy alias).
 
 <ParamField path="id" type="string" required>
 Workflow ID
@@ -390,8 +390,8 @@ curl '{BASE_URL}/api/workflows/{id}/executions/{eid}/logs' -H "apikey: {API_KEY}
 
 Workflow routes return one of two body shapes:
 
-- Plain `{"error": "<message>"}` — list/create/patch/delete and the deploy/undeploy/arm endpoints.
-- Structured `{"error": "<message>", "error_code": "<UPPER_SNAKE_CODE>"}` (via the shared `error_response` helper) — `GET /workflows/{id}`, `PUT /workflows/{id}/graph`, and the synchronous `/execute` endpoint.
+- Plain `{"error": "<message>"}`: list/create/patch/delete and the deploy/undeploy/arm endpoints.
+- Structured `{"error": "<message>", "error_code": "<UPPER_SNAKE_CODE>"}` (via the shared `error_response` helper): `GET /workflows/{id}`, `PUT /workflows/{id}/graph`, and the synchronous `/execute` endpoint.
 
 Streaming endpoints (`/execute/stream`) return HTTP 200 and emit errors as SSE `data: {"type": "error", ...}` events; only the timeout event includes `error_code` (`EXECUTION_TIMEOUT`).
 

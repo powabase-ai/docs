@@ -4,9 +4,9 @@ description: "Read and override per-project configuration values managed through
 icon: "sliders"
 ---
 
-Project Settings expose a typed registry of configuration knobs (extraction defaults, copilot behavior, model selection, etc.). The registry defines each setting's default; user overrides are stored per-project and merged at read time. Secret-typed settings are returned with a mask placeholder — sending that placeholder back is treated as "no change".
+Project Settings expose a typed registry of configuration knobs (extraction defaults, copilot behavior, model selection, etc.). The registry defines each setting's default; user overrides are stored per-project and merged at read time. Secret-typed settings are returned with a mask placeholder, and sending that placeholder back is treated as "no change".
 
-Setting keys come from the registry as-is — most use `UPPER_SNAKE_CASE` (e.g. `EXTRACTION_DEFAULT_METHOD`, `COPILOT_TEMPERATURE`), with a few historical lowercase keys (e.g. `copilot_model`). All values are persisted as strings, so when sending bools or numbers, stringify them (`"true"`, `"0.7"`).
+Setting keys come from the registry as-is. Most use `UPPER_SNAKE_CASE` (e.g. `EXTRACTION_DEFAULT_METHOD`, `COPILOT_TEMPERATURE`), with a few historical lowercase keys (e.g. `copilot_model`). All values are persisted as strings, so when sending bools or numbers, stringify them (`"true"`, `"0.7"`).
 
 Categories defined by the registry: `copilot`, `agents`, `tools`, `knowledge-indexing`, `knowledge-retrieval`, `compaction`, `sources`.
 
@@ -127,7 +127,7 @@ curl -X POST '{BASE_URL}/api/settings/reset-category' -H "apikey: {API_KEY}" -H 
 
 ## Registry keys reference
 
-A high-level map of what's in the registry. The authoritative source for current defaults, types, and validation rules is `GET /api/settings` against your project — these tables tell you what each key controls so you can find the right knob without round-tripping.
+A high-level map of what's in the registry. The authoritative source for current defaults, types, and validation rules is `GET /api/settings` against your project. These tables tell you what each key controls so you can find the right knob without round-tripping.
 
 ### copilot (8 keys)
 
@@ -218,7 +218,7 @@ There are 92 registered keys total. `GET /api/settings` is the authoritative liv
 
 ## Error Responses
 
-Settings routes return `{"error": "<message>"}` (PUT additionally includes `details` with per-key errors). The codes below are the documentation labels we use for each failure mode.
+Settings routes return `{"error": "<message>"}` (PUT also includes `details` with per-key errors). The codes below are the documentation labels for each failure mode.
 
 | Status | Description |
 | --- | --- |

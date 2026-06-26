@@ -1,10 +1,10 @@
 ---
 title: "Backups and disaster recovery"
-description: "What the platform automatically backs up, what's NOT user-callable, and what to do if you need restore. Honest about the gap between 'we run backups' and 'you can restore yourself.'"
+description: "What the platform automatically backs up, what's NOT user-callable, and what to do if you need a restore. Honest about the gap between 'we run backups' and 'you can restore yourself.'"
 icon: "shield"
 ---
 
-Powabase runs automated Postgres backups for every project. They're not user-callable today — there's no `POST /api/backup/restore` or self-service rollback UI. This page documents what runs, what the retention story looks like, and how to engage with the platform if you need a restore.
+Powabase runs automated Postgres backups for every project. They're not user-callable today: there's no `POST /api/backup/restore` and no self-service rollback UI. This page documents what runs, what the retention story looks like, and how to engage with the platform if you need a restore.
 
 For per-resource recovery inside the API (re-running a failed extraction, re-indexing a KB), see the relevant API references. For platform-wide infrastructure decisions, see [Architecture](/concepts/architecture).
 
@@ -12,28 +12,28 @@ For per-resource recovery inside the API (re-running a failed extraction, re-ind
 
 Each project's database has a scheduled `pg_dump` job that runs daily and streams the output (gzipped) to S3:
 
-- **Schedule:** daily — exact time depends on the platform's scheduling, not user-configurable.
-- **Method:** `pg_dump --no-owner --no-privileges` streamed through `gzip` directly into S3. The job doesn't write to local disk — incident 2026-05-03 caught node-eviction problems with the local-temp-file approach on projects with large embeddings tables.
+- **Schedule:** daily. The exact time depends on the platform's scheduling and isn't user-configurable.
+- **Method:** `pg_dump --no-owner --no-privileges` streamed through `gzip` directly into S3. The job doesn't write to local disk; incident 2026-05-03 caught node-eviction problems with the local-temp-file approach on projects with large embeddings tables.
 - **Storage:** S3, in a backup bucket separate from your project's Storage bucket. Keyed under `<backup-bucket>/<backup-prefix>/<project-ref>/<timestamp>.sql.gz`.
-- **Verification:** the backup job rejects "absurdly small" dumps (under 100 bytes) as suspected silent failures and alerts the platform team.
+- **Verification:** the backup job rejects dumps under 100 bytes as suspected silent failures and alerts the platform team.
 
-Backups include the entire database — `public`, `ai`, `auth`, `storage`, and `extensions` schemas all dumped together. Restore would replace everything.
+Backups include the entire database. The `public`, `ai`, `auth`, `storage`, and `extensions` schemas are all dumped together, and a restore would replace everything.
 
 ## What's NOT user-callable
 
 To set realistic expectations:
 
-- **No self-service restore.** There's no UI button, no API endpoint that initiates a restore. Restoration requires platform team involvement.
-- **No backup list endpoint.** You can't query "what backups do you have for my project?" — that's an internal operations question.
-- **No restore-to-different-timestamp UI.** The backups are timestamped and S3-versioned but exposing a "restore to last Tuesday" picker requires UI work that hasn't shipped.
+- **No self-service restore.** There's no UI button and no API endpoint that initiates a restore. Restoration requires platform team involvement.
+- **No backup list endpoint.** You can't query "what backups do you have for my project?" That's an internal operations question.
+- **No restore-to-different-timestamp UI.** The backups are timestamped and S3-versioned, but exposing a "restore to last Tuesday" picker requires UI work that hasn't shipped.
 - **No incremental backups.** Each daily backup is a full `pg_dump`. For large databases this is fine; for very-large databases the storage and runtime can add up.
-- **No point-in-time recovery.** Postgres WAL streaming isn't configured for off-cluster archiving. The recovery granularity is "the daily snapshot."
+- **No point-in-time recovery.** Postgres WAL streaming isn't configured for off-cluster archiving. The recovery granularity is the daily snapshot.
 
-The honest framing: **the platform backs you up; restoration requires support.** This is fine for "we accidentally deleted production data, please help" — file a support ticket and the platform team can restore from the daily snapshot. It is not fine for "we want hourly self-service rollback" — that's a feature that doesn't exist.
+The honest framing: **the platform backs you up; restoration requires support.** This is fine for "we accidentally deleted production data, please help": file a support ticket and the platform team can restore from the daily snapshot. It is not fine for "we want hourly self-service rollback," which is a feature that doesn't exist.
 
 ## Retention
 
-Backup retention is platform-configured, not project-configured. The platform's defaults retain daily snapshots for a window measured in weeks; older snapshots get pruned. The exact window can vary by deployment tier — enterprise self-hosted deployments may have longer retention.
+Backup retention is platform-configured, not project-configured. The platform's defaults retain daily snapshots for a window measured in weeks; older snapshots get pruned. The exact window can vary by deployment tier, and enterprise self-hosted deployments may have longer retention.
 
 If you need a specific retention policy (regulatory, compliance) that exceeds the platform default, that's an enterprise-tier conversation with sales.
 
@@ -43,8 +43,8 @@ Email support with:
 
 1. Your project ref.
 2. The approximate timestamp of the state you want to restore to.
-3. What scope you want — full database, or just specific tables (the platform team can extract specific tables from the snapshot if needed).
-4. Whether you want destructive restore (overwrite current state) or restore-to-new-project (create a fresh project with the restored data, so you can manually merge what you need).
+3. What scope you want: full database, or just specific tables (the platform team can extract specific tables from the snapshot if needed).
+4. Whether you want a destructive restore (overwrite current state) or a restore-to-new-project (create a fresh project with the restored data, so you can manually merge what you need).
 
 Restoration is usually completed within hours for managed-cloud projects. Plan around that turnaround in your own disaster-recovery runbook.
 
@@ -63,9 +63,9 @@ pg_dump "postgresql://<ref>:<password>@db.p.powabase.ai:5432/<ref>" \
   > backup-$(date +%Y%m%d).sql.gz
 ```
 
-This connects through PgBouncer. For a big database this might bump into transaction-mode constraints — `pg_dump` opens multiple connections; one transaction with everything in it would fail at large enough sizes. Most projects this isn't an issue.
+This connects through PgBouncer. For a big database this might bump into transaction-mode constraints, since `pg_dump` opens multiple connections and one transaction with everything in it would fail at large enough sizes. For most projects this isn't an issue.
 
-If you do this regularly, your own backup is the fastest path to restore — you control the schedule and the destination.
+If you do this regularly, your own backup is the fastest path to restore: you control the schedule and the destination.
 
 ### 2. Use Storage for user-uploaded files separately
 
@@ -75,13 +75,13 @@ For files that matter, replicate to your own S3 bucket on upload. Pattern: webho
 
 ### 3. Decouple write-path side effects
 
-For events you don't want to lose during an outage — payments, signups, etc. — write to your own durable queue *in addition to* the Powabase database. If the Powabase project is unavailable, the queue still has the data; reconciliation happens after recovery.
+For events you don't want to lose during an outage (payments, signups, and the like), write to your own durable queue *in addition to* the Powabase database. If the Powabase project is unavailable, the queue still has the data; reconciliation happens after recovery.
 
 This is independent of backup/restore. It's just good practice for any system where data loss during a downtime window is unacceptable.
 
 ## What's coming
 
-Like observability, a self-service restore API is on the platform's radar but not committed. The plausible near-term addition would be a Studio UI for triggering a restore to a fresh project from a snapshot — gives users self-service for the "restore but don't overwrite" pattern without exposing the destructive case.
+Like observability, a self-service restore API is on the platform's radar but not committed. The plausible near-term addition would be a Studio UI for triggering a restore to a fresh project from a snapshot. That gives users self-service for the "restore but don't overwrite" pattern without exposing the destructive case.
 
 For enterprise customers, longer retention windows and point-in-time recovery options are conversations to have with sales. They're achievable on dedicated infrastructure; they're not standard managed-cloud features.
 
@@ -102,7 +102,7 @@ The schema-change discipline that reduces the likelihood you'll need a restore i
 </Card>
 
 <Card title="Architecture" href="/concepts/architecture">
-The infrastructure context — namespace isolation, the per-project StatefulSet.
+The infrastructure context: namespace isolation, the per-project StatefulSet.
 </Card>
 
 </CardGroup>

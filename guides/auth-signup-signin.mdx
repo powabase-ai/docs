@@ -4,22 +4,22 @@ description: "Working end-to-end auth flows: email + password signup and signin,
 icon: "id-card"
 ---
 
-These flows assume you've read [Auth model](/concepts/auth-model) and have your Anon (Publishable) Key from the Connect modal. **All calls here use the Anon Key** as the `apikey` header — the Anon Key is what makes the auth endpoints reachable from public clients. After sign-in, you'll send the user's access token as the `Authorization: Bearer <token>` header on subsequent API calls (and keep the Anon Key in `apikey`).
+These flows assume you've read [Auth model](/concepts/auth-model) and have your Anon (Publishable) Key from the Connect modal. **All calls here use the Anon Key** as the `apikey` header; that's what makes the auth endpoints reachable from public clients. After sign-in, you send the user's access token as the `Authorization: Bearer <token>` header on subsequent API calls (and keep the Anon Key in `apikey`).
 
 For the conceptual underpinning, see [Auth model](/concepts/auth-model). For the full endpoint surface, see [Auth Reference](/api-reference/auth). For OAuth flows specifically, see [OAuth providers](/guides/auth-oauth-providers).
 
 ## Headers used throughout
 
-Every request below uses these two headers (the auth API doesn't need its own access token — that's what you're trying to get):
+Every request below uses these two headers (the auth API doesn't need its own access token; that's what you're trying to get):
 
 ```
 apikey: <Anon Publishable Key>
 Authorization: Bearer <Anon Publishable Key>
 ```
 
-After sign-in, replace the `Authorization` value with the user's `access_token`. Keep `apikey` as the Anon Key — PostgREST and GoTrue both check it for upstream routing.
+After sign-in, replace the `Authorization` value with the user's `access_token`. Keep `apikey` as the Anon Key; PostgREST and GoTrue both check it for upstream routing.
 
-## Email + password — signup
+## Email + password: signup
 
 `POST /auth/v1/signup` creates a new user with email + password and, on default settings (`autoConfirm: true`), returns a session immediately. On projects where you've enabled email confirmation, the response is just `{ user }` and the user has to click the email link before they can sign in.
 
@@ -99,7 +99,7 @@ curl -X POST 'https://{ref}.p.powabase.ai/auth/v1/signup' \
 - `phone: "+1..."` — phone-based signup (requires `GOTRUE_EXTERNAL_PHONE_ENABLED=true` + Twilio configured).
 - `gotrue_meta_security: { captcha_token: "..." }` — required if CAPTCHA is enabled on the project.
 
-## Email + password — signin
+## Email + password: signin
 
 `POST /auth/v1/token?grant_type=password` exchanges credentials for an access token + refresh token.
 
@@ -163,9 +163,9 @@ curl -X POST 'https://{ref}.p.powabase.ai/auth/v1/token?grant_type=password' \
 
 **Common error responses:**
 
-- `400 invalid_grant` — wrong email/password combination, or the user doesn't exist.
-- `400 email_not_confirmed` — autoConfirm is off and the user hasn't clicked the verification email yet.
-- `400 over_email_send_rate_limit` — too many recent failed signin attempts from this IP (30/hour by default).
+- `400 invalid_grant`: wrong email/password combination, or the user doesn't exist.
+- `400 email_not_confirmed`: autoConfirm is off and the user hasn't clicked the verification email yet.
+- `400 over_email_send_rate_limit`: too many recent failed signin attempts from this IP (30/hour by default).
 
 ## Magic link (passwordless email)
 
@@ -253,7 +253,7 @@ curl -X POST 'https://{ref}.p.powabase.ai/auth/v1/otp' \
 
 ## Password recovery
 
-The recovery flow looks just like magic link — request a recovery email, user clicks it, your callback grabs tokens from the URL fragment.
+The recovery flow looks just like magic link. Request a recovery email, the user clicks it, and your callback grabs tokens from the URL fragment.
 
 <CodeGroup>
 
@@ -314,7 +314,7 @@ curl -X POST 'https://{ref}.p.powabase.ai/auth/v1/recover' \
 
 </CodeGroup>
 
-The `POST /auth/v1/recover` always returns 200, even for emails that don't exist — this is intentional, so an attacker can't enumerate user accounts via the recovery endpoint.
+The `POST /auth/v1/recover` always returns 200, even for emails that don't exist. That's intentional: it stops an attacker from enumerating user accounts via the recovery endpoint.
 
 ## Refreshing the access token
 
@@ -375,11 +375,11 @@ curl -X POST 'https://{ref}.p.powabase.ai/auth/v1/token?grant_type=refresh_token
 
 **Rotation is on by default.** Each refresh token is single-use; the response includes a fresh refresh token that must replace the old one in storage. The 10-second grace window means concurrent refresh attempts from the same client (a common SPA race) don't both fail.
 
-**Schedule the refresh before expiry, not after.** A common pattern: schedule a refresh at `expires_at - 60s`. If you wait for expiry, you'll get 401s on in-flight requests.
+**Schedule the refresh before expiry, not after.** A common pattern is to schedule a refresh at `expires_at - 60s`. If you wait for expiry, you'll get 401s on in-flight requests.
 
 ## Sign out
 
-`POST /auth/v1/logout` (with the user's access token) invalidates the refresh token server-side and emits a session-revocation event. Always clear client-side storage too — server-side invalidation alone won't log the user out if the access token is still in localStorage.
+`POST /auth/v1/logout` (with the user's access token) invalidates the refresh token server-side and emits a session-revocation event. Always clear client-side storage too. Server-side invalidation alone won't log the user out if the access token is still in localStorage.
 
 <CodeGroup>
 
@@ -413,18 +413,18 @@ curl -X POST 'https://{ref}.p.powabase.ai/auth/v1/logout' \
 
 </CodeGroup>
 
-The `scope` query parameter can be `global` (default — revoke refresh tokens on all devices), `local` (just this session), or `others` (everywhere except this device).
+The `scope` query parameter can be `global` (default, revoke refresh tokens on all devices), `local` (just this session), or `others` (everywhere except this device).
 
 ## Storing tokens
 
-A short detour because this trips people up. The right place to store the tokens depends on your environment:
+A short detour, because this trips people up. Where you store the tokens depends on your environment:
 
-- **Browser SPA** — `localStorage` is fine for most apps. The Anon Key is already public; the access token is short-lived; the refresh token's single-use rotation limits damage from XSS-stolen tokens. If XSS is a serious concern, use an httpOnly cookie set by your backend proxy.
-- **Server-side rendering (Next.js, Remix, etc.)** — use httpOnly cookies set by the server. The client never sees the tokens; your server attaches them on outbound API calls.
-- **Mobile (iOS, Android)** — the OS-native secure storage (Keychain on iOS, EncryptedSharedPreferences on Android). Don't put refresh tokens in regular preferences.
-- **CLI / desktop apps** — write to a `~/.config/your-app/credentials.json` with 0600 perms.
+- **Browser SPA:** `localStorage` is fine for most apps. The Anon Key is already public, the access token is short-lived, and the refresh token's single-use rotation limits damage from XSS-stolen tokens. If XSS is a serious concern, use an httpOnly cookie set by your backend proxy.
+- **Server-side rendering (Next.js, Remix, etc.):** use httpOnly cookies set by the server. The client never sees the tokens; your server attaches them on outbound API calls.
+- **Mobile (iOS, Android):** the OS-native secure storage (Keychain on iOS, EncryptedSharedPreferences on Android). Don't put refresh tokens in regular preferences.
+- **CLI / desktop apps:** write to a `~/.config/your-app/credentials.json` with 0600 perms.
 
-In all cases, treat the refresh token as the more sensitive credential — it lasts indefinitely until rotated, while the access token expires in an hour.
+In every case, treat the refresh token as the more sensitive credential. It lasts indefinitely until rotated, while the access token expires in an hour.
 
 ## Next steps
 

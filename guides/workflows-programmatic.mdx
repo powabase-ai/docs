@@ -55,7 +55,7 @@ curl -X POST '{BASE_URL}/api/workflows' \
 
 <Step title="Define the graph">
 
-Save blocks (processing steps) and edges (connections between them) as a complete graph. The block registry recognizes these canonical types: `starter`, `agent`, `code`, `condition`, `general_api`, `platform_api`, `response`, `split`, `webhook`, `orchestration` (`function` and `api_call` are accepted as back-compat aliases for `code` and `general_api`). The example below wires a `starter` that injects workflow variables, runs an `agent` block to produce a summary, and returns the agent's output through a `response` block.
+Save blocks (processing steps) and edges (connections between them) as a complete graph. The block registry recognizes these canonical types: `starter`, `agent`, `code`, `condition`, `general_api`, `platform_api`, `response`, `split`, `webhook`, `orchestration` (`function` and `api_call` are accepted as back-compat aliases for `code` and `general_api`). The example below wires a `starter` that injects workflow variables, runs an `agent` block to produce a summary, then returns the agent's output through a `response` block.
 
 **Endpoint:** `PUT /api/workflows/{id}/graph`
 
@@ -172,15 +172,15 @@ curl -X POST '{BASE_URL}/api/workflows/{wf_id}/execute' \
 
 Two activation modes:
 
-- **Deploy** (`POST /api/workflows/{id}/deploy`) — sets `state = "deployed"`. The webhook accepts unlimited calls until you `undeploy`.
-- **Arm** (`POST /api/workflows/{id}/arm`) — leaves `state = "internal"` but opens a 10-minute window during which the webhook accepts exactly one call. After it fires (or expires), you must arm again.
+- **Deploy** (`POST /api/workflows/{id}/deploy`) sets `state = "deployed"`. The webhook accepts unlimited calls until you `undeploy`.
+- **Arm** (`POST /api/workflows/{id}/arm`) leaves `state = "internal"` but opens a 10-minute window during which the webhook accepts exactly one call. After it fires (or expires), you must arm again.
 
 Use deploy for production integrations; use arm for one-shot tests.
 
 The `webhook_id` and `webhook_secret` are properties of the **webhook block** itself, stored in `block.config`. The studio editor mints them client-side when you drag in a webhook block. To retrieve them programmatically, fetch the workflow and pull them from the block's config.
 
 <Note>
-If you create the webhook block via API instead of the UI (`PUT /api/workflows/{id}/graph`), you must mint both `webhook_id` and `webhook_secret` yourself and include them in the block's `config`. The server does not generate them. `webhook_id` MUST be a valid UUID — the trigger endpoint validates it and returns 400 otherwise. `webhook_secret` can be any non-empty string (the studio editor uses `crypto.randomUUID()` for both). A webhook block with no secret is silently un-triggerable (the trigger endpoint will return 401).
+If you create the webhook block via API instead of the UI (`PUT /api/workflows/{id}/graph`), you must mint both `webhook_id` and `webhook_secret` yourself and include them in the block's `config`. The server does not generate them. `webhook_id` MUST be a valid UUID; the trigger endpoint validates it and returns 400 otherwise. `webhook_secret` can be any non-empty string (the studio editor uses `crypto.randomUUID()` for both). A webhook block with no secret is silently un-triggerable (the trigger endpoint returns 401).
 </Note>
 
 <CodeGroup>
@@ -223,23 +223,23 @@ curl '{BASE_URL}/api/workflows/{wf_id}' \
 </CodeGroup>
 
 <Note>
-The deploy endpoint returns `{"ok": true, "state": "deployed"}` and arm returns `{"ok": true, "armed_until": "<iso-timestamp>"}` — neither response contains the webhook credentials.
+The deploy endpoint returns `{"ok": true, "state": "deployed"}` and arm returns `{"ok": true, "armed_until": "<iso-timestamp>"}`. Neither response contains the webhook credentials.
 </Note>
 
 </Step>
 
 <Step title="Trigger externally">
 
-Call the webhook endpoint from any external system. No platform API key is needed — auth is per-webhook via the secret, sent either as a Bearer header (preferred) or a `?token=` query param. The request body becomes the workflow's input variables directly.
+Call the webhook endpoint from any external system. No platform API key is needed; auth is per-webhook via the secret, sent either as a Bearer header (preferred) or a `?token=` query param. The request body becomes the workflow's input variables directly.
 
 <Note>
-Use one auth mechanism or the other, not both. The server checks the header with `auth_header.lower().startswith("bearer ")` (note the trailing space). If your `Authorization` header is exactly `Bearer ` (trailing space, no token) — what `Bearer ${secret || ""}` produces when `secret` is falsy — the server reads an empty token and 401s without consulting `?token=`. The `?token=` fallback only fires when the header doesn't start with `Bearer `.
+Use one auth mechanism or the other, not both. The server checks the header with `auth_header.lower().startswith("bearer ")` (note the trailing space). If your `Authorization` header is exactly `Bearer ` (trailing space, no token), which is what `Bearer ${secret || ""}` produces when `secret` is falsy, the server reads an empty token and 401s without consulting `?token=`. The `?token=` fallback only fires when the header doesn't start with `Bearer `.
 </Note>
 
 **Endpoint:** `POST /api/webhooks/{webhook_id}`
 
 <Note>
-If the workflow is `deployed`, the webhook accepts unlimited calls. If only armed, the webhook accepts exactly one call within the 10-minute window — re-arm to fire it again.
+If the workflow is `deployed`, the webhook accepts unlimited calls. If only armed, the webhook accepts exactly one call within the 10-minute window; re-arm to fire it again.
 </Note>
 
 <CodeGroup>

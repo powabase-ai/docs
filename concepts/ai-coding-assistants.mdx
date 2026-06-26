@@ -1,16 +1,16 @@
 ---
 title: "Using the Platform with AI Coding Assistants"
-description: "Powabase's REST API is designed to be consumed by AI coding assistants like Claude Code, GitHub Copilot, Cursor, and others. This page describes how to integrate effectively and previews our upcoming skill framework."
+description: "Powabase's REST API is built to be consumed by AI coding assistants like Claude Code, GitHub Copilot, Cursor, and others. How to integrate effectively, plus a preview of the upcoming skill framework."
 icon: "code"
 ---
 
 ## Why AI Coding Assistants?
 
-The platform's REST API is the primary interface for building AI applications. AI coding assistants can help you write integration code faster by understanding the API structure, generating correct requests, and debugging responses. Because every endpoint follows consistent patterns (authentication, error format, streaming protocol), an AI assistant with the right context can produce production-quality integration code with minimal guidance.
+The platform's REST API is the primary interface for building AI applications. A coding assistant can write integration code faster by reading the API structure, generating correct requests, and debugging responses. Every endpoint follows the same patterns for authentication, error format, and streaming, so an assistant with the right context produces working integration code with minimal guidance.
 
 ## Getting Started with Claude Code
 
-Claude Code works particularly well with the Powabase API because it can read this documentation, understand the type system, and generate correct API calls in Python, TypeScript, or cURL. To get the best results, provide Claude Code with your project's base URL and API key, and reference the specific API section you're working with.
+Claude Code works well with the Powabase API: it can read this documentation, follow the type system, and generate correct API calls in Python, TypeScript, or cURL. For the best results, give Claude Code your project's base URL and API key, and point it at the specific API section you're working with.
 
 <Tip>
 **Share your project context**
@@ -20,7 +20,7 @@ Grab your Project URL and Service Role (Secret) Key from the Studio's Connect mo
 
 ## Common Patterns
 
-These are the most common tasks AI coding assistants help with when integrating the Powabase:
+The most common tasks AI coding assistants help with when integrating Powabase:
 
 | Task | What to Ask For | Key API Endpoints |
 | --- | --- | --- |
@@ -33,9 +33,9 @@ These are the most common tasks AI coding assistants help with when integrating 
 
 ## Upcoming: Skill Framework
 
-We are developing a skill.md framework that will give AI coding assistants deep, structured knowledge of the Powabase API. Instead of relying on general documentation, the skill file will provide the assistant with decision trees, common patterns, error handling strategies, and code templates — enabling it to build complete integrations autonomously.
+We are developing a skill.md framework that gives AI coding assistants structured knowledge of the Powabase API. Instead of relying on general documentation, the skill file provides the assistant with decision trees, common patterns, error handling strategies, and code templates so it can build complete integrations with less hand-holding.
 
-The skill framework will include: API reference in a format optimized for LLM consumption, decision logic for choosing indexing strategies and retrieval methods, end-to-end integration templates for common use cases (RAG chatbot, document processing pipeline, multi-agent support team), streaming event parsers for all three languages, and error recovery patterns.
+The skill framework will include: API reference in a format suited to LLM consumption, decision logic for choosing indexing strategies and retrieval methods, end-to-end integration templates for common use cases (RAG chatbot, document processing pipeline, multi-agent support team), streaming event parsers for all three languages, and error recovery patterns.
 
 <Info>
 **Coming soon**
@@ -45,14 +45,14 @@ The skill.md framework is under active development. When released, you'll be abl
 
 ## Tips for All AI Assistants
 
-Regardless of which AI coding assistant you use, these practices will improve your results:
+These practices improve results with any AI coding assistant:
 
 | Tip | Why |
 | --- | --- |
 | Provide your base URL and API key format | The assistant can generate ready-to-run code instead of placeholder-filled templates |
 | Reference specific API sections | "Use the Knowledge Bases API to..." is more effective than "set up search" |
 | Ask for streaming code in your specific language | SSE parsing differs significantly between Python (requests), TypeScript (fetch), and Go |
-| Request error handling | The API returns consistent error objects — ask the assistant to handle them |
+| Request error handling | The API returns consistent error objects; ask the assistant to handle them |
 | Start with the Quickstart pattern | Upload → Index → Agent → Stream is the canonical flow |
 
 ## Next Steps

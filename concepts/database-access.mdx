@@ -6,13 +6,13 @@ icon: "table"
 
 ## Three Ways In
 
-The Project Service API (/api/*) manages the ai schema — sources, knowledge bases, agents, and all other platform-managed data. You interact with this data through structured endpoints. PostgREST (/rest/v1/*) gives you direct RESTful access to the public schema where your application tables live. And the Database URL is a standard Postgres connection string — drop it into psql, pg, psycopg2, JDBC, SQLAlchemy, or any tool that speaks the Postgres wire protocol for migrations, dashboards, or one-off queries.
+The Project Service API (/api/*) manages the ai schema: sources, knowledge bases, agents, and all other platform-managed data. You interact with this data through structured endpoints. PostgREST (/rest/v1/*) gives you direct RESTful access to the public schema where your application tables live. The Database URL is a standard Postgres connection string. Drop it into psql, pg, psycopg2, JDBC, SQLAlchemy, or any tool that speaks the Postgres wire protocol for migrations, dashboards, or one-off queries.
 
-All three need credentials, and all three credentials live in the same place: open the Connect modal in the Studio by clicking the Connect button in the project header (or append ?showConnect=true to any project URL). The "API Keys" tab gives you Project URL, Anon (Publishable) Key, Service Role (Secret) Key, JWT Secret, and Database URL; the "Connection Strings" tab ships ready-to-paste Postgres snippets in nine formats (URI, PSQL, Node.js, Python, Golang, JDBC, .NET, PHP, SQLAlchemy).
+All three need credentials, and all three credentials live in the same place. Open the Connect modal in the Studio by clicking the Connect button in the project header, or append ?showConnect=true to any project URL. The "API Keys" tab gives you Project URL, Anon (Publishable) Key, Service Role (Secret) Key, JWT Secret, and Database URL. The "Connection Strings" tab ships ready-to-paste Postgres snippets in nine formats (URI, PSQL, Node.js, Python, Golang, JDBC, .NET, PHP, SQLAlchemy).
 
 ## AI Schema (Managed)
 
-The ai schema is fully managed by the platform. It contains tables for sources, page_texts, knowledge_bases, chunks (with pgvector embeddings), agents, tool_assignments, sessions, messages, runs, orchestrations, workflows, and more. You should never modify these tables directly — use the Project Service API instead.
+The ai schema is fully managed by the platform. It contains tables for sources, page_texts, knowledge_bases, chunks (with pgvector embeddings), agents, tool_assignments, sessions, messages, runs, orchestrations, workflows, and more. Never modify these tables directly; use the Project Service API instead.
 
 <Warning>
 **Do not modify the ai schema directly**
@@ -22,20 +22,20 @@ The ai schema is managed by the platform and may change between versions. Direct
 
 ## Public Schema (Your Tables)
 
-The public schema is yours. Create tables, define relationships, and add indexes as needed. PostgREST automatically exposes all public schema tables as REST endpoints. You can read, insert, update, and delete rows using standard HTTP methods with powerful filtering operators.
+The public schema is yours. Create tables, define relationships, and add indexes as needed. PostgREST automatically exposes all public schema tables as REST endpoints. Read, insert, update, and delete rows using standard HTTP methods, with a full set of filtering operators.
 
 ## Row Level Security
 
-PostgREST respects Row Level Security (RLS) policies on your tables. The Service Role (Secret) Key bypasses RLS entirely — use it only server-side. The Anon (Publishable) Key respects RLS policies, so users only see rows they're authorized to access. This is the recommended pattern for client-side applications.
+PostgREST respects Row Level Security (RLS) policies on your tables. The Service Role (Secret) Key bypasses RLS entirely, so use it only server-side. The Anon (Publishable) Key respects RLS policies, so users only see rows they're authorized to access. This is the recommended pattern for client-side applications.
 
 ## Direct Postgres Connection
 
-When you need raw SQL — running migrations, hooking up a BI tool, importing a CSV, or wiring an ORM — connect directly to Postgres using the Database URL from the Connect modal. The URL embeds host, port, database, user, and password; treat it like a credential and keep it server-side. The "Connection Strings" tab generates the equivalent snippet for psql, Node.js (pg), Python (psycopg2), Go (database/sql), JDBC, .NET, PHP, and SQLAlchemy so you don't have to hand-assemble DSNs.
+When you need raw SQL (running migrations, hooking up a BI tool, importing a CSV, wiring an ORM), connect directly to Postgres using the Database URL from the Connect modal. The URL embeds host, port, database, user, and password; treat it like a credential and keep it server-side. The "Connection Strings" tab generates the equivalent snippet for psql, Node.js (pg), Python (psycopg2), Go (database/sql), JDBC, .NET, PHP, and SQLAlchemy so you don't have to hand-assemble DSNs.
 
 <Warning>
 **Database URL is a secret**
 
-The Database URL contains the database password in cleartext. Never commit it to source control or ship it to a client. Use it only from trusted backends, migration tools, or local dev — and rotate the database password (Studio -> Settings -> Database) if it leaks.
+The Database URL contains the database password in cleartext. Never commit it to source control or ship it to a client. Use it only from trusted backends, migration tools, or local dev, and rotate the database password (Studio -> Settings -> Database) if it leaks.
 </Warning>
 
 | Use case | Best surface | Key from Connect modal |

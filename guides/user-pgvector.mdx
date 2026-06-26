@@ -4,9 +4,9 @@ description: "pgvector is preloaded in every Powabase project. When to use the t
 icon: "diagram-project"
 ---
 
-Powabase projects ship with [pgvector](https://github.com/pgvector/pgvector) preloaded — the `vector` extension is created at project provision time and used internally by `ai.embeddings`. You can use it for your own tables too: store embeddings in `public.*` and run vector similarity queries via PostgREST or direct SQL.
+Powabase projects ship with [pgvector](https://github.com/pgvector/pgvector) preloaded. The `vector` extension is created at project provision time and used internally by `ai.embeddings`. You can use it for your own tables too: store embeddings in `public.*` and run vector similarity queries via PostgREST or direct SQL.
 
-For most users, **the typed [Sources](/api-reference/sources) + [Knowledge Bases](/api-reference/knowledge-bases) surface is the right path** — it manages chunking, embedding, indexing, RLS, billing, and retrieval reranking for you. Rolling your own pgvector tables is for cases where the typed surface doesn't fit: custom embedding models, specific schema constraints, integration with non-Powabase pipelines.
+For most users, **the typed [Sources](/api-reference/sources) and [Knowledge Bases](/api-reference/knowledge-bases) surface is the right path.** It manages chunking, embedding, indexing, RLS, billing, and retrieval reranking for you. Rolling your own pgvector tables is for cases where the typed surface doesn't fit: custom embedding models, specific schema constraints, integration with non-Powabase pipelines.
 
 This page covers the user-managed approach so you can choose the right tool for the job.
 
@@ -21,7 +21,7 @@ This page covers the user-managed approach so you can choose the right tool for 
 | Integration with an external indexing pipeline | User-managed pgvector |
 | Per-user RLS that the typed KB surface doesn't yet support | User-managed pgvector |
 
-The typed surface charges credits per indexing operation and per search; user-managed pgvector only charges credits for `vector_search` calls (see [Billing model](/concepts/billing-model)). For high-volume retrieval against a fixed corpus, user-managed can be cheaper at the cost of more setup.
+The typed surface charges credits per indexing operation and per search; user-managed pgvector only charges credits for `vector_search` calls (see [Billing model](/concepts/billing-model)). For high-volume retrieval against a fixed corpus, user-managed can be cheaper, at the cost of more setup.
 
 ## The basic shape
 
@@ -56,9 +56,9 @@ Get the dimension wrong and inserts will fail with `expected N dimensions, not M
 
 ## Indexing for fast search
 
-A `vector` column without an index does a sequential scan for every search — fine for thousands of rows, slow above tens of thousands. Two index types: HNSW and IVFFlat.
+A `vector` column without an index does a sequential scan for every search: fine for thousands of rows, slow above tens of thousands. Two index types: HNSW and IVFFlat.
 
-**HNSW** (Hierarchical Navigable Small World) is what Powabase uses internally and what most production setups want. Faster searches, slower builds, no parameter tuning at query time:
+**HNSW** (Hierarchical Navigable Small World) is what Powabase uses internally and what most production setups want. It gives faster searches, slower builds, and no parameter tuning at query time:
 
 ```sql
 CREATE INDEX product_embeddings_hnsw_idx
@@ -66,17 +66,17 @@ ON public.product_embeddings
 USING hnsw ((embedding::vector(1536)) vector_cosine_ops);
 ```
 
-The double cast `embedding::vector(1536)` is what pgvector wants for HNSW with explicit dimension typing — without it the index may not be picked up at query time.
+The double cast `embedding::vector(1536)` is what pgvector wants for HNSW with explicit dimension typing. Without it the index may not be picked up at query time.
 
 `vector_cosine_ops` is the distance operator class:
 
-- `vector_cosine_ops` — cosine distance (most common for text embeddings)
-- `vector_l2_ops` — Euclidean distance
-- `vector_ip_ops` — inner product (negative dot product)
+- `vector_cosine_ops`: cosine distance (most common for text embeddings)
+- `vector_l2_ops`: Euclidean distance
+- `vector_ip_ops`: inner product (negative dot product)
 
-Match the distance to whatever your embedding model recommends — most text embedding models are L2-normalized so cosine and inner-product give the same ranking; for non-normalized embeddings the choice matters.
+Match the distance to whatever your embedding model recommends. Most text embedding models are L2-normalized, so cosine and inner-product give the same ranking; for non-normalized embeddings the choice matters.
 
-**IVFFlat** is an older index type — faster to build, slower to query, needs `lists` tuning:
+**IVFFlat** is an older index type: faster to build, slower to query, needs `lists` tuning:
 
 ```sql
 CREATE INDEX product_embeddings_ivfflat_idx
@@ -85,7 +85,7 @@ USING ivfflat (embedding vector_cosine_ops)
 WITH (lists = 100);
 ```
 
-`lists` is roughly `rows / 1000` for the rule-of-thumb default. Use HNSW unless you have a specific reason — it's strictly better for most workloads.
+`lists` is roughly `rows / 1000` for the rule-of-thumb default. Use HNSW unless you have a specific reason; it's strictly better for most workloads.
 
 ## Inserting embeddings
 
@@ -214,15 +214,15 @@ AS $$
 $$;
 ```
 
-This is a basic weighted-sum hybrid; the typed KB surface uses reciprocal rank fusion (RRF), which is more robust. For real RAG quality, the typed surface is still the right answer.
+This is a basic weighted-sum hybrid; the typed KB surface uses reciprocal rank fusion (RRF), which holds up better across query types. For real RAG quality, the typed surface is still the right answer.
 
 ## When pgvector isn't enough
 
 For very large corpora (10M+ embeddings), even HNSW gets slow. Three options:
 
-1. **Use the typed KB surface** — Powabase's KB indexing strategies handle large corpora with techniques like PageIndex and GraphIndex that go beyond flat vector search.
-2. **Specialized vector DB** — Pinecone, Weaviate, Qdrant. Add cost; sometimes the right shape for billion-scale workloads.
-3. **Quantization / dimensionality reduction** — reduce the embedding size to 256 or 512 dimensions; faster but lower recall.
+1. **Use the typed KB surface.** Powabase's KB indexing strategies handle large corpora with techniques like PageIndex and GraphIndex that go beyond flat vector search.
+2. **Specialized vector DB:** Pinecone, Weaviate, Qdrant. These add cost but are sometimes the right shape for billion-scale workloads.
+3. **Quantization or dimensionality reduction.** Reduce the embedding size to 256 or 512 dimensions; faster but lower recall.
 
 For most apps under 1M embeddings, user-managed pgvector is fine.
 

@@ -1,6 +1,6 @@
 ---
 title: "Auth"
-description: "End-user-facing GoTrue endpoints at /auth/v1/* — sign up, sign in, refresh, magic link, password recovery, OAuth, MFA, user management, and admin operations."
+description: "End-user-facing GoTrue endpoints at /auth/v1/*: sign up, sign in, refresh, magic link, password recovery, OAuth, MFA, user management, and admin operations."
 icon: "id-card"
 ---
 
@@ -175,7 +175,7 @@ curl -X POST '{BASE_URL}/auth/v1/token?grant_type=password' \
 
 ### POST /auth/v1/token?grant_type=refresh_token
 
-Exchange a refresh token for a new access token + new refresh token. Refresh-token rotation is enabled by default — each refresh token is single-use, with a 10-second grace window for concurrent refresh attempts.
+Exchange a refresh token for a new access token + new refresh token. Refresh-token rotation is enabled by default: each refresh token is single-use, with a 10-second grace window for concurrent refresh attempts.
 
 <ParamField body="refresh_token" type="string" required>
 </ParamField>
@@ -236,11 +236,11 @@ E.164 format. Requires phone auth enabled.
 </ParamField>
 
 <ParamField body="create_user" type="boolean">
-Default `true`. When false, returns 400 if no user with that address exists — useful for "magic link only for existing users."
+Default `true`. When false, returns 400 if no user with that address exists; useful for "magic link only for existing users."
 </ParamField>
 
 <ParamField body="options" type="object">
-`{ email_redirect_to: "...", data: { ... } }` — `email_redirect_to` overrides the default site URL for this request; `data` populates `user_metadata` if `create_user` results in a new user.
+`{ email_redirect_to: "...", data: { ... } }`. `email_redirect_to` overrides the default site URL for this request; `data` populates `user_metadata` if `create_user` results in a new user.
 </ParamField>
 
 <RequestExample>
@@ -285,7 +285,7 @@ curl -X POST '{BASE_URL}/auth/v1/otp' \
 
 </CodeGroup>
 
-**Response:** `200 OK` with empty body if the email was queued. Returns 200 even for non-existent addresses when `create_user: false` would have failed — GoTrue treats this as "do not enumerate users."
+**Response:** `200 OK` with empty body if the email was queued. Returns 200 even for non-existent addresses when `create_user: false` would have failed; GoTrue treats this as "do not enumerate users."
 
 ### POST /auth/v1/verify
 
@@ -348,7 +348,7 @@ curl -X POST '{BASE_URL}/auth/v1/recover' \
 
 </CodeGroup>
 
-Always returns 200, even if the email doesn't exist — prevents user enumeration.
+Always returns 200, even if the email doesn't exist, to prevent user enumeration.
 
 ## OAuth
 
@@ -423,7 +423,7 @@ The new password.
 </ParamField>
 
 <ParamField body="phone" type="string">
-Same flow as email — sends a verification SMS.
+Same flow as email; sends a verification SMS.
 </ParamField>
 
 <ParamField body="data" type="object">
@@ -461,7 +461,7 @@ curl -X PUT '{BASE_URL}/auth/v1/user' \
 Invalidate the current session (revokes the refresh token server-side). Optionally specify scope.
 
 <ParamField query="scope" type="string">
-`global` (default — revoke all refresh tokens for this user), `local` (just this session), or `others` (every session except this one).
+`global` (default; revoke all refresh tokens for this user), `local` (just this session), or `others` (every session except this one).
 </ParamField>
 
 <CodeGroup>
@@ -518,7 +518,7 @@ Verify the challenge code. On first-time enrollment, also activates the factor. 
 
 ### DELETE /auth/v1/factors/{factor_id}
 
-Unenroll a factor. Requires the current access token to be at aal2 if the factor being deleted is the user's last factor — prevents lockout from a stolen access token.
+Unenroll a factor. Requires the current access token to be at aal2 if the factor being deleted is the user's last factor, which prevents lockout from a stolen access token.
 
 ## Admin (service-role only)
 

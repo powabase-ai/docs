@@ -4,7 +4,7 @@ description: "Upload files to Powabase Storage: simple multipart, browser-direct
 icon: "boxes-stacked"
 ---
 
-There are four ways files get into Storage, depending on where the upload originates and how big the file is. This guide walks each one with the headers, body shape, and gotchas. For the conceptual model, see [Storage model](/concepts/storage-model). For the full API surface, see [Storage Reference](/api-reference/storage). For controlling who can upload what, see [Storage policies](/guides/storage-policies).
+There are four ways files get into Storage, depending on where the upload originates and how big the file is. This guide walks each one with the headers, body shape, and gotchas. For the conceptual model, see [Storage model](/concepts/storage-model). For the full API surface, see [Storage Reference](/api-reference/storage). To control who can upload what, see [Storage policies](/guides/storage-policies).
 
 ## Decision tree
 
@@ -78,11 +78,11 @@ curl -X POST 'https://{ref}.p.powabase.ai/storage/v1/object/documents/2026/q1/re
 - The URL is `/storage/v1/object/{bucket}/{path}`. The bucket must already exist (`POST /storage/v1/bucket` if not).
 - `Content-Type` is what the bucket's MIME allowlist (if any) checks against.
 - Use `POST` for new objects, `PUT` to overwrite an existing object at the same path. `POST` to an existing path returns `409 Duplicate`.
-- The path can include slashes — they're stored verbatim and let you organize "folders" client-side.
+- The path can include slashes. They're stored verbatim and let you organize "folders" client-side.
 
 ## Browser-direct upload (with the Anon Key)
 
-For uploads from a signed-in user's browser, you don't want to proxy the file through your backend — that doubles your bandwidth and adds latency. Have the browser upload directly to Storage with the Anon Key + the user's access token. RLS on `storage.objects` decides whether the upload is allowed.
+For uploads from a signed-in user's browser, you don't want to proxy the file through your backend; that doubles your bandwidth and adds latency. Have the browser upload directly to Storage with the Anon Key plus the user's access token. RLS on `storage.objects` decides whether the upload is allowed.
 
 <CodeGroup>
 
@@ -149,11 +149,11 @@ CREATE POLICY upload_own_avatar ON storage.objects
   );
 ```
 
-`storage.foldername()` is a helper that splits the path by `/` and returns the segments — `(storage.foldername(name))[1]` is the first segment. The policy above lets users upload only to paths starting with their own user id. For more patterns, see [Storage policies](/guides/storage-policies).
+`storage.foldername()` is a helper that splits the path by `/` and returns the segments; `(storage.foldername(name))[1]` is the first segment. The policy above lets users upload only to paths starting with their own user id. For more patterns, see [Storage policies](/guides/storage-policies).
 
 ## Signed upload URLs
 
-For high-bandwidth cases (large files, many concurrent uploaders) you might not want every upload to go through the Storage API — you can have your server mint a signed URL that lets the client upload directly to S3 (well, to Storage at a URL that Storage forwards to S3 without re-auth'ing). This is a two-step flow:
+For high-bandwidth cases (large files, many concurrent uploaders) you might not want every upload to go through the Storage API. Instead, have your server mint a signed URL that lets the client upload directly to S3 (well, to Storage at a URL that Storage forwards to S3 without re-auth'ing). This is a two-step flow:
 
 **Step 1 (server): mint the signed URL.**
 
@@ -209,11 +209,11 @@ await fetch(uploadUrl, {
 });
 ```
 
-Notice the client doesn't send `Authorization` or `apikey` — the signature in the URL is the auth. This lets you decouple the upload from your auth layer (e.g., for offline clients that need to upload when reconnected).
+Notice the client doesn't send `Authorization` or `apikey`; the signature in the URL is the auth. This lets you decouple the upload from your auth layer (e.g., for offline clients that need to upload when reconnected).
 
 ## TUS resumable uploads (for files larger than 50MB)
 
-For uploads that might fail mid-stream — large files on flaky connections, mobile users, video editors — use the TUS protocol at `/storage/v1/upload/resumable`. TUS chunks the upload, persists progress server-side, and lets the client pick up where it left off after a disconnect.
+For uploads that might fail mid-stream (large files on flaky connections, mobile users, video editors) use the TUS protocol at `/storage/v1/upload/resumable`. TUS chunks the upload, persists progress server-side, and lets the client pick up where it left off after a disconnect.
 
 The protocol itself is involved (PATCH requests with offset headers, HEAD to query progress, etc.). Use a TUS client library rather than implementing it by hand:
 
@@ -267,7 +267,7 @@ upload.start();
 
 </CodeGroup>
 
-**Chunk size:** keep it under 50MB (the per-request limit). 6MB is a common starting point — small enough that one failed chunk is fast to retry, big enough that you're not constantly thrashing on TUS overhead.
+**Chunk size:** keep it under 50MB (the per-request limit). 6MB is a common starting point: small enough that one failed chunk is fast to retry, big enough that you're not constantly thrashing on TUS overhead.
 
 **Headers:** TUS needs the auth headers (`apikey` + `Authorization`) on every chunk request. The TUS client library handles this.
 
@@ -308,19 +308,19 @@ The signed URL works without auth (the token in the query string is the credenti
 
 ## Common failure modes
 
-- **`413 Payload Too Large`** — the file (or chunk in TUS) exceeds 50MB. Use TUS with a smaller chunk size.
-- **`409 Duplicate`** — POSTing to a path that already exists. Use `PUT` to overwrite or set the `x-upsert: true` header.
-- **`401 Unauthorized`** — missing or wrong `Authorization` header. Check that you're sending both `apikey` and `Authorization`, and that they match what the operation needs (Anon Key for client-side; Service Role for server-side; user access token for user-scoped operations).
-- **`400 invalid_mime_type`** — the `Content-Type` doesn't match the bucket's `allowed_mime_types`. Either fix the header or widen the bucket's allowlist.
-- **`403 Forbidden`** — RLS on `storage.objects` denied the operation. Check your INSERT/UPDATE/SELECT policies match the path pattern your client is using.
-- **TUS uploads stall, no error.** The TUS client is retrying invisibly. Check the network tab — if you see repeated PATCH requests with 5xx responses, the issue is server-side (probably an RLS denial on UPDATE, since TUS PATCHes the same row). If you see PATCH requests with 200 responses but no progress, the client isn't sending the next chunk — check your `onProgress` handler isn't throwing.
+- **`413 Payload Too Large`:** the file (or chunk in TUS) exceeds 50MB. Use TUS with a smaller chunk size.
+- **`409 Duplicate`:** POSTing to a path that already exists. Use `PUT` to overwrite or set the `x-upsert: true` header.
+- **`401 Unauthorized`:** missing or wrong `Authorization` header. Check that you're sending both `apikey` and `Authorization`, and that they match what the operation needs (Anon Key for client-side; Service Role for server-side; user access token for user-scoped operations).
+- **`400 invalid_mime_type`:** the `Content-Type` doesn't match the bucket's `allowed_mime_types`. Either fix the header or widen the bucket's allowlist.
+- **`403 Forbidden`:** RLS on `storage.objects` denied the operation. Check your INSERT/UPDATE/SELECT policies match the path pattern your client is using.
+- **TUS uploads stall, no error.** The TUS client is retrying invisibly. Check the network tab. Repeated PATCH requests with 5xx responses mean the issue is server-side (probably an RLS denial on UPDATE, since TUS PATCHes the same row). PATCH requests with 200 responses but no progress mean the client isn't sending the next chunk, so check your `onProgress` handler isn't throwing.
 
 ## Next steps
 
 <CardGroup cols={2}>
 
 <Card title="Storage policies" href="/guides/storage-policies">
-RLS patterns on storage.objects — own-files, public-read, role-based access.
+RLS patterns on storage.objects: own-files, public-read, role-based access.
 </Card>
 
 <Card title="Storage model" href="/concepts/storage-model">

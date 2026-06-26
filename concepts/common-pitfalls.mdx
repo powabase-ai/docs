@@ -1,12 +1,12 @@
 ---
 title: "Common pitfalls"
-description: "The footguns Powabase users hit most — silent failures, wrong field placements, default-permissive RLS on ai.*, the differences between agentic and database webhooks. With concrete fixes."
+description: "The footguns Powabase users hit most: silent failures, wrong field placements, default-permissive RLS on ai.*, the differences between agentic and database webhooks. With concrete fixes."
 icon: "triangle-exclamation"
 ---
 
-This page is a list of things people get wrong, with the fix for each. Most are documented somewhere else in the docs too — this page exists so you can grep for the specific error message or symptom and jump to the right fix without reading three concept pages.
+This page is a list of things people get wrong, with the fix for each. Most are documented elsewhere too; this page exists so you can grep for the specific error message or symptom and jump to the right fix without reading three concept pages.
 
-If you're hitting something here, the right move is to read the linked source-of-truth page after applying the fix. The pitfalls list is a shortcut; the concept pages are the explanations.
+If you're hitting something here, read the linked source-of-truth page after applying the fix. The pitfalls list is a shortcut; the concept pages are the explanations.
 
 ## Auth and tokens
 
@@ -14,11 +14,11 @@ If you're hitting something here, the right move is to read the linked source-of
 
 The Service Role Key bypasses RLS. Don't embed it in browsers, mobile apps, or anything else that ships to user devices. If you've accidentally shipped it, rotate it from the Studio and treat any data accessed during the leak window as compromised. See [Auth model](/concepts/auth-model).
 
-### `Authorization` header with `Bearer ` (trailing space) returns 401 silently — webhook routes
+### `Authorization` header with `Bearer ` (trailing space) returns 401 silently on webhook routes
 
-The **webhook trigger route** (`POST /api/webhooks/{id}`) checks `auth_header.lower().startswith("bearer ")` (with a trailing space) and pulls the token by slicing from index 7. If your client constructs `Authorization: Bearer ${token ?? ""}` and `token` is undefined, you send literally `"Bearer "` and get an empty string as the token. Returns 401 with no useful error. **Fix:** guard the construction so you don't send a Bearer header when the token is missing; or pass the secret via `?token=...` query parameter instead.
+The **webhook trigger route** (`POST /api/webhooks/{id}`) checks `auth_header.lower().startswith("bearer ")` (with a trailing space) and pulls the token by slicing from index 7. If your client constructs `Authorization: Bearer ${token ?? ""}` and `token` is undefined, you send literally `"Bearer "` and get an empty string as the token. Returns 401 with no useful error. **Fix:** guard the construction so you don't send a Bearer header when the token is missing, or pass the secret via the `?token=...` query parameter instead.
 
-The general `/api/*` auth path uses `auth_header.split()` and is whitespace-tolerant — a `Bearer ` there returns 401 "Authorization header required" rather than a confusing empty-token failure.
+The general `/api/*` auth path uses `auth_header.split()` and is whitespace-tolerant. A `Bearer ` there returns 401 "Authorization header required" rather than a confusing empty-token failure.
 
 ### "I'm sending the access token but getting `unauthorized`"
 
@@ -32,7 +32,7 @@ Probably an RLS policy issue. The signed-in user has the `authenticated` role; c
 
 ### "Anyone signed in can read every other user's agents"
 
-This is the default `ai.*` RLS posture. The `authenticated` role has blanket SELECT on most `ai.*` tables; only session-shaped tables (`agent_sessions`, `agent_runs`, `orchestration_sessions`, `orchestration_runs`) filter by `auth.uid()`. For multi-user projects, you need to either tighten the policies or only let end users hit the typed `/api/*` (which the platform's backend enforces ownership against). See [Querying the ai schema](/concepts/ai-schema-postgrest).
+This is the default `ai.*` RLS posture. The `authenticated` role has blanket SELECT on most `ai.*` tables; only session-shaped tables (`agent_sessions`, `agent_runs`, `orchestration_sessions`, `orchestration_runs`) filter by `auth.uid()`. For multi-user projects, either tighten the policies or only let end users hit the typed `/api/*`, which the platform's backend enforces ownership against. See [Querying the ai schema](/concepts/ai-schema-postgrest).
 
 ### `query.from(...).select()` is empty even though rows exist
 
@@ -40,17 +40,17 @@ If you're querying `ai.*` from PostgREST, you need `Accept-Profile: ai`. Without
 
 ### "I added an RLS policy but my old policy still applies"
 
-RLS policies are additive (OR-combined) by default. Adding a permissive policy doesn't replace existing permissive policies — they all apply. If you intended to replace, `DROP POLICY` first.
+RLS policies are additive (OR-combined) by default. Adding a permissive policy doesn't replace existing permissive policies; they all apply. If you intended to replace, `DROP POLICY` first.
 
 ## Agent runs
 
 ### Agent runs with end-user JWTs leak data
 
-The platform does NOT forward end-user JWTs to agent tools. `database_query` and `database_write` builtins run as superuser regardless of who invoked the run. If you expose `/api/agents/{id}/run` to clients with their own access tokens, the agent has full project-wide DB access — not the caller's RLS-filtered view. See [BaaS+AI cookbook Recipe 2](/guides/baas-ai-cookbook). Always run agents from a trusted backend.
+The platform does NOT forward end-user JWTs to agent tools. `database_query` and `database_write` builtins run as superuser regardless of who invoked the run. If you expose `/api/agents/{id}/run` to clients with their own access tokens, the agent has full project-wide DB access, not the caller's RLS-filtered view. See [BaaS+AI cookbook Recipe 2](/guides/baas-ai-cookbook). Always run agents from a trusted backend.
 
 ### `temperature` at the top level of agent body silently dropped
 
-Agent create/update bodies accept `name`, `model`, `system_prompt`, and `settings`. Top-level `temperature` is silently dropped — nest it inside `settings`:
+Agent create/update bodies accept `name`, `model`, `system_prompt`, and `settings`. Top-level `temperature` is silently dropped. Nest it inside `settings`:
 
 ```json
 {"name": "...", "model": "gpt-4o", "settings": {"temperature": 0.7}}
@@ -72,11 +72,11 @@ The block registry has 10 canonical types: `starter`, `agent`, `code`, `conditio
 
 ### `/execute` body uses `input` but the new field is `variables`
 
-`POST /api/workflows/{id}/execute` accepts both `variables` (canonical) and `input` (legacy alias) — the platform reads `data.get("variables", data.get("input", {}))`. Prefer `variables` in new code.
+`POST /api/workflows/{id}/execute` accepts both `variables` (canonical) and `input` (legacy alias); the platform reads `data.get("variables", data.get("input", {}))`. Prefer `variables` in new code.
 
 ### `/arm` returns `{"ok": true, "armed_until": ...}` not `{"webhook_id", "secret"}`
 
-The arm endpoint doesn't return webhook credentials. The `webhook_id` and `webhook_secret` live in the webhook block's `config` — fetch the workflow and read them from there. See [Workflows reference](/api-reference/workflows).
+The arm endpoint doesn't return webhook credentials. The `webhook_id` and `webhook_secret` live in the webhook block's `config`; fetch the workflow and read them from there. See [Workflows reference](/api-reference/workflows).
 
 ### Workflow `/execute` returns `429`
 
@@ -86,7 +86,7 @@ The endpoint is rate-limited at 20 requests per minute per user. Back off with j
 
 ### Public-bucket URLs ignore RLS
 
-`GET /storage/v1/object/public/{bucket}/{path}` returns files without auth from any bucket where `public: true`. No RLS check happens on the public URL. If you don't want files publicly fetchable, don't put them in a public bucket — use a private bucket with signed URLs instead. See [Storage policies](/guides/storage-policies).
+`GET /storage/v1/object/public/{bucket}/{path}` returns files without auth from any bucket where `public: true`. No RLS check happens on the public URL. If you don't want files publicly fetchable, don't put them in a public bucket; use a private bucket with signed URLs instead. See [Storage policies](/guides/storage-policies).
 
 ### File over 50MB returns `413`
 
@@ -104,7 +104,7 @@ The `supabase_realtime` publication isn't set up by default on Powabase projects
 
 ### Realtime returns `403 TenantNotFound`
 
-Only happens on self-hosted deployments where Kong isn't preserving the Host header. Powabase managed cloud handles this — if you see it from managed cloud, file a support ticket.
+Only happens on self-hosted deployments where Kong isn't preserving the Host header. Powabase managed cloud handles this; if you see it from managed cloud, file a support ticket.
 
 ### WebSocket closes after 60 seconds
 
@@ -114,7 +114,7 @@ You're not sending heartbeats. Send a `{ topic: "phoenix", event: "heartbeat", p
 
 ### `prepared statement "..." does not exist`
 
-PgBouncer transaction mode breaks prepared statements. Disable them in your driver's config — see [Connection pooling](/guides/connection-pooling) for the per-driver table.
+PgBouncer transaction mode breaks prepared statements. Disable them in your driver's config; see [Connection pooling](/guides/connection-pooling) for the per-driver table.
 
 ### LISTEN/NOTIFY through the pooler doesn't work
 
@@ -122,7 +122,7 @@ PgBouncer doesn't maintain session-level state across statements. The LISTEN reg
 
 ### `SET statement_timeout = '5s'` outside a transaction doesn't apply
 
-Same reason as LISTEN/NOTIFY — the `SET` sticks to one server connection. Use `SET LOCAL` inside a transaction, or pass settings via the connection string.
+Same reason as LISTEN/NOTIFY: the `SET` sticks to one server connection. Use `SET LOCAL` inside a transaction, or pass settings via the connection string.
 
 ### Username is `<ref>` not `postgres`
 
@@ -154,19 +154,19 @@ Transient. Back off and retry. Don't treat as a permanent error.
 
 ## Confusingly named
 
-### "Webhook" — agentic vs database
+### "Webhook": agentic vs database
 
 - Agentic webhooks: external systems triggering workflows. `POST /api/webhooks/{id}`.
 - Database webhooks: Postgres rows changing and Postgres calling out via pg_net.
 
 See [Glossary](/concepts/glossary).
 
-### "Session" — agent vs auth
+### "Session": agent vs auth
 
 - Agent session: a multi-turn conversation. In `ai.agent_sessions`.
 - Auth session: a signed-in user's authenticated state. GoTrue-internal.
 
-### "Hook" — agent vs database trigger vs GoTrue
+### "Hook": agent vs database trigger vs GoTrue
 
 - Agent hook: lifecycle callback (PreToolUse, approval, etc.).
 - Database trigger: Postgres function fired on row changes.
@@ -174,7 +174,7 @@ See [Glossary](/concepts/glossary).
 
 ## Debugging a failed run
 
-When an agent run, workflow execution, or orchestration finishes with `status: failed`, the pieces you need are spread across several endpoints. Here's the order to check them in:
+When an agent run, workflow execution, or orchestration finishes with `status: failed`, the pieces you need are spread across several endpoints. Check them in this order.
 
 ### Step 1: get the run record
 
@@ -199,11 +199,11 @@ Common shapes:
 
 ### Step 3: for retrieval issues, get the retrieved context
 
-`GET /api/sessions/{session_id}/runs/{run_id}/retrieved-context` returns what context was injected into the LLM call. If the agent's answer is "I don't know," compare this to what you expected — empty or wrong-source context here is the root cause.
+`GET /api/sessions/{session_id}/runs/{run_id}/retrieved-context` returns what context was injected into the LLM call. If the agent's answer is "I don't know," compare this to what you expected. Empty or wrong-source context here is the root cause.
 
 ### Step 4: for workflow runs, get the per-block logs
 
-`GET /api/workflows/{id}/executions/{execution_id}/logs` returns the per-block logs for a workflow execution — a failed `general_api` block's response body lives here, as do code-block stderr lines.
+`GET /api/workflows/{id}/executions/{execution_id}/logs` returns the per-block logs for a workflow execution. A failed `general_api` block's response body lives here, as do code-block stderr lines.
 
 ### Step 5: rate limit?
 
@@ -211,7 +211,7 @@ If the failure is on the 22nd+ workflow execution within a minute, you've hit th
 
 ### Step 6: still stuck?
 
-The Studio's run-detail view renders all the above on one page and is usually faster than stitching the API calls yourself. For platform issues (suspected bug, weird state), file a support ticket with the run_id — the platform team can read the same data plus the internal logs.
+The Studio's run-detail view renders all the above on one page and is usually faster than stitching the API calls yourself. For platform issues (suspected bug, weird state), file a support ticket with the run_id; the platform team can read the same data plus the internal logs.
 
 ## Next steps
 
@@ -222,7 +222,7 @@ The full terminology disambiguation list.
 </Card>
 
 <Card title="API conventions" href="/concepts/api-conventions">
-The shared patterns across all `/api/*` endpoints — once you know them, fewer pitfalls.
+The shared patterns across all `/api/*` endpoints. Once you know them, fewer pitfalls.
 </Card>
 
 <Card title="Migrating from Supabase" href="/guides/migrating-from-supabase">

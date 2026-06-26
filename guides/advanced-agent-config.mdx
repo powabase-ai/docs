@@ -4,7 +4,7 @@ description: "Configure MCP servers, hooks, and the human-in-the-loop approval f
 icon: "wrench"
 ---
 
-Beyond basic tools and knowledge bases, agents support three powerful configuration options: MCP (Model Context Protocol) servers for external tool integrations, hooks for triggering webhooks on agent lifecycle events, and an approval flow that pauses execution until a human approves sensitive tool calls. This guide walks through each one.
+Beyond basic tools and knowledge bases, agents take three further configuration options. MCP (Model Context Protocol) servers connect external tools. Hooks fire webhooks on agent lifecycle events. And an approval flow pauses execution until a human signs off on sensitive tool calls. This guide walks through each one.
 
 <Note>
 **Prerequisites:**
@@ -99,7 +99,7 @@ curl -X POST '{BASE_URL}/api/agents/{agent_id}/mcp-servers' \
 
 <Step title="Configure a webhook hook">
 
-Add an HTTP webhook hook that fires before each tool call. Use hooks to log tool usage, enforce policies, or notify external systems.
+Add an HTTP webhook hook that fires before each tool call. Hooks are useful for logging tool usage, enforcing policies, or notifying external systems.
 
 **Endpoint:** `POST /api/agents/{id}/hooks`
 

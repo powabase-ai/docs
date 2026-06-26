@@ -1,24 +1,24 @@
 ---
 title: "Platform Overview"
-description: "Powabase is a multi-tenant AI Backend-as-a-Service that provides a unified REST API for building production AI applications. It combines three core modules — Context Engineering, Agent Orchestration, and Workflow Automation — that work independently or together."
+description: "Powabase is a multi-tenant AI Backend-as-a-Service that provides a unified REST API for building production AI applications. It combines three core modules, Context Engineering, Agent Orchestration, and Workflow Automation, that work independently or together."
 icon: "book-open"
 ---
 
 ## What is Powabase?
 
-Powabase is the infrastructure layer for AI-powered applications. Most teams building with LLMs end up assembling the same stack: a vector database for RAG, an agent framework for tool use, a workflow engine for automation, an auth layer, a file storage service, and a database — then writing the glue code to connect them. Powabase replaces that entire stack with a single API.
+Powabase is the infrastructure layer for AI-powered applications. Most teams building with LLMs end up assembling the same stack: a vector database for RAG, an agent framework for tool use, a workflow engine for automation, an auth layer, a file storage service, and a database, then writing the glue code to connect them. Powabase replaces that entire stack with a single API.
 
-Unlike frameworks like LangChain or Agno that give you libraries to run in your own infrastructure, Powabase is a fully managed backend — you don't deploy or operate anything. Unlike workflow-only tools like n8n or Dify, the platform provides deep AI primitives (multiple indexing strategies, four retrieval algorithms, ReAct agents with tool execution, multi-agent orchestration) alongside automation. And unlike Supabase, which provides a general-purpose backend, Powabase is purpose-built for AI workloads with first-class support for embeddings, vector search, LLM sessions, and streaming.
+Frameworks like LangChain or Agno give you libraries to run in your own infrastructure. Powabase is a fully managed backend, so you don't deploy or operate anything. Workflow-only tools like n8n or Dify treat AI as an add-on; the platform instead provides native AI primitives (multiple indexing strategies, four retrieval algorithms, ReAct agents with tool execution, multi-agent orchestration) alongside automation. And where Supabase provides a general-purpose backend, Powabase is built for AI workloads, with direct support for embeddings, vector search, LLM sessions, and streaming.
 
-Each project gets a fully isolated stack: its own Postgres database with pgvector, API gateway, auth service, file storage, and AI service worker. There is no shared state between projects — isolation is enforced at the infrastructure level.
+Each project gets a fully isolated stack: its own Postgres database with pgvector, API gateway, auth service, file storage, and AI service worker. There is no shared state between projects; isolation is enforced at the infrastructure level.
 
 ## Three Core Modules
 
-The platform is organized around three modules that can be used independently or composed together. A simple project might use only Context Engineering for document search. A chatbot uses Context Engineering + Agent Orchestration. A fully automated pipeline uses all three — ingesting documents, reasoning over them with agents, and triggering downstream workflows.
+The platform is organized around three modules that can be used independently or composed together. A simple project might use only Context Engineering for document search. A chatbot uses Context Engineering + Agent Orchestration. A fully automated pipeline uses all three: ingesting documents, reasoning over them with agents, and triggering downstream workflows.
 
 ### 1. Context Engineering Suite (RAG-as-a-Service)
 
-The Context Engineering suite handles the entire RAG pipeline: document ingestion, content extraction, indexing, and retrieval. Upload any document — PDFs, Word files, images, spreadsheets — and the platform extracts text (with OCR for scanned pages), then indexes it using the strategy you choose. This isn't a one-size-fits-all chunking pipeline. The platform offers multiple indexing strategies and four retrieval algorithms, each designed for different document types and query patterns.
+The Context Engineering suite handles the entire RAG pipeline: document ingestion, content extraction, indexing, and retrieval. Upload any document (PDFs, Word files, images, spreadsheets) and the platform extracts text, with OCR for scanned pages, then indexes it using the strategy you choose. Chunking is not one fixed pipeline. The platform offers multiple indexing strategies and four retrieval algorithms, each designed for different document types and query patterns.
 
 | Indexing Strategy | What It Does | Best For |
 | --- | --- | --- |
@@ -34,7 +34,7 @@ The Context Engineering suite handles the entire RAG pipeline: document ingestio
 | Hybrid Search | Vector + BM25 fused via Reciprocal Rank Fusion | Production RAG (recommended default) |
 | Tree Search | LLM reasons over document structure to select sections | PageIndex KBs — complex structural queries |
 
-The suite also supports cross-encoder reranking (Cohere, Jina, Voyage, and more) for precision-critical applications, three chunking strategies (recursive, fixed-size, markdown-header), configurable embedding models, and project-level defaults for all parameters. This depth of control is what separates RAG-as-a-Service from a basic vector store.
+The suite also supports cross-encoder reranking (Cohere, Jina, Voyage, and more) for precision-critical applications, three chunking strategies (recursive, fixed-size, markdown-header), configurable embedding models, and project-level defaults for all parameters.
 
 <CardGroup cols={2}>
 
@@ -50,11 +50,11 @@ How document ingestion and text extraction works.
 
 ### 2. Agent Orchestration
 
-Agents are LLM-powered conversational entities that use a ReAct (Reason + Act) loop to handle complex tasks. Each agent has a system prompt, a set of tools, optional knowledge bases, and session-based memory. When a user sends a message, the agent reasons about what to do, calls tools as needed, observes the results, and iterates until it can respond — all streamed in real-time via Server-Sent Events.
+Agents are LLM-powered conversational entities that use a ReAct (Reason + Act) loop to handle complex tasks. Each agent has a system prompt, a set of tools, optional knowledge bases, and session-based memory. When a user sends a message, the agent reasons about what to do, calls tools as needed, observes the results, and iterates until it can respond. The whole loop is streamed in real-time via Server-Sent Events.
 
-Tools come in three forms: builtin tools (database query, database write, HTTP requests, code execution, storage read/write, web search, web scrape), custom tools (your own endpoints that the platform calls with tool arguments), and MCP servers (external tool providers that the agent discovers at runtime via the Model Context Protocol). For high-stakes operations, the approval flow pauses execution before a tool call and waits for human approval via the API — enabling human-in-the-loop patterns for production deployments.
+Tools come in three forms: builtin tools (database query, database write, HTTP requests, code execution, storage read/write, web search, web scrape), custom tools (your own endpoints that the platform calls with tool arguments), and MCP servers (external tool providers that the agent discovers at runtime via the Model Context Protocol). For high-stakes operations, the approval flow pauses execution before a tool call and waits for human approval via the API, enabling human-in-the-loop patterns for production deployments.
 
-Multi-agent orchestrations take this further: a coordinator agent analyzes incoming messages and delegates subtasks to specialized entity agents based on their role descriptions. Each entity runs independently with its own tools and knowledge bases, and the coordinator synthesizes their results. This enables domain-specialized teams — a billing agent, a technical support agent, and a sales agent all coordinated by a single orchestration endpoint.
+Multi-agent orchestrations take this further: a coordinator agent analyzes incoming messages and delegates subtasks to specialized entity agents based on their role descriptions. Each entity runs independently with its own tools and knowledge bases, and the coordinator synthesizes their results. This enables domain-specialized teams, such as a billing agent, a technical support agent, and a sales agent all coordinated by a single orchestration endpoint.
 
 <CardGroup cols={2}>
 
@@ -70,11 +70,11 @@ The coordinator pattern for multi-agent collaboration.
 
 ### 3. Workflow Automation
 
-Workflows are DAG-based automation pipelines for semi-deterministic tasks. Unlike agents (which decide what to do), workflows follow a fixed graph of blocks and edges — but individual blocks can contain LLM calls, agent runs, or code execution, so the output is still dynamic. Workflows are ideal when you know the steps but the content within each step requires AI reasoning: classify an email, extract fields, route to the right team, send a notification.
+Workflows are DAG-based automation pipelines for semi-deterministic tasks. Where agents decide what to do, workflows follow a fixed graph of blocks and edges. Individual blocks can still contain LLM calls, agent runs, or code execution, so the output stays dynamic. Workflows are ideal when you know the steps but the content within each step requires AI reasoning: classify an email, extract fields, route to the right team, send a notification.
 
 Each workflow is built from composable blocks: starter (manual/API trigger with typed inputs), webhook (HTTP trigger from external systems), agent (run an existing agent with a message), orchestration (delegate to a multi-agent coordinator), code (execute Python or JavaScript), condition (branch the flow based on expressions), split (parallel fan-out execution), platform_api (call platform resources like knowledge base search or agent runs), general_api (call external HTTP APIs), and response (return results). Blocks reference upstream outputs using template syntax, creating a data pipeline through the graph.
 
-Workflows support three trigger mechanisms: manual execution via the API, webhook triggers from external systems (Stripe events, GitHub hooks, form submissions), and scheduled execution via interval timers or cron expressions. Once deployed, a workflow becomes a persistent automation that runs unattended. The AI Copilot can also generate workflow graphs from natural language descriptions, accelerating development.
+Workflows support three trigger mechanisms: manual execution via the API, webhook triggers from external systems (Stripe events, GitHub hooks, form submissions), and scheduled execution via interval timers or cron expressions. Once deployed, a workflow becomes a persistent automation that runs unattended. The AI Copilot can also generate workflow graphs from natural language descriptions.
 
 <CardGroup cols={2}>
 
@@ -90,7 +90,7 @@ Real-time events for agents, orchestrations, and workflows.
 
 ## How the Modules Work Together
 
-The three modules are designed to compose. A knowledge base created in the Context Engineering suite can be attached to an agent in the Agent Orchestration module — the agent automatically gets a search tool that queries the KB during conversations. An agent can be used as a block in a workflow, bringing LLM reasoning into a deterministic pipeline. A workflow can call the Platform API block to search knowledge bases, run agents, or query the database programmatically. And webhooks connect workflows to external systems, closing the loop between your AI backend and the rest of your infrastructure.
+The three modules are designed to compose. A knowledge base created in the Context Engineering suite can be attached to an agent in the Agent Orchestration module, where the agent automatically gets a search tool that queries the KB during conversations. An agent can be used as a block in a workflow, bringing LLM reasoning into a deterministic pipeline. A workflow can call the Platform API block to search knowledge bases, run agents, or query the database programmatically. And webhooks connect workflows to external systems, closing the loop between your AI backend and the rest of your infrastructure.
 
 <Tip>
 **Example: End-to-end document processing**
@@ -98,11 +98,11 @@ The three modules are designed to compose. A knowledge base created in the Conte
 A webhook-triggered workflow receives a customer question → a platform_api block searches a knowledge base for relevant context → an agent block reasons over the context and drafts a response → a condition block checks confidence → a general_api block posts the answer to Slack or escalates to a human. Each step is a block in the workflow graph, combining all three modules.
 </Tip>
 
-Of course, not all use cases require all modules. The platform is designed to be versatile. You use only the parts you need in order to build your app.
+You use only the modules your app needs; none of them depend on the others being present.
 
 ## Per-Project Infrastructure
 
-Every project gets a fully isolated infrastructure stack: Postgres with pgvector (your database — both the AI schema and your own tables), Kong API gateway (routing and auth), GoTrue (user authentication), Storage API (file management), and a dedicated AI service worker (document extraction, indexing, agent execution). You get direct PostgREST access to your public schema for building application features alongside AI capabilities, and a full auth system for managing end users.
+Every project gets a fully isolated infrastructure stack: Postgres with pgvector (your database, holding both the AI schema and your own tables), Kong API gateway (routing and auth), GoTrue (user authentication), Storage API (file management), and a dedicated AI service worker (document extraction, indexing, agent execution). You get direct PostgREST access to your public schema for building application features alongside AI capabilities, and a full auth system for managing end users.
 
 <CardGroup cols={2}>
 

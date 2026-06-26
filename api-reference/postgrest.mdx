@@ -1,14 +1,14 @@
 ---
 title: "Database (PostgREST)"
-description: "Direct REST access to your project's public schema. PostgREST exposes every table and view in the public schema as a REST endpoint with rich filtering, ordering, pagination, and embedded relations."
+description: "Direct REST access to your project's public schema. PostgREST exposes every table and view as a REST endpoint with filtering, ordering, pagination, and embedded relations."
 icon: "table"
 ---
 
-Each project has its own Postgres database. The `ai` schema is managed by Powabase (sources, knowledge bases, agents, sessions, and so on). The `public` schema is yours — create tables, define relationships, add indexes, and PostgREST will expose them automatically at /rest/v1/\{table\}. PostgREST honours Row Level Security: the Anon (Publishable) Key respects RLS policies, the Service Role (Secret) Key bypasses them — use the service role server-side only. Both keys, plus the Project URL, are in the Studio's Connect modal — click the Connect button in your project header (or append ?showConnect=true to any project URL).
+Each project has its own Postgres database. The `ai` schema is managed by Powabase (sources, knowledge bases, agents, sessions, and so on). The `public` schema is yours: create tables, define relationships, and add indexes, and PostgREST exposes them at /rest/v1/\{table\}. PostgREST honours Row Level Security. The Anon (Publishable) Key respects RLS policies; the Service Role (Secret) Key bypasses them, so use the service role server-side only. Both keys, plus the Project URL, are in the Studio's Connect modal: click the Connect button in your project header, or append ?showConnect=true to any project URL.
 
 ## Common Patterns
 
-Read with GET /rest/v1/\{table\} and a select= query parameter. Insert with POST and a JSON body. Update with PATCH and a filter. Delete with DELETE and a filter. Embed related tables with select=*,other(*). Filter operators (eq, gt, lt, like, in, is, ...) follow PostgREST conventions. Always include both apikey and Authorization: Bearer headers, both set to the same key — sending only one returns 401.
+Read with GET /rest/v1/\{table\} and a select= query parameter. Insert with POST and a JSON body. Update with PATCH and a filter. Delete with DELETE and a filter. Embed related tables with select=*,other(*). Filter operators (eq, gt, lt, like, in, is, ...) follow PostgREST conventions. Always include both apikey and Authorization: Bearer headers, both set to the same key; sending only one returns 401.
 
 ## Reading rows
 
@@ -112,7 +112,7 @@ curl -X POST '{BASE_URL}/rest/v1/users' -H "apikey: {API_KEY}" -H "Authorization
 
 ### PATCH /rest/v1/{table}
 
-Update rows that match the filter in the query string. Always include a filter — without one, PATCH updates every row in the table.
+Update rows that match the filter in the query string. Always include a filter; without one, PATCH updates every row in the table.
 
 <ParamField path="table" type="string" required>
 Target table
@@ -144,7 +144,7 @@ curl -X PATCH '{BASE_URL}/rest/v1/users?id=eq.{user_id}' -H "apikey: {API_KEY}" 
 
 ### DELETE /rest/v1/{table}
 
-Delete rows that match the filter in the query string. Always include a filter — without one, DELETE removes every row.
+Delete rows that match the filter in the query string. Always include a filter; without one, DELETE removes every row.
 
 <ParamField path="table" type="string" required>
 Target table

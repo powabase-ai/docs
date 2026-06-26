@@ -1,6 +1,6 @@
 ---
 title: "Drizzle"
-description: "Use Drizzle with Powabase — connection setup using postgres.js, schema as TypeScript, queries that look like SQL, and Drizzle Kit migrations."
+description: "Use Drizzle with Powabase: connection setup using postgres.js, schema as TypeScript, queries that look like SQL, and Drizzle Kit migrations."
 icon: "boxes-packing"
 ---
 
@@ -10,13 +10,13 @@ For pooler-level constraints, see [Connection pooling](/guides/connection-poolin
 
 ## Connection setup
 
-Drizzle works with several Postgres drivers. The most-used pairing on Powabase is `postgres.js` (a.k.a. `postgres`). One required flag on the URL:
+Drizzle works with several Postgres drivers. The most-used pairing on Powabase is `postgres.js` (a.k.a. `postgres`), which needs one flag on the URL:
 
 ```
 DATABASE_URL="postgresql://<ref>:<password>@db.p.powabase.ai:5432/<ref>?prepare=false"
 ```
 
-- **`prepare=false`** — disables `postgres.js`'s prepared-statement cache. Required for PgBouncer transaction-mode pooling.
+- **`prepare=false`** disables `postgres.js`'s prepared-statement cache. Required for PgBouncer transaction-mode pooling.
 
 You can also pass `{ prepare: false }` directly in client options instead of the query param:
 
@@ -92,7 +92,7 @@ await db.transaction(async (tx) => {
 });
 ```
 
-The queries read like SQL because that's the design — `db.select().from().where().orderBy().limit()` maps 1:1 to `SELECT ... FROM ... WHERE ... ORDER BY ... LIMIT`. The advantage over raw SQL is that Drizzle infers result types from the schema; the advantage over heavier ORMs is that there's no magic between you and the query plan.
+The queries read like SQL because that's the design: `db.select().from().where().orderBy().limit()` maps 1:1 to `SELECT ... FROM ... WHERE ... ORDER BY ... LIMIT`. Compared with raw SQL, Drizzle infers result types from the schema; compared with heavier ORMs, there's no magic between you and the query plan.
 
 ## Migrations with Drizzle Kit
 
@@ -119,7 +119,7 @@ npx drizzle-kit generate
 npx drizzle-kit migrate
 ```
 
-Migrations land in `./drizzle/` as `.sql` files (one per migration step) plus a `_journal.json` index. Inspect them before applying in production — Drizzle's generated SQL is straightforward but worth a glance for anything that touches data.
+Migrations land in `./drizzle/` as `.sql` files (one per migration step) plus a `_journal.json` index. Inspect them before applying in production. Drizzle's generated SQL is straightforward, but anything that touches data is worth a second look.
 
 The migration tracking table is `drizzle.__drizzle_migrations`. Don't touch it.
 
@@ -142,9 +142,9 @@ await db.transaction(async (tx) => {
 });
 ```
 
-Inside the transaction, RLS applies. **Don't issue the SET LOCAL outside a transaction** — PgBouncer hands you a different server connection per statement and your role/claims won't persist.
+Inside the transaction, RLS applies. **Don't issue the SET LOCAL outside a transaction.** PgBouncer hands you a different server connection per statement, so your role and claims won't persist.
 
-For most apps, the cleaner separation is: PostgREST (`/rest/v1/*`) under user JWTs for RLS-required reads from the browser, Drizzle for server-side work under `supabase_admin`.
+For most apps, the cleaner split is PostgREST (`/rest/v1/*`) under user JWTs for RLS-required reads from the browser, and Drizzle for server-side work under `supabase_admin`.
 
 ## Drizzle in serverless
 
@@ -168,7 +168,7 @@ export async function handler(event) {
 
 The `max: 1` keeps each invocation to one connection. Without `sql.end()`, you'll leak connections at PgBouncer until `max_client_conn = 200` cluster-wide runs out and new invocations start 429ing.
 
-For high-traffic serverless workloads, consider Drizzle's HTTP-based drivers ([Neon serverless driver](https://neon.tech/docs/serverless/serverless-driver), Vercel Postgres) — they're built for stateless invocations and don't burn pooler slots. But for moderate serverless traffic on Powabase, the open-and-close pattern is fine.
+For high-traffic serverless workloads, consider Drizzle's HTTP-based drivers ([Neon serverless driver](https://neon.tech/docs/serverless/serverless-driver), Vercel Postgres). They're built for stateless invocations and don't burn pooler slots. For moderate serverless traffic on Powabase, the open-and-close pattern is fine.
 
 ## Next steps
 
@@ -183,7 +183,7 @@ The migration patterns across all three ORMs we cover.
 </Card>
 
 <Card title="Direct Postgres" href="/guides/direct-postgres">
-For SQL Drizzle doesn't cover — bulk imports, schema introspection.
+For SQL Drizzle doesn't cover: bulk imports, schema introspection.
 </Card>
 
 <Card title="Prisma" href="/guides/orm-prisma">

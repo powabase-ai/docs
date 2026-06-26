@@ -1,10 +1,10 @@
 ---
 title: "Glossary"
-description: "Disambiguating the terms Powabase uses that overlap with each other or with terms from other platforms — agent sessions vs auth sessions, agent hooks vs DB webhooks, etc."
+description: "Disambiguating the terms Powabase uses that overlap with each other or with terms from other platforms: agent sessions vs auth sessions, agent hooks vs DB webhooks, etc."
 icon: "spell-check"
 ---
 
-A few terms in the Powabase docs do double duty depending on context. This page disambiguates the ones that come up most. If you've spent any time reading the rest of the docs and wondered "wait, which 'session' are we talking about" — this is the page for that.
+A few terms in the Powabase docs do double duty depending on context. This page disambiguates the ones that come up most. If you've wondered which "session" a given page means, start here.
 
 ## Sessions
 
@@ -12,7 +12,7 @@ A few terms in the Powabase docs do double duty depending on context. This page 
 
 **Auth session** (in GoTrue's internal state). A signed-in user's authenticated state, represented client-side as an access token + refresh token. Created by `POST /auth/v1/token?grant_type=password` etc., expires when the refresh token is invalidated. Owned by the user themselves; no direct table you query.
 
-The two are independent. You can have an active auth session and zero agent sessions, or many agent sessions and no current auth session (if you're calling agent runs from a backend with the Service Role key).
+The two are independent. You can have an active auth session and zero agent sessions, or many agent sessions and no current auth session (when you call agent runs from a backend with the Service Role key).
 
 ## Runs vs executions
 
@@ -30,11 +30,11 @@ All three are "things that happened that you can query for status and logs."
 
 **Database webhook** (the outbound side, `supabase_functions.http_request()` trigger function). Postgres rows changing and Postgres calling out to some HTTP endpoint via pg_net. See [DB webhooks](/guides/db-webhooks).
 
-They're named identically and easily confused. The agentic kind is "things calling Powabase"; the database kind is "Powabase calling things."
+They're named identically and easily confused. The agentic kind is things calling Powabase; the database kind is Powabase calling things.
 
 ## Hooks
 
-**Agent hook** (in `ai.hooks`). Lifecycle callback on an agent — PreToolUse, PostToolUse, plus the approval flow. Configured at agent-create time, fires during agent runs.
+**Agent hook** (in `ai.hooks`). Lifecycle callback on an agent: PreToolUse, PostToolUse, plus the approval flow. Configured at agent-create time, fires during agent runs.
 
 **Database trigger function** ("trigger hook" in some Postgres docs). A function that runs on table changes, via `CREATE TRIGGER`. Sometimes loosely called a "hook." Different mechanism, different surface.
 
@@ -46,7 +46,7 @@ They're named identically and easily confused. The agentic kind is "things calli
 
 **Custom tool** (in `ai.tools`). A user-defined tool record. Has a `type` field stored as a free-form string (not used by dispatch) and a `config` blob describing how to call it.
 
-**Tool assignment** (in `ai.agent_tools`). The link between an agent and a tool — "this agent can use that tool." Dispatch reads from `agent_tools.tool_type` (which is `'builtin'` or `'custom'`), not from the Tool's own `type` field.
+**Tool assignment** (in `ai.agent_tools`). The link between an agent and a tool: "this agent can use that tool." Dispatch reads from `agent_tools.tool_type` (which is `'builtin'` or `'custom'`), not from the Tool's own `type` field.
 
 **MCP tool** (discovered at runtime via `tools/list` JSON-RPC). Provided by an MCP server attached to an agent. Namespaced as `mcp__<server>__<tool>` when the agent calls them.
 
@@ -64,7 +64,7 @@ A "tool" in conversation could mean any of these depending on context. When prec
 
 **Database URL**. Postgres connection string for direct SQL access via PgBouncer. Authenticates as `supabase_admin`. Full schema ownership.
 
-The Connect modal in the Studio surfaces the **Project URL**, **Anon Key**, **Service Role Key**, **JWT Secret**, and **Database URL**, plus nine driver-specific connection-string snippets (psql, URI, Node.js pg, Python psycopg2, Go database/sql, JDBC, .NET, PHP, SQLAlchemy). The **user access token** and **refresh token** are runtime outputs from GoTrue after sign-in — they don't appear in the modal because they don't exist until a user signs in.
+The Connect modal in the Studio surfaces the **Project URL**, **Anon Key**, **Service Role Key**, **JWT Secret**, and **Database URL**, plus nine driver-specific connection-string snippets (psql, URI, Node.js pg, Python psycopg2, Go database/sql, JDBC, .NET, PHP, SQLAlchemy). The **user access token** and **refresh token** are runtime outputs from GoTrue after sign-in; they don't appear in the modal because they don't exist until a user signs in.
 
 ## Schemas (the Postgres kind)
 
@@ -84,11 +84,11 @@ See [Schemas](/concepts/schemas) for the longer treatment.
 
 **`indexing_config`** / **`retrieval_config`** (on knowledge bases). Per-KB tuning for the chosen indexing strategy and retrieval method. Strategy-specific shape.
 
-**`config`** (on tools). The dispatch config for a custom tool — endpoint, method, headers, timeout for HTTP tools.
+**`config`** (on tools). The dispatch config for a custom tool: endpoint, method, headers, timeout for HTTP tools.
 
-**`config`** (on workflow blocks). The block's parameters — depends on block type (agent_id for agent blocks, code for code blocks, etc.).
+**`config`** (on workflow blocks). The block's parameters, which depend on block type (agent_id for agent blocks, code for code blocks, etc.).
 
-**Block config vs block output**. Block config is the static template; block output is the per-execution result that downstream blocks reference.
+**Block config vs block output**. Block config is the static template. Block output is the per-execution result that downstream blocks reference.
 
 ## Strategies
 
@@ -112,7 +112,7 @@ A single channel can use one, two, or all three at once.
 
 ## When in doubt
 
-If you see a term in the docs you can't disambiguate from context, the right approach is grep the rest of the docs for it and look at which page it appears on:
+If you see a term you can't disambiguate from context, grep the rest of the docs for it and look at which page it appears on:
 
 - Mentioned in `/concepts/auth-model` → likely auth-side
 - Mentioned in `/concepts/agents-tools` → likely agent-side
@@ -136,7 +136,7 @@ The HTTP-layer naming patterns the API uses.
 </Card>
 
 <Card title="Migrating from Supabase" href="/guides/migrating-from-supabase">
-For users coming from Supabase — what's the same and what's different.
+For users coming from Supabase: what's the same and what's different.
 </Card>
 
 </CardGroup>

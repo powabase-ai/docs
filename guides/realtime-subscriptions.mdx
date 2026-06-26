@@ -4,13 +4,13 @@ description: "Three worked patterns: a live-updating list driven by postgres_cha
 icon: "satellite-dish"
 ---
 
-These recipes assume you've read [Realtime model](/concepts/realtime) and have either the Anon Key (for unauthenticated demos) or a user access token (for production patterns). They use TypeScript in the browser as the main example since Realtime is overwhelmingly a client-side tool; the Python and cURL approaches at the bottom of each section show how to verify and drive Realtime from outside the browser when you need to.
+These recipes assume you've read [Realtime model](/concepts/realtime) and have either the Anon Key (for unauthenticated demos) or a user access token (for production patterns). They use TypeScript in the browser as the main example, since Realtime is overwhelmingly a client-side tool. The Python and cURL approaches at the bottom of each section show how to verify and drive Realtime from outside the browser when you need to.
 
 For the WebSocket protocol details (frame shapes, error responses), see [Realtime Reference](/api-reference/realtime). For the conceptual underpinning, see [Realtime model](/concepts/realtime).
 
 ## Setup
 
-All three recipes share the same connection setup. We're using a tiny WebSocket helper rather than the upstream `@supabase/realtime-js` library because Powabase doesn't ship a first-party SDK yet — once you have a working WS client, the protocol from there is straightforward.
+All three recipes share the same connection setup. We use a tiny WebSocket helper rather than the upstream `@supabase/realtime-js` library because Powabase doesn't ship its own SDK yet. Once you have a working WS client, the protocol from there is straightforward.
 
 ```typescript
 const BASE_URL = "wss://{ref}.p.powabase.ai";
@@ -27,9 +27,9 @@ function send(ws: WebSocket, ref: string, topic: string, event: string, payload:
 }
 ```
 
-The `vsn=1.0.0` parameter tells Realtime which protocol version to use. The frames are Phoenix Channels JSON envelopes: `{ topic, event, payload, ref }`. The `ref` is your client-generated request ID — Realtime echoes it back so you can correlate replies.
+The `vsn=1.0.0` parameter tells Realtime which protocol version to use. The frames are Phoenix Channels JSON envelopes: `{ topic, event, payload, ref }`. The `ref` is your client-generated request ID; Realtime echoes it back so you can correlate replies.
 
-## Recipe 1 — Live-updating list with Postgres Changes
+## Recipe 1: Live-updating list with Postgres Changes
 
 A todo list where INSERT/UPDATE/DELETE on `public.todos` automatically updates the UI. The classic Postgres Changes pattern.
 
@@ -106,11 +106,11 @@ setInterval(() => {
 }, 30_000);
 ```
 
-The `phx_join` frame opens the subscription. The `postgres_changes` config tells Realtime which events to forward; you can add a `filter` field for column equality (e.g., `filter: "user_id=eq.<uuid>"`) but in this case the RLS policy already restricts to the user's own rows, so an extra filter is redundant.
+The `phx_join` frame opens the subscription. The `postgres_changes` config tells Realtime which events to forward. You can add a `filter` field for column equality (e.g., `filter: "user_id=eq.<uuid>"`), but here the RLS policy already restricts to the user's own rows, so an extra filter is redundant.
 
-**Step 4: handle reconnects.** If the WebSocket drops mid-session, your client loses everything that happened during the gap. The pattern is to refetch on reconnect — assume the local state may be stale and reissue the original "load all todos" query, then resume the subscription. Realtime is not a durable queue.
+**Step 4: handle reconnects.** If the WebSocket drops mid-session, your client loses everything that happened during the gap. The pattern is to refetch on reconnect: assume the local state may be stale, reissue the original "load all todos" query, then resume the subscription. Realtime is not a durable queue.
 
-## Recipe 2 — Presence: who's online
+## Recipe 2: Presence (who's online)
 
 For a collaborative document where you show avatars of everyone currently viewing the page. Each user broadcasts their own presence state; everyone sees the union.
 
@@ -161,11 +161,11 @@ window.addEventListener("beforeunload", () => {
 });
 ```
 
-**Two things to know.** First, presence is **per-channel, not per-connection** — if a user opens two tabs, they appear twice in the presence list unless you dedupe by `user_id` client-side. Second, `untrack` only fires when the tab closes cleanly. If the user kills the tab or loses connectivity, Realtime infers the leave from a heartbeat timeout (about 60 seconds), so the avatar lingers briefly.
+**Two things to know.** First, presence is **per-channel, not per-connection**: if a user opens two tabs, they appear twice in the presence list unless you dedupe by `user_id` client-side. Second, `untrack` only fires when the tab closes cleanly. If the user kills the tab or loses connectivity, Realtime infers the leave from a heartbeat timeout (about 60 seconds), so the avatar lingers briefly.
 
 For "real-time cursor positions on top of a shared document," combine Presence (to know who's online) with Broadcast (to send the position updates without storing them). Each cursor move emits a broadcast event with `{ user_id, x, y }`; the receivers update each user's cursor based on the latest position they've seen.
 
-## Recipe 3 — Broadcast chat
+## Recipe 3: Broadcast chat
 
 A chat room where every message goes to every subscriber. No persistence — refresh the page and the history is gone. Real apps would also write messages to a table for history, but the broadcast pattern is the right starting point.
 
@@ -197,7 +197,7 @@ ws.addEventListener("message", (e) => {
 });
 ```
 
-**Two config options worth knowing.** `self: false` means the sender doesn't receive their own messages — usually what you want, since you're already showing them the message you sent. `ack: true` means Realtime sends a `phx_reply` confirming the broadcast was delivered to its routing layer (doesn't confirm individual subscribers received it).
+**Two config options worth knowing.** `self: false` means the sender doesn't receive their own messages, usually what you want since you're already showing them the message you sent. `ack: true` means Realtime sends a `phx_reply` confirming the broadcast was delivered to its routing layer (it doesn't confirm individual subscribers received it).
 
 For a private chat room (only authenticated users in the room can read messages), wrap the join in a private channel:
 
@@ -224,11 +224,11 @@ CREATE POLICY only_room_members ON realtime.messages
   );
 ```
 
-`realtime.topic()` returns the channel name being checked; we split it on `:` and look up membership. The pattern is straight out of the [RLS Cookbook](/guides/rls-policies) — Realtime is just one more table to write policies against.
+`realtime.topic()` returns the channel name being checked; we split it on `:` and look up membership. The pattern is straight out of the [RLS Cookbook](/guides/rls-policies): Realtime is just one more table to write policies against.
 
 ## REST broadcast (sending from a backend)
 
-For server-side message emission — webhook handlers, scheduled jobs — use the REST broadcast endpoint instead of opening a WebSocket from your backend:
+For server-side message emission (webhook handlers, scheduled jobs), use the REST broadcast endpoint instead of opening a WebSocket from your backend:
 
 <CodeGroup>
 
@@ -289,7 +289,7 @@ The endpoint takes an array, so you can fan out to multiple channels in one call
 - **`401` immediately after `phx_join` on a private channel.** Your RLS policy on `realtime.messages` denied the join. Test the policy in psql with the role+claims set, same as the [RLS Testing](/guides/rls-testing) flow.
 - **Joined OK but no `postgres_changes` events arrive.** Either (a) the table isn't in the `supabase_realtime` publication, (b) RLS on the underlying table denies SELECT for your role, or (c) the filter syntax is wrong. Check the publication first: `SELECT * FROM pg_publication_tables WHERE pubname = 'supabase_realtime';`.
 - **WebSocket closes after 60 seconds of silence.** You're not sending heartbeats. Add the `setInterval` from the recipes above.
-- **Reconnect storms after a deploy.** Realtime pods restart during deploys; clients reconnect immediately and pile on. Add exponential backoff with jitter to your reconnect logic — start at 1s, double up to 30s, jitter ±25%.
+- **Reconnect storms after a deploy.** Realtime pods restart during deploys; clients reconnect immediately and pile on. Add exponential backoff with jitter to your reconnect logic: start at 1s, double up to 30s, jitter ±25%.
 
 ## Next steps
 

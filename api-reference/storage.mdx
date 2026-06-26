@@ -15,7 +15,7 @@ apikey: <Anon Publishable Key | Service Role Key>
 Authorization: Bearer <same key as apikey, or a user access token>
 ```
 
-The Anon Key combined with a user's access token in `Authorization` is the right pattern for browser-direct uploads. Service Role in both is for server-side admin operations.
+The Anon Key combined with a user's access token in `Authorization` is the pattern for browser-direct uploads. Service Role in both is for server-side admin operations.
 
 The Storage API uses bearer auth for most endpoints. Public-URL reads (`/object/public/*`) work without auth; signed-URL reads pass auth via a `?token=` query parameter.
 
@@ -120,7 +120,7 @@ Update bucket metadata. Body fields are the same as create (`public`, `file_size
 
 ### DELETE /storage/v1/bucket/{id}
 
-Delete an empty bucket. Returns `409 not_empty` if the bucket contains any objects — empty it first via `POST /bucket/{id}/empty` or DELETE the objects individually.
+Delete an empty bucket. Returns `409 not_empty` if the bucket contains any objects; empty it first via `POST /bucket/{id}/empty` or DELETE the objects individually.
 
 ### POST /storage/v1/bucket/{id}/empty
 
@@ -132,12 +132,12 @@ The core file operations. Object endpoints are routed by bucket + path.
 
 ### POST /storage/v1/object/{bucket}/{path}
 
-Upload a new file. The path can include slashes — they're stored verbatim, not interpreted as folders by Storage. Returns `409 Duplicate` if a file already exists at that path; use `PUT` or set the `x-upsert: true` header to overwrite.
+Upload a new file. The path can include slashes; they're stored verbatim, not interpreted as folders by Storage. Returns `409 Duplicate` if a file already exists at that path; use `PUT` or set the `x-upsert: true` header to overwrite.
 
 **Headers:**
 
-- `Content-Type` — the MIME type of the file. Checked against the bucket's `allowed_mime_types` if set.
-- `x-upsert: true` (optional) — overwrite if exists.
+- `Content-Type`: the MIME type of the file. Checked against the bucket's `allowed_mime_types` if set.
+- `x-upsert: true` (optional): overwrite if exists.
 
 **Body:** raw file bytes.
 
@@ -344,7 +344,7 @@ curl -X POST '{BASE_URL}/storage/v1/object/sign/documents/report.pdf' \
 
 </CodeGroup>
 
-**Response:** `{ "signedURL": "/object/sign/documents/report.pdf?token=..." }`. The URL is path-relative — prepend your `BASE_URL` to get the full URL.
+**Response:** `{ "signedURL": "/object/sign/documents/report.pdf?token=..." }`. The URL is path-relative; prepend your `BASE_URL` to get the full URL.
 
 ### GET /storage/v1/object/sign/{bucket}/{path}?token=...
 
@@ -352,7 +352,7 @@ Fetch a file via a signed URL. The token is the signature; no other auth require
 
 ### POST /storage/v1/object/upload/sign/{bucket}/{path}
 
-Mint an upload signed URL — your server creates the URL, the client PUTs the file directly to it. Useful for high-bandwidth flows or offline clients.
+Mint an upload signed URL: your server creates the URL, the client PUTs the file directly to it. Useful for high-bandwidth flows or offline clients.
 
 <ParamField body="expiresIn" type="integer">
 URL TTL in seconds. Default 7200 (2 hours).
@@ -366,7 +366,7 @@ Sign multiple URLs in one request. Body: `{ "paths": ["bucket1/path1", "bucket2/
 
 ## Image transformations
 
-The `render/image` endpoints route through imgproxy. The path shape mirrors the object endpoints — `public`, `authenticated`, `sign` — with the same auth requirements.
+The `render/image` endpoints route through imgproxy. The path shape mirrors the object endpoints (`public`, `authenticated`, `sign`) with the same auth requirements.
 
 ### GET /storage/v1/render/image/public/{bucket}/{path}
 

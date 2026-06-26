@@ -4,11 +4,11 @@ description: "Create and manage knowledge bases for semantic search and RAG."
 icon: "database"
 ---
 
-Knowledge bases provide semantic search over your document content. They store chunked and embedded text from one or more sources, enabling retrieval-augmented generation (RAG). When you add a source to a knowledge base, the platform automatically chunks the source's page texts, generates vector embeddings, and stores them for similarity search.
+Knowledge bases provide semantic search over your document content. They store chunked and embedded text from one or more sources for retrieval-augmented generation (RAG). When you add a source, the platform chunks the source's page texts, generates vector embeddings, and stores them for similarity search.
 
 ## Common Patterns
 
-Create a knowledge base, add one or more sources to trigger indexing, then use the search endpoint to query. Check indexing status by fetching the knowledge base details. Reindex when you change chunking parameters or want to re-process sources.
+Create a knowledge base, add one or more sources to trigger indexing, then query with the search endpoint. Check indexing status by fetching the knowledge base details. Reindex when you change chunking parameters or want to re-process sources.
 
 ### GET /api/knowledge-bases
 
@@ -150,7 +150,7 @@ Exact match on `index_status` (`pending`, `indexing`, `indexed`, `failed`, `canc
 </ParamField>
 
 <ParamField query="sort" type="string">
-`name` or `created_at`. When omitted, sorts failed-first then newest-source-first — useful for surfacing problems at the top of a UI list.
+`name` or `created_at`. When omitted, sorts failed-first then newest-source-first, which surfaces problems at the top of a UI list.
 </ParamField>
 
 <ParamField query="order" type="string">
@@ -242,7 +242,7 @@ curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/sources' -H "apikey: {API_KEY}
 
 ### POST /api/knowledge-bases/{id}/sources/{indexed_source_id}/cancel
 
-Cancel an in-progress indexing task. Only `pending` and `indexing` rows can be cancelled — anything already `indexed`, `failed`, or `cancelled` returns 409. Returns 404 if no `indexed_sources` row matches the given pair.
+Cancel an in-progress indexing task. Only `pending` and `indexing` rows can be cancelled; anything already `indexed`, `failed`, or `cancelled` returns 409. Returns 404 if no `indexed_sources` row matches the given pair.
 
 <ParamField path="id" type="string" required>
 KB ID
@@ -270,11 +270,11 @@ curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/sources/{indexed_source_id}/ca
 
 ### DELETE /api/knowledge-bases/{id}/sources/{indexed_source_id}
 
-Remove a source from a knowledge base. The underlying `ai.sources` row is **not** touched — only its link to this KB and everything the indexing pipeline produced from it. The source stays available to re-add to other KBs.
+Remove a source from a knowledge base. The underlying `ai.sources` row is **not** touched, only its link to this KB and everything the indexing pipeline produced from it. The source stays available to re-add to other KBs.
 
 Deleting the `indexed_sources` row cascades through all eight derivative tables: `ai.chunks`, `ai.embeddings`, `ai.full_documents`, `ai.doc2json_documents`, `ai.page_index_toc`, `ai.page_index_nodes`, `ai.graph_index_toc`, `ai.graph_index_nodes`. After the call, the source contributes nothing to retrieval in this KB.
 
-If the source is mid-indexing (status `pending` or `indexing` with a `celery_task_id`), the Celery task is revoked before the row is deleted. A revoke failure logs a warning but does not block the deletion — the row goes regardless. Returns `200` with a small JSON body, or `404` if no `indexed_sources` row matches the given `(kb_id, indexed_source_id)` pair.
+If the source is mid-indexing (status `pending` or `indexing` with a `celery_task_id`), the Celery task is revoked before the row is deleted. A revoke failure logs a warning but does not block the deletion; the row goes regardless. Returns `200` with a small JSON body, or `404` if no `indexed_sources` row matches the given `(kb_id, indexed_source_id)` pair.
 
 <ParamField path="id" type="string" required>
 KB ID
@@ -312,14 +312,14 @@ curl -X DELETE '{BASE_URL}/api/knowledge-bases/{id}/sources/{indexed_source_id}'
 
 ### POST /api/knowledge-bases/{id}/reindex
 
-Re-index sources in the knowledge base. The body is optional — empty body re-indexes every source. Pass `indexed_source_ids` to re-index a specific subset, or `failed_only: true` to retry only sources currently in `failed` status.
+Re-index sources in the knowledge base. The body is optional: an empty body re-indexes every source. Pass `indexed_source_ids` to re-index a specific subset, or `failed_only: true` to retry only sources currently in `failed` status.
 
 <ParamField path="id" type="string" required>
 KB ID
 </ParamField>
 
 <ParamField body="indexed_source_ids" type="string[]">
-Restrict to specific `indexed_sources.id` values. If supplied, this wins — `failed_only` is ignored.
+Restrict to specific `indexed_sources.id` values. If supplied, this wins and `failed_only` is ignored.
 </ParamField>
 
 <ParamField body="failed_only" type="boolean">
@@ -360,7 +360,7 @@ curl -X POST '{BASE_URL}/api/knowledge-bases/{id}/reindex' -H "apikey: {API_KEY}
 
 ### POST /api/knowledge-bases/{id}/build-bm25
 
-Dispatch a one-shot BM25 rebuild for this KB. Re-tokenizes the entire item table for the KB's strategy (chunks / full_documents / graph_index_nodes) and writes a fresh BM25 index, replacing whatever was there. Operator path — most KBs never need this, but it's useful after changing `retrieval_config` tuning knobs or recovering from a partial index.
+Dispatch a one-shot BM25 rebuild for this KB. Re-tokenizes the entire item table for the KB's strategy (chunks / full_documents / graph_index_nodes) and writes a fresh BM25 index, replacing whatever was there. An operator path: most KBs never need it, but it's useful after changing `retrieval_config` tuning knobs or recovering from a partial index.
 
 <ParamField path="id" type="string" required>
 KB ID
@@ -392,9 +392,9 @@ Returns `202` + `{"task_id": "celery-task-uuid", "knowledge_base_id": "kb-uuid"}
 
 ### POST /api/knowledge-bases/{id}/items
 
-Fetch the indexed content items (chunks, nodes, or extracted JSON) for one or more source documents. The response shape depends on the KB's `indexing_config.strategy` — every item carries `id`, `source_id`, `text`, and `meta`, plus strategy-specific extras.
+Fetch the indexed content items (chunks, nodes, or extracted JSON) for one or more source documents. The response shape depends on the KB's `indexing_config.strategy`; every item carries `id`, `source_id`, `text`, and `meta`, plus strategy-specific extras.
 
-This is the right endpoint when you want to enumerate everything the platform produced from a source — for export, debugging, or to consume Doc2JSON `extracted_json` directly without going through retrieval.
+Use this endpoint to enumerate everything the platform produced from a source: for export, debugging, or to consume Doc2JSON `extracted_json` directly without going through retrieval.
 
 <ParamField path="id" type="string" required>
 KB ID
@@ -537,7 +537,7 @@ KB ID
 | --- | --- | --- |
 | `query` | string (required) | Natural-language search query |
 | `top_k` | int | Number of results to return. Default `5` (or `KB_DEFAULT_TOP_K` setting) |
-| `retrieval_method` | string | `vector_search` / `full_text` / `hybrid` / `tree_search`. Omit to use the KB's configured default — the response carries `retrieval_method: "auto"` to indicate this. |
+| `retrieval_method` | string | `vector_search` / `full_text` / `hybrid` / `tree_search`. Omit to use the KB's configured default; the response carries `retrieval_method: "auto"` to indicate this. |
 | `similarity_threshold` | float | Minimum vector score (0–1). Items below this are filtered out. Default `0.0`. |
 | `filter_metadata` | object | Narrow to chunks whose enrichment-metadata fields match. Keys are field names from the KB's enrichment config (see `/enrichment`); values can be scalars or `{ "op": "...", "value": ... }` shapes. |
 | `source_ids` | array of UUIDs | Restrict to chunks from this set of sources only. Useful for "search inside one specific document." |
@@ -568,10 +568,10 @@ Metadata enrichment runs an LLM over each indexed item to extract structured fie
 
 Create or replace the enrichment config. Re-enrichment behavior depends on what changed:
 
-- **Changes to `fields` or `llm_model`** — drop the metadata table, recreate it, and re-enrich every item from scratch. Returns 409 if a run is already in progress.
-- **Toggle of `use_multimodal`** — keep the table, but re-enrich because results differ with/without images. Returns 409 if a run is in progress.
-- **`max_tokens`-only change** — lightweight update; no re-enrichment.
-- **Identical body** — no-op.
+- **Changes to `fields` or `llm_model`:** drop the metadata table, recreate it, and re-enrich every item from scratch. Returns 409 if a run is already in progress.
+- **Toggle of `use_multimodal`:** keep the table, but re-enrich because results differ with/without images. Returns 409 if a run is in progress.
+- **`max_tokens`-only change:** lightweight update; no re-enrichment.
+- **Identical body:** no-op.
 
 The response body is `{ "config": {...}, "re_enrichment_triggered": <bool> }`.
 
@@ -794,14 +794,14 @@ curl '{BASE_URL}/api/knowledge-bases/{id}/graph-enrichment/errors' -H "apikey: {
 Returns the platform's KB-creation defaults so a UI or self-service KB-creation flow can present valid options without hardcoding them. The Studio's KB-create wizard uses this exact endpoint.
 
 Returns:
-- `strategies` — map of strategy name → `{ label, compatible_retrievers, retriever_labels, default_retrieval_method, supports_reranker, default_indexing_config, default_retrieval_config }`. The strategies are the indexing strategies described in [Knowledge bases & indexing](/concepts/knowledge-bases-indexing).
-- `reranker` — `{ default_model, candidate_count, options }`. `options` is the list of supported reranker models (Cohere v3, Jina v2, Voyage 2.5, ZeroEntropy zerank-2, etc.).
-- `query_enrichment` — `{ model }` (the model used to rewrite/expand user queries).
-- `enrichment` — `{ model, max_tokens }` (the LLM used for chunk metadata enrichment).
-- `hybrid_vector_weight` — default weight for hybrid search (vector vs. sparse contribution).
-- `extraction` — `{ default_method, fallback_chain, options }`. `options` lists every supported extraction method (mistral, paddleocr, lighton, opendataloader, fitz, pdfplumber, plus `auto`) with a one-line description of each.
+- `strategies`: map of strategy name → `{ label, compatible_retrievers, retriever_labels, default_retrieval_method, supports_reranker, default_indexing_config, default_retrieval_config }`. The strategies are the indexing strategies described in [Knowledge bases & indexing](/concepts/knowledge-bases-indexing).
+- `reranker`: `{ default_model, candidate_count, options }`. `options` is the list of supported reranker models (Cohere v3, Jina v2, Voyage 2.5, ZeroEntropy zerank-2, etc.).
+- `query_enrichment`: `{ model }` (the model used to rewrite/expand user queries).
+- `enrichment`: `{ model, max_tokens }` (the LLM used for chunk metadata enrichment).
+- `hybrid_vector_weight`: default weight for hybrid search (vector vs. sparse contribution).
+- `extraction`: `{ default_method, fallback_chain, options }`. `options` lists every supported extraction method (mistral, paddleocr, lighton, opendataloader, fitz, pdfplumber, plus `auto`) with a one-line description of each.
 
-This is the single source of truth for what's selectable when creating or reconfiguring a KB — if the platform adds a new strategy, reranker, or extraction method, it shows up here without any docs update.
+This is the single source of truth for what's selectable when creating or reconfiguring a KB. If the platform adds a new strategy, reranker, or extraction method, it shows up here without any docs update.
 
 <CodeGroup>
 

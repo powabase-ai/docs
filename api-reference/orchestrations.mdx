@@ -4,11 +4,11 @@ description: "Combine multiple agents into coordinated multi-agent systems."
 icon: "diagram-project"
 ---
 
-Orchestrations coordinate multiple agents to handle complex, multi-domain tasks. A coordinator agent analyzes incoming messages and delegates subtasks to specialized entity agents based on their role descriptions. The coordinator synthesizes entity responses into a unified reply.
+Orchestrations coordinate multiple agents across multi-domain tasks. A coordinator agent reads incoming messages and delegates subtasks to entity agents based on their role descriptions, then combines the entity responses into a single reply.
 
 ## Common Patterns
 
-Create an orchestration, add entity agents with clear role descriptions, then use the streaming endpoint. The coordinator automatically handles delegation. Entity role descriptions should be specific and non-overlapping so the coordinator can make clear routing decisions.
+Create an orchestration, add entity agents with role descriptions, then call the streaming endpoint. The coordinator handles delegation. Keep role descriptions specific and non-overlapping so the coordinator can route clearly.
 
 ## CRUD
 
@@ -143,7 +143,7 @@ Orchestration ID
 </ParamField>
 
 <ParamField body="entity_type" type="string" required>
-Use `"agent"`. The route accepts any string ≤50 chars, but the orchestrator's execution path only invokes entities where `entity_type === "agent"` — other values are stored but silently skipped at run time.
+Use `"agent"`. The route accepts any string ≤50 chars, but the orchestrator's execution path only invokes entities where `entity_type === "agent"`; other values are stored but silently skipped at run time.
 </ParamField>
 
 <ParamField body="entity_ref_id" type="string" required>
@@ -220,7 +220,7 @@ curl '{BASE_URL}/api/orchestrations/{id}/entities' -H "apikey: {API_KEY}" -H "Au
 
 ### PUT /api/orchestrations/{id}/entities/{eid}
 
-Update an entity. Only `role_description`, `config`, and `position` are writable — any other top-level keys are silently ignored. `entity_type` and `entity_ref_id` are not updatable; create a new entity instead.
+Update an entity. Only `role_description`, `config`, and `position` are writable; any other top-level keys are silently ignored. `entity_type` and `entity_ref_id` are not updatable; create a new entity instead.
 
 <ParamField path="id" type="string" required>
 Orchestration ID
@@ -499,7 +499,7 @@ Orchestration routes return `{"error": "<message>"}` (no structured error code f
 
 | Status | Description |
 | --- | --- |
-| 400 | The orchestration has no entity agents — add at least one before running |
+| 400 | The orchestration has no entity agents; add at least one before running |
 | 400 | Hook POST is missing one of `event`, `type`, or `config` |
 | 404 | No orchestration exists with the given ID |
 | 404 | No hook exists with the given ID for this orchestration |

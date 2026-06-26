@@ -4,7 +4,7 @@ description: "Wire up Google, GitHub, Apple, and 19 other OAuth providers with P
 icon: "id-card"
 ---
 
-GoTrue ships with 22 OAuth providers wired up, all disabled by default. Enabling one is a configuration change plus app code to drive the redirect flow. This guide covers the full sequence for Google and GitHub (the two most common), points you at the per-provider docs for the rest, and explains how PKCE works for browser/mobile clients.
+GoTrue ships with 22 OAuth providers wired up, all disabled by default. Enabling one is a configuration change plus app code to drive the redirect flow. This guide covers the full sequence for Google and GitHub (the two most common), points you at the per-provider docs for the rest, and explains how PKCE works for browser and mobile clients.
 
 For the auth foundation, see [Auth model](/concepts/auth-model). For email/password and magic-link flows, see [Signup, signin, magic link](/guides/auth-signup-signin).
 
@@ -25,7 +25,7 @@ gotrue:
       secret: "<your-client-secret>"
 ```
 
-A few providers (`azure`, `gitlab`, `keycloak`, `workos`) also need a `url` field for their issuer endpoint — useful when the provider is self-hosted or you're using a non-default tenant.
+A few providers (`azure`, `gitlab`, `keycloak`, `workos`) also need a `url` field for their issuer endpoint, which matters when the provider is self-hosted or you're on a non-default tenant.
 
 ## The redirect flow at a glance
 
@@ -35,7 +35,7 @@ A few providers (`azure`, `gitlab`, `keycloak`, `workos`) also need a `url` fiel
 4. GoTrue exchanges the code with Google for the user's profile, creates/updates the user record, and 302-redirects the browser to your `redirect_to` URL with a session code in the URL fragment.
 5. Your callback page extracts the tokens from the URL fragment (or, in PKCE mode, exchanges the code for tokens) and persists them.
 
-Most of this happens transparently. Your code is only step 1 (kick off the flow) and step 5 (handle the callback).
+Most of this happens behind the scenes. Your code is only step 1 (kick off the flow) and step 5 (handle the callback).
 
 ## Setting up Google
 
@@ -157,7 +157,7 @@ window.location.href = `${BASE_URL}/auth/v1/authorize?provider=github&redirect_t
 
 ## Requesting additional scopes
 
-By default, GoTrue requests the minimum scopes needed to identify the user (typically email + profile). To request more — e.g., to read a GitHub user's repos or send email through Gmail — pass `scopes` as a query parameter:
+By default, GoTrue requests the minimum scopes needed to identify the user (typically email + profile). To request more, say to read a GitHub user's repos or send email through Gmail, pass `scopes` as a query parameter:
 
 ```typescript
 const scopes = encodeURIComponent("repo read:org");
@@ -169,9 +169,9 @@ The provider's access token (the one that lets you call Google or GitHub APIs on
 
 GoTrue does **not** refresh provider tokens for you. If you need long-lived API access to the upstream provider, you'll need to handle the refresh against that provider's token endpoint yourself.
 
-## PKCE — when and why
+## PKCE: when and why
 
-For public clients (browser SPAs, mobile apps), the standard OAuth flow has a vulnerability: the authorization code is transmitted via URL parameters back to your app, and any local code that intercepts that URL can exchange the code for tokens. PKCE (Proof Key for Code Exchange) fixes this by having your client generate a one-time secret at the start of the flow and prove possession of it during the code exchange — an intercepted code is useless without the secret.
+For public clients (browser SPAs, mobile apps), the standard OAuth flow has a vulnerability: the authorization code is transmitted via URL parameters back to your app, and any local code that intercepts that URL can exchange the code for tokens. PKCE (Proof Key for Code Exchange) fixes this by having your client generate a one-time secret at the start of the flow and prove possession of it during the code exchange. An intercepted code is useless without the secret.
 
 GoTrue supports PKCE automatically when you pass a `code_challenge` parameter to `/auth/v1/authorize`. Most client SDKs (e.g., `supabase-js`) handle PKCE transparently. If you're rolling your own client:
 
@@ -238,7 +238,7 @@ For browser SPAs, **use PKCE.** For server-rendered apps where the callback is s
 
 ## The redirect-allow-list gotcha
 
-The `gotrue.uriAllowList` is a comma-separated list of URLs GoTrue will redirect to. **If your `redirect_to` isn't in the list, GoTrue silently drops it** and redirects to `gotrue.siteUrl` instead — which on a fresh project is unset, so you end up on the GoTrue host with no obvious error.
+The `gotrue.uriAllowList` is a comma-separated list of URLs GoTrue will redirect to. **If your `redirect_to` isn't in the list, GoTrue silently drops it** and redirects to `gotrue.siteUrl` instead, which on a fresh project is unset, so you end up on the GoTrue host with no obvious error.
 
 Set the allow list to include every callback URL your app might use:
 
@@ -248,7 +248,7 @@ gotrue:
   uriAllowList: "https://your-app.example.com/auth/callback,http://localhost:3000/auth/callback,http://localhost:3000/auth/reset-password"
 ```
 
-For local development, include the localhost variants. Don't add wildcards — GoTrue does substring matching, not glob.
+For local development, include the localhost variants. Don't add wildcards; GoTrue does substring matching, not glob.
 
 ## Common failure modes
 
