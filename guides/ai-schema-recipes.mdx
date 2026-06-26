@@ -1,6 +1,6 @@
 ---
 title: "ai schema recipes"
-description: "Four worked examples that use PostgREST directly against ai.* tables — custom hybrid search, usage analytics, bulk tagging, cross-KB joins."
+description: "Four worked examples that use PostgREST directly against ai.* tables: custom hybrid search, usage analytics, bulk tagging, cross-KB joins."
 icon: "binoculars"
 ---
 
@@ -10,7 +10,7 @@ These recipes assume you've read [Querying the ai schema via PostgREST](/concept
 **Use the Service Role key from a trusted backend for these recipes.** They all touch project-wide data and are not RLS-safe for direct browser access. If you want to expose any of this to end users, gate it behind your own API.
 </Note>
 
-## Recipe 1 — Custom hybrid search over ai.chunks
+## Recipe 1: Custom hybrid search over ai.chunks
 
 The typed `POST /api/knowledge-bases/{id}/search` runs the platform's hybrid retriever for you. If you want different filters, different ranking, or to merge results across multiple KBs in one query, drop down to direct PostgREST.
 
@@ -80,9 +80,9 @@ curl -G '{BASE_URL}/rest/v1/chunks' \
 
 </CodeGroup>
 
-Two PostgREST patterns to notice. The `in.(...)` filter selects across multiple KBs in one query — no application-side fan-out. The `meta->>tag=eq.policy` selector reaches into the `meta` JSONB column with the standard Postgres `->>` operator; PostgREST honors that syntax in filter expressions.
+Two PostgREST patterns to notice. The `in.(...)` filter selects across multiple KBs in one query, with no application-side fan-out. The `meta->>tag=eq.policy` selector reaches into the `meta` JSONB column with the standard Postgres `->>` operator; PostgREST honors that syntax in filter expressions.
 
-## Recipe 2 — Usage analytics on agent_runs
+## Recipe 2: Usage analytics on agent_runs
 
 Build a dashboard query that shows, for each agent, the run count, average input/output token counts, and last-run timestamp over the last 7 days. The typed `/api/agents` doesn't aggregate; PostgREST + a server-side RPC does it in one round-trip.
 
@@ -167,9 +167,9 @@ curl -X POST '{BASE_URL}/rest/v1/rpc/agent_usage_last_7d' \
 
 </CodeGroup>
 
-`SECURITY DEFINER` lets the function run with the owner's permissions rather than the caller's — useful here because the aggregate doesn't need per-user filtering and you want consistent results regardless of which key calls it. Set `search_path = ai` explicitly to avoid the [search-path SECURITY DEFINER pitfall](https://www.postgresql.org/docs/current/sql-createfunction.html#SQL-CREATEFUNCTION-SECURITY).
+`SECURITY DEFINER` runs the function with the owner's permissions rather than the caller's. That fits here: the aggregate doesn't need per-user filtering, and you want the same results regardless of which key calls it. Set `search_path = ai` explicitly to avoid the [search-path SECURITY DEFINER pitfall](https://www.postgresql.org/docs/current/sql-createfunction.html#SQL-CREATEFUNCTION-SECURITY).
 
-## Recipe 3 — Bulk-tag sources
+## Recipe 3: Bulk-tag sources
 
 You imported 200 sources last month and want to attach a `{"tag": "q3-2025"}` JSONB key to all of them in one round-trip. The typed `PATCH /api/sources/{id}` is one-source-per-call; PostgREST supports a single filter+update.
 
@@ -224,9 +224,9 @@ curl -X PATCH '{BASE_URL}/rest/v1/sources?id=in.(uuid-1,uuid-2,...)' \
 
 Two notes. `Prefer: return=representation` makes PostgREST return the updated rows so you can confirm the count. **Beware:** the `meta` write here **replaces** the whole JSONB column rather than merging. For partial-update semantics, use `jsonb_set` via an RPC, or read-modify-write per row.
 
-## Recipe 4 — Cross-KB analytics with embeds
+## Recipe 4: Cross-KB analytics with embeds
 
-For a "which sources contribute most to this KB" report, you want each `indexed_sources` row joined to its `sources` row (for the name and file type) and a chunk count. PostgREST's embed syntax does this in one request:
+For a "which sources contribute most to this KB" report, you want each `indexed_sources` row joined to its `sources` row (for the name and file type) plus a chunk count. PostgREST's embed syntax does this in one request:
 
 <CodeGroup>
 
@@ -279,7 +279,7 @@ curl -G '{BASE_URL}/rest/v1/indexed_sources' \
 
 </CodeGroup>
 
-The embed syntax `source:sources(name,file_type)` aliases the joined `sources` row as `source` in the response. `chunks(count)` does a count-only embed — PostgREST recognizes `count` as a special function and emits `[{"count": N}]` rather than the rows themselves. You can stack embeds, embed embeds, and filter on them — see the [PostgREST reference](/api-reference/postgrest) for the full filter and embed grammar.
+The embed syntax `source:sources(name,file_type)` aliases the joined `sources` row as `source` in the response. `chunks(count)` does a count-only embed: PostgREST recognizes `count` as a special function and emits `[{"count": N}]` rather than the rows themselves. You can stack embeds, embed embeds, and filter on them. See the [PostgREST reference](/api-reference/postgrest) for the full filter and embed grammar.
 
 ## Next steps
 

@@ -1,10 +1,10 @@
 ---
 title: "Build an Agent"
-description: "Create an AI agent, assign tools and knowledge bases, then chat with it via streaming. Agents use a ReAct loop — they reason, call tools, and respond."
+description: "Create an AI agent, assign tools and knowledge bases, then chat with it via streaming. Agents run a ReAct loop: they reason, call tools, and respond."
 icon: "robot"
 ---
 
-Agents are the conversational interface to your AI features. This guide creates an agent, gives it a tool and a knowledge base, then demonstrates a streaming multi-turn conversation.
+Agents are the conversational interface to your AI features. This guide creates an agent, gives it a tool and a knowledge base, then runs a streaming multi-turn conversation against it.
 
 <Note>
 **Prerequisites:**
@@ -22,7 +22,7 @@ Define the agent with a name, LLM model, and system prompt that describes its be
 **Endpoint:** `POST /api/agents`
 
 <Note>
-`model` is a LiteLLM model ID. Bare IDs (`gpt-4o`, `claude-sonnet-4-6`) route to OpenAI/Anthropic; other providers are prefixed (`gemini/...`, `openrouter/...`). The field is not limited to the Studio model picker, but a provider you haven't [registered a key](/api-reference/ai-provider-keys) for (and that isn't AI-on-us) returns `402 provider_key_decrypt_failed`. See [Bring your own LLM](/guides/byollm) for the formats and an OpenRouter/DeepSeek example.
+`model` is a LiteLLM model ID. Bare IDs (`gpt-4o`, `claude-sonnet-4-6`) route to OpenAI/Anthropic; other providers are prefixed (`gemini/...`, `openrouter/...`). The field is not limited to the Studio model picker, but a provider you haven't [registered a key](/api-reference/ai-provider-keys) for (and that isn't AI-on-us) returns `402 provider_key_decrypt_failed`. [Bring your own LLM](/guides/byollm) covers the formats and an OpenRouter/DeepSeek example.
 </Note>
 
 <CodeGroup>
@@ -114,7 +114,7 @@ curl -X POST '{BASE_URL}/api/agents/{agent_id}/tools' \
 
 <Step title="Link a knowledge base">
 
-Assign a knowledge base so the agent automatically gets a search tool for it. During conversations, the agent can search the KB to ground its responses.
+Assign a knowledge base and the agent automatically gets a search tool for it. During a conversation it can search the KB to ground its responses.
 
 **Endpoint:** `POST /api/agents/{id}/knowledge-bases`
 

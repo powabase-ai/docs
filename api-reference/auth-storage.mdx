@@ -8,7 +8,7 @@ Auth and Storage endpoints are proxied through the control plane to each project
 
 ## Common Patterns
 
-For authentication, list users with GET /api/platform/auth/\{ref\}/users and create them with POST. For storage, list buckets and upload files under /api/platform/storage/\{ref\}/*. A platform JWT (signed-in user's access token) is required; service-role bypasses are not available through the proxy. For client-side GoTrue and Storage calls that talk directly to your project (not through this proxy), use the Anon (Publishable) Key from the Connect modal with RLS / Storage policies.
+For authentication, list users with GET /api/platform/auth/\{ref\}/users and create them with POST. For storage, list buckets and upload files under /api/platform/storage/\{ref\}/*. A platform JWT (signed-in user's access token) is required; service-role bypasses are not available through the proxy. For client-side GoTrue and Storage calls that talk directly to your project (not through this proxy), use the Anon (Publishable) Key from the Connect modal with RLS and Storage policies.
 
 ## Authentication (via Control Plane)
 

@@ -4,20 +4,20 @@ description: "What's identical, what's different, what breaks. Database URL form
 icon: "arrows-left-right"
 ---
 
-Powabase is a Supabase fork plus an agentic AI surface. If you've built on Supabase, most of your existing knowledge transfers — PostgREST is identical, GoTrue is the same version line, Storage is bit-compatible, RLS works the same way. This guide covers what's different, with concrete rewriting notes for the patterns that change.
+Powabase is a Supabase fork plus an agentic AI surface. If you've built on Supabase, most of your existing knowledge transfers. PostgREST is identical, GoTrue is the same version line, Storage is bit-compatible, and RLS works the same way. This guide covers what's different, with concrete rewriting notes for the patterns that change.
 
-For the BaaS surface in general, see the relevant per-area pages. For the agentic API (the Powabase-specific addition), see the [Auth & Connection](/guides/auth-connection) guide and follow the links into the AI surface from there.
+For the BaaS surface in general, see the relevant per-area pages. For the agentic API (the Powabase-specific addition), start from the [Auth & Connection](/guides/auth-connection) guide and follow the links into the AI surface.
 
 ## What's identical
 
 The following work unchanged from Supabase. You can copy a Supabase guide verbatim and substitute the URLs.
 
 - **PostgREST.** Same version line (v14.1 on Powabase), same filter operators, same embed syntax, same `Prefer` headers. See [PostgREST reference](/api-reference/postgrest) and [PostgREST advanced](/guides/postgrest-advanced).
-- **GoTrue / Auth.** v2.184.0 — same endpoints (`/auth/v1/*`), same JWT shape, same OAuth provider list. See [Auth model](/concepts/auth-model).
-- **Storage.** v1.33.0 — same bucket/object model, same TUS upload protocol, same signed URL flow. See [Storage model](/concepts/storage-model).
+- **GoTrue / Auth.** v2.184.0, with the same endpoints (`/auth/v1/*`), the same JWT shape, and the same OAuth provider list. See [Auth model](/concepts/auth-model).
+- **Storage.** v1.33.0, with the same bucket/object model, TUS upload protocol, and signed URL flow. See [Storage model](/concepts/storage-model).
 - **RLS patterns.** `auth.uid()`, `auth.jwt()`, `auth.role()` work identically. Policy syntax is plain Postgres. See [RLS Model](/concepts/rls-model).
-- **Realtime.** v2.65.3 — three channels (Broadcast, Presence, Postgres Changes), same Phoenix Channels frame format. See [Realtime model](/concepts/realtime).
-- **pg_graphql.** Available via `POST /rest/v1/rpc/graphql` (not a dedicated `/graphql/v1` route — see below).
+- **Realtime.** v2.65.3, with three channels (Broadcast, Presence, Postgres Changes) and the same Phoenix Channels frame format. See [Realtime model](/concepts/realtime).
+- **pg_graphql.** Available via `POST /rest/v1/rpc/graphql`, not a dedicated `/graphql/v1` route (see below).
 
 If you're porting a Supabase project, the realistic move is "copy your code, change the URL, fix the handful of differences below." Most teams need a day to ship.
 
@@ -39,24 +39,24 @@ postgresql://<ref>:<password>@db.p.powabase.ai:5432/<ref>
 
 Three differences:
 
-1. **Username is `<ref>`, not `postgres`.** Powabase's PgBouncer routes by database name; the connection pool uses `<ref>` as the user.
+1. **Username is `<ref>`, not `postgres`.** Powabase's PgBouncer routes by database name, and the connection pool uses `<ref>` as the user.
 2. **Database is `<ref>`, not `postgres`.** Same reason.
-3. **Port is 5432, not 6543.** Powabase has one pooler endpoint; no separate session-mode port.
+3. **Port is 5432, not 6543.** Powabase has one pooler endpoint and no separate session-mode port.
 
-ORM connection-string flags carry over: `?pgbouncer=true&connection_limit=1` for Prisma, `?prepare=false` for Drizzle's `postgres.js`, `prepare_threshold=None` for psycopg, etc. Same flags as Supabase pooler mode. See [Connection pooling](/guides/connection-pooling).
+ORM connection-string flags carry over: `?pgbouncer=true&connection_limit=1` for Prisma, `?prepare=false` for Drizzle's `postgres.js`, `prepare_threshold=None` for psycopg, and so on. These are the same flags as Supabase pooler mode. See [Connection pooling](/guides/connection-pooling).
 
 ### Pooler is PgBouncer, not Supavisor
 
 Supabase recently migrated to Supavisor. Powabase still uses PgBouncer. Practically:
 
 - **Transaction mode only.** No session-mode endpoint on a different port. Anything that needs session state must run inside an explicit transaction.
-- **No direct (non-pooled) URL.** Supavisor offers both a direct connection and pooler-fronted; Powabase only offers the PgBouncer URL externally. Direct Postgres is in-cluster only.
+- **No direct (non-pooled) URL.** Supavisor offers both a direct connection and a pooler-fronted one; Powabase only offers the PgBouncer URL externally. Direct Postgres is in-cluster only.
 
-The per-driver workarounds are the same. The choice of "transaction vs session mode" doesn't apply — you're always transaction mode.
+The per-driver workarounds are the same. The "transaction vs session mode" choice doesn't apply, since you're always in transaction mode.
 
 ### No `/graphql/v1` route
 
-pg_graphql is preloaded and the `graphql_public` schema is in PostgREST's exposed schemas. But there's no dedicated `/graphql/v1/*` Kong route — call GraphQL through PostgREST RPC:
+pg_graphql is preloaded and the `graphql_public` schema is in PostgREST's exposed schemas. But there's no dedicated `/graphql/v1/*` Kong route, so call GraphQL through PostgREST RPC:
 
 ```bash
 POST /rest/v1/rpc/graphql
@@ -74,19 +74,19 @@ Supabase's Deno-based Edge Functions are not deployed on Powabase. There's no `/
 
 What to use instead, depending on what you used Edge Functions for:
 
-- **Auth webhooks / row triggers** — use [Database webhooks](/guides/db-webhooks) (the `supabase_functions.http_request()` trigger pattern).
-- **Public HTTP endpoints** — host them yourself on whatever serverless platform (Vercel, Cloudflare Workers, Lambda) and call Powabase from there.
-- **Background jobs** — use a [Workflow](/api-reference/workflows) with the `code` block type for the logic and a scheduled trigger.
-- **The agentic AI use case** — the entire reason Powabase exists. Use [Agents](/api-reference/agents) directly instead of building Edge Functions that call the OpenAI API.
+- **Auth webhooks / row triggers:** use [Database webhooks](/guides/db-webhooks) (the `supabase_functions.http_request()` trigger pattern).
+- **Public HTTP endpoints:** host them yourself on a serverless platform (Vercel, Cloudflare Workers, Lambda) and call Powabase from there.
+- **Background jobs:** use a [Workflow](/api-reference/workflows) with the `code` block type for the logic and a scheduled trigger.
+- **The agentic AI use case:** the reason Powabase exists. Use [Agents](/api-reference/agents) directly instead of building Edge Functions that call the OpenAI API.
 
 ### `ai` schema is new
 
-The most novel thing about Powabase is the `ai` schema. It's where the AI surface's state lives: sources, knowledge_bases, agents, workflows, etc. You can query it via PostgREST under RLS (35+ tables exposed) — see [Querying the ai schema](/concepts/ai-schema-postgrest).
+The most novel thing about Powabase is the `ai` schema. It's where the AI surface's state lives: sources, knowledge_bases, agents, workflows, and the rest. You can query it via PostgREST under RLS (35+ tables exposed); see [Querying the ai schema](/concepts/ai-schema-postgrest).
 
 If you're porting a Supabase project that built RAG yourself with pgvector tables in `public`, you have two options:
 
 1. **Keep your existing tables.** `vector` is still preloaded; nothing breaks. See [User-managed pgvector](/guides/user-pgvector).
-2. **Migrate to the typed surface.** Move documents to `/api/sources`, create a KB, and switch retrieval to `/api/knowledge-bases/{id}/search`. The platform handles chunking, embedding, indexing, and reranking. Trade-off: less control, more reliability + features (multiple retrieval methods, reranker catalog, etc.).
+2. **Migrate to the typed surface.** Move documents to `/api/sources`, create a KB, and switch retrieval to `/api/knowledge-bases/{id}/search`. The platform handles chunking, embedding, indexing, and reranking. The trade-off is less control in exchange for more reliability and features (multiple retrieval methods, a reranker catalog, and so on).
 
 For new projects, the typed surface is the right default. For migrations, "keep what works" is reasonable until you have a reason to change.
 
@@ -95,7 +95,7 @@ For new projects, the typed surface is the right default. For migrations, "keep 
 `pg_cron` is not enabled on Powabase. If you used it for scheduled jobs:
 
 - **Periodic table maintenance / cleanup.** Run as a workflow with a cron trigger.
-- **Periodic email reports.** Same — workflow with cron trigger, calling a `general_api` block to your email service.
+- **Periodic email reports.** Same approach: a cron-triggered workflow calling a `general_api` block to your email service.
 - **Per-second polling.** Probably the wrong shape. Switch to event-driven (Realtime postgres_changes or DB webhooks).
 
 ### `pg_jsonschema` not available
@@ -104,21 +104,21 @@ Use `CHECK` constraints for simple validation, or validate at the application la
 
 ### Free-tier billing model differs
 
-Supabase's free tier has soft limits (project pauses after inactivity, weekly egress quotas). Powabase's free tier has a **hard 402** on credit exhaustion (see [Billing model](/concepts/billing-model)). Different shape — same posture of "free for prototyping, pay for production."
+Supabase's free tier has soft limits (project pauses after inactivity, weekly egress quotas). Powabase's free tier has a **hard 402** on credit exhaustion (see [Billing model](/concepts/billing-model)). Different mechanism, same posture: free for prototyping, pay for production.
 
 The 402 response includes `renews_at` (first of next UTC month). Surface that to your users so they know when their credits refresh.
 
 ### Auth proxy paths differ
 
-Supabase's admin auth lives at `/auth/v1/admin/*`. Powabase has those endpoints too (same paths), plus the **control-plane proxy** at `/api/platform/auth/<ref>/*` which proxies into the per-project GoTrue. The proxy is for Studio-internal admin operations; you almost certainly want the direct per-project endpoints. See [Auth reference](/api-reference/auth).
+Supabase's admin auth lives at `/auth/v1/admin/*`. Powabase has those endpoints too, at the same paths, plus a **control-plane proxy** at `/api/platform/auth/<ref>/*` that proxies into the per-project GoTrue. The proxy is for Studio-internal admin operations; you almost certainly want the direct per-project endpoints. See [Auth reference](/api-reference/auth).
 
 ## What you have that Supabase doesn't
 
-- **Agentic API** — Agents (`/api/agents`), Knowledge Bases (`/api/knowledge-bases`), Sources (`/api/sources`), Workflows (`/api/workflows`), Orchestrations (`/api/orchestrations`). The differentiating feature.
-- **Five RAG indexing strategies** — chunk_embed, full_document, page_index, graph_index, doc2json. Each is an opinionated indexing pipeline.
-- **Four retrieval methods** — vector_search, full_text (BM25), hybrid, tree_search (for page_index strategy).
-- **Reranker catalog** — Cohere, Jina, Voyage, ZeroEntropy options on the KB search.
-- **`realtime.send()` and `realtime.broadcast_changes()`** — SQL functions for emitting broadcast messages from triggers without going through pg_net.
+- **Agentic API:** Agents (`/api/agents`), Knowledge Bases (`/api/knowledge-bases`), Sources (`/api/sources`), Workflows (`/api/workflows`), Orchestrations (`/api/orchestrations`). The differentiating feature.
+- **Five RAG indexing strategies:** chunk_embed, full_document, page_index, graph_index, doc2json. Each is an opinionated indexing pipeline.
+- **Four retrieval methods:** vector_search, full_text (BM25), hybrid, tree_search (for the page_index strategy).
+- **Reranker catalog:** Cohere, Jina, Voyage, ZeroEntropy options on the KB search.
+- **`realtime.send()` and `realtime.broadcast_changes()`:** SQL functions for emitting broadcast messages from triggers without going through pg_net.
 
 See [Platform overview](/concepts/platform-overview) for the full surface.
 
@@ -128,13 +128,13 @@ See [Platform overview](/concepts/platform-overview) for the full surface.
 
 ## Concrete porting checklist
 
-1. **Update the Database URL** — new format, new pooler hostname.
-2. **Strip `pg_cron` / `supabase functions` references** — port to workflows or self-hosted.
+1. **Update the Database URL:** new format, new pooler hostname.
+2. **Strip `pg_cron` / `supabase functions` references:** port to workflows or self-hosted.
 3. **Repoint GraphQL** from `/graphql/v1` to `/rest/v1/rpc/graphql`.
-4. **Audit RLS on `ai.*`** if your app exposes the AI surface to clients — defaults are permissive for `authenticated`.
-5. **Replace billing assumptions** — soft limits → hard 402 with credit refill.
-6. **Decide on RAG path** — keep your pgvector tables, or migrate to the typed Sources + KB surface.
-7. **Move scheduled jobs to workflows** — cron-triggered workflows replace `pg_cron`.
+4. **Audit RLS on `ai.*`** if your app exposes the AI surface to clients; defaults are permissive for `authenticated`.
+5. **Replace billing assumptions:** soft limits become a hard 402 with credit refill.
+6. **Decide on RAG path:** keep your pgvector tables, or migrate to the typed Sources + KB surface.
+7. **Move scheduled jobs to workflows:** cron-triggered workflows replace `pg_cron`.
 
 For most production Supabase projects, this is half a day to a day of focused work.
 
@@ -143,7 +143,7 @@ For most production Supabase projects, this is half a day to a day of focused wo
 <CardGroup cols={2}>
 
 <Card title="Platform overview" href="/concepts/platform-overview">
-The full Powabase surface — what's worth knowing about beyond the BaaS layer.
+The full Powabase surface, and what's worth knowing beyond the BaaS layer.
 </Card>
 
 <Card title="Glossary" href="/concepts/glossary">
@@ -151,11 +151,11 @@ Terminology that overlaps confusingly.
 </Card>
 
 <Card title="Common pitfalls" href="/concepts/common-pitfalls">
-The footgun list — most are Powabase-specific things Supabase users hit.
+The footgun list; most are Powabase-specific things Supabase users hit.
 </Card>
 
 <Card title="Auth & Connection" href="/guides/auth-connection">
-The Connect modal — your starting point in the Studio.
+The Connect modal, your starting point in the Studio.
 </Card>
 
 </CardGroup>

@@ -1,23 +1,23 @@
 ---
 title: "Querying the ai schema via PostgREST"
-description: "Every AI-surface table — sources, knowledge_bases, agents, runs, sessions, workflows — is queryable via /rest/v1/* under RLS. Use it for dashboards, bulk operations, custom analytics, and anything the typed /api/* endpoints don't cover."
+description: "Every AI-surface table (sources, knowledge_bases, agents, runs, sessions, workflows) is queryable via /rest/v1/* under RLS. Use it for dashboards, bulk operations, custom analytics, and anything the typed /api/* endpoints don't cover."
 icon: "binoculars"
 ---
 
-The typed `/api/*` surface gives you opinionated, RPC-style access to the AI features. Underneath, all the state those endpoints manage lives in a single Postgres schema — `ai` — and PostgREST exposes that schema as a standard REST CRUD surface at `/rest/v1/*`.
+The typed `/api/*` surface gives you opinionated, RPC-style access to the AI features. Underneath, all the state those endpoints manage lives in a single Postgres schema, `ai`, and PostgREST exposes that schema as a standard REST CRUD surface at `/rest/v1/*`.
 
-That means **everything you can do with `/api/agents`, `/api/sessions`, `/api/runs`, `/api/knowledge-bases`, etc., you can also do directly against the underlying tables.** SQL-style filters, joins, JSONB selectors, pagination via `Content-Range`, embeds — all the PostgREST machinery that powers `public.*` access works for `ai.*` too. This is the right tool when:
+That means **everything you can do with `/api/agents`, `/api/sessions`, `/api/runs`, `/api/knowledge-bases`, etc., you can also do directly against the underlying tables.** SQL-style filters, joins, JSONB selectors, pagination via `Content-Range`, embeds: all the PostgREST machinery that powers `public.*` access works for `ai.*` too. This is the right tool when:
 
 - You need filters or joins the typed endpoint doesn't expose (e.g., "all runs from the last 7 days where the agent's `system_prompt` contains 'refund'").
 - You're building a dashboard and want one query for usage analytics instead of N round-trips.
 - You're bulk-tagging or migrating sources and don't want to call `PATCH /api/sources/{id}` in a loop.
 - You want Realtime subscriptions on a state change the typed API doesn't broadcast.
 
-It's **not** the right tool for state changes the platform's own services manage (run lifecycle, indexing dispatch, workflow execution). Those endpoints aren't just "a CRUD with extra steps" — they coordinate Celery tasks, RAG pipelines, and external LLM calls. Use the typed `/api/*` for state-changing operations on dynamic state; use PostgREST for reads and for writes on static, user-owned configuration.
+It's **not** the right tool for state changes the platform's own services manage (run lifecycle, indexing dispatch, workflow execution). Those endpoints aren't just "a CRUD with extra steps"; they coordinate Celery tasks, RAG pipelines, and external LLM calls. Use the typed `/api/*` for state-changing operations on dynamic state, and PostgREST for reads and for writes on static, user-owned configuration.
 
 ## How `ai.*` is exposed
 
-PostgREST is configured to serve four schemas: `public, storage, graphql_public, ai`. The `ai` schema sits alongside your own `public` schema as a fully-routed PostgREST surface. Every table follows the standard PostgREST URL pattern:
+PostgREST is configured to serve four schemas: `public, storage, graphql_public, ai`. The `ai` schema sits alongside your own `public` schema as a fully routed PostgREST surface. Every table follows the standard PostgREST URL pattern:
 
 ```
 GET    /rest/v1/{table}                # list
@@ -61,9 +61,9 @@ Schemas can grow; consult `GET /rest/v1/` with `Accept-Profile: ai` for the live
 
 Every `ai.*` table has Row Level Security enabled. The default policies are:
 
-- **`service_role`** — full access on every table (`FOR ALL USING (true) WITH CHECK (true)`). This is what the platform's own backend uses.
-- **`authenticated`** (any signed-in GoTrue user) — **read access on every table**. Write access on most user-configurable tables (agents, workflows, tools, knowledge_bases, sources, etc.). Per-user filtering on session-shaped tables (`agent_sessions`, `agent_runs`, `orchestration_sessions`, `orchestration_runs`) via `auth.uid() = user_id`.
-- **`anon`** — **no access**. Querying `ai.*` with the Anon (Publishable) Key returns empty result sets.
+- **`service_role`**: full access on every table (`FOR ALL USING (true) WITH CHECK (true)`). This is what the platform's own backend uses.
+- **`authenticated`** (any signed-in GoTrue user): **read access on every table**. Write access on most user-configurable tables (agents, workflows, tools, knowledge_bases, sources, etc.). Per-user filtering on session-shaped tables (`agent_sessions`, `agent_runs`, `orchestration_sessions`, `orchestration_runs`) via `auth.uid() = user_id`.
+- **`anon`**: **no access**. Querying `ai.*` with the Anon (Publishable) Key returns empty result sets.
 
 What this means in practice:
 

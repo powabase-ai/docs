@@ -10,13 +10,13 @@ Every example here assumes:
 
 - The table is in `public`, RLS is **enabled** (`ALTER TABLE ... ENABLE ROW LEVEL SECURITY`), and you want to add policies on top.
 - You're signing in users through GoTrue, so `auth.uid()` returns the user's id.
-- You want to expose the table directly to clients via PostgREST. (If you're only ever hitting it from a backend with the Service Role key, you don't need any of this — `service_role` bypasses RLS.)
+- You want to expose the table directly to clients via PostgREST. (If you're only ever hitting it from a backend with the Service Role key, you don't need any of this; `service_role` bypasses RLS.)
 
 <Note>
 **Step zero: enable RLS, then add policies.** `ALTER TABLE my_table ENABLE ROW LEVEL SECURITY;` flips the default to "deny all." If you then add no policies, the table is unreadable by anyone except `service_role`. Always pair the `ENABLE` with the policies in a single migration.
 </Note>
 
-## Pattern 1 — Each user sees and edits only their own rows
+## Pattern 1: Each user sees and edits only their own rows
 
 The most common pattern. A `todos` table where every row has an `owner_id` column, and users can only touch their own rows.
 
@@ -55,7 +55,7 @@ CREATE POLICY own_todos_delete ON public.todos
 
 **Why the WITH CHECK on UPDATE.** `USING` decides which rows the policy applies to *before* the update; `WITH CHECK` validates the *result*. Without `WITH CHECK`, a user could change `owner_id` from their own id to anyone else's mid-update and the policy would still pass. Always pair `USING` + `WITH CHECK` on `UPDATE` policies.
 
-**Variant — let the server set `owner_id`.** Instead of trusting the client to send `owner_id`, default it from the session:
+**Variant: let the server set `owner_id`.** Instead of trusting the client to send `owner_id`, default it from the session:
 
 ```sql
 ALTER TABLE public.todos
@@ -64,9 +64,9 @@ ALTER TABLE public.todos
 
 Now `INSERT` requests that omit `owner_id` get the caller's id automatically, and your `WITH CHECK (owner_id = auth.uid())` ensures they can't override it.
 
-## Pattern 2 — Public read, auth-only write
+## Pattern 2: Public read, auth-only write
 
-A blog. Anyone — including unauthenticated visitors — can read posts. Only the author can create, edit, or delete their own posts.
+A blog. Anyone, including unauthenticated visitors, can read posts. Only the author can create, edit, or delete their own posts.
 
 ```sql
 CREATE TABLE public.posts (
@@ -106,9 +106,9 @@ CREATE POLICY posts_author_delete ON public.posts
   USING (author_id = auth.uid());
 ```
 
-**Important:** RLS policies are **additive (OR-combined)** within the same role. Both the `posts_public_read` and `posts_author_read_drafts` policies apply when a signed-in user reads — they see all published posts AND their own drafts. That's the desired behavior here.
+**Important:** RLS policies are **additive (OR-combined)** within the same role. Both the `posts_public_read` and `posts_author_read_drafts` policies apply when a signed-in user reads, so they see all published posts AND their own drafts. That's the desired behavior here.
 
-## Pattern 3 — Tenant isolation (multi-org SaaS)
+## Pattern 3: Tenant isolation (multi-org SaaS)
 
 You're building a SaaS where each user belongs to one or more organizations and rows are scoped per organization. A `documents` table where users only see documents in orgs they're a member of.
 
@@ -176,15 +176,15 @@ CREATE POLICY docs_member_update ON public.documents
   );
 ```
 
-**Performance gotcha.** That `IN (SELECT ...)` runs once per row scanned at worst. Add an index on `members(user_id, org_id)` and Postgres will turn it into a hash semi-join — fast. If `documents` gets large, also index `documents(org_id)`. For very high cardinality, denormalize: stuff the user's allowed `org_ids` into the JWT (via a GoTrue hook) and read them from `auth.jwt() -> 'org_ids'` directly — avoids the join entirely.
+**Performance gotcha.** That `IN (SELECT ...)` runs once per row scanned at worst. Add an index on `members(user_id, org_id)` and Postgres will turn it into a hash semi-join. If `documents` gets large, also index `documents(org_id)`. For very high cardinality, denormalize: stuff the user's allowed `org_ids` into the JWT (via a GoTrue hook) and read them from `auth.jwt() -> 'org_ids'` directly, which avoids the join entirely.
 
-## Pattern 4 — Role-based access (admin / member)
+## Pattern 4: Role-based access (admin / member)
 
 Extending the tenant pattern: only org admins can delete documents, members can read and create.
 
 Two reasonable approaches.
 
-**Option A — encode role in the policy expression.** Re-use the `members.role` column:
+**Option A: encode role in the policy expression.** Re-use the `members.role` column:
 
 ```sql
 CREATE POLICY docs_admin_delete ON public.documents
@@ -199,7 +199,7 @@ CREATE POLICY docs_admin_delete ON public.documents
   );
 ```
 
-**Option B — encode role in the JWT.** If GoTrue is minting tokens with custom claims (e.g., via a Postgres function hook on sign-in), you can stash a `{"role": "admin"}` claim and check it directly:
+**Option B: encode role in the JWT.** If GoTrue is minting tokens with custom claims (e.g., via a Postgres function hook on sign-in), you can stash a `{"role": "admin"}` claim and check it directly:
 
 ```sql
 CREATE POLICY docs_admin_delete ON public.documents
@@ -207,9 +207,9 @@ CREATE POLICY docs_admin_delete ON public.documents
   USING (auth.jwt() ->> 'app_role' = 'admin');
 ```
 
-Option A is the right default — roles are dynamic, change without re-signing the user in, and there's a single source of truth. Option B is faster (no subquery) but requires re-issuing tokens when roles change. Use it for things that genuinely won't change mid-session (e.g., "is this user verified at all?").
+Option A is the right default: roles are dynamic, change without re-signing the user in, and there's a single source of truth. Option B is faster (no subquery) but requires re-issuing tokens when roles change. Use it for things that genuinely won't change mid-session, like whether the user is verified at all.
 
-## Pattern 5 — Soft delete
+## Pattern 5: Soft delete
 
 Instead of physically deleting rows, you mark them with `deleted_at`. Active queries should hide them; admins should still see them. The trick is to filter `deleted_at IS NULL` in the policy itself, so callers never have to add it.
 
@@ -240,7 +240,7 @@ CREATE POLICY posts_author_soft_delete ON public.posts
 
 Callers now issue `PATCH /rest/v1/posts?id=eq.{id}` with `{"deleted_at": "<now>"}` instead of `DELETE`. The policies hide the row from subsequent reads.
 
-**Variant — let admins see deleted rows.** Add a separate policy for the admin role:
+**Variant: let admins see deleted rows.** Add a separate policy for the admin role:
 
 ```sql
 CREATE POLICY posts_admin_read_all ON public.posts
@@ -254,11 +254,11 @@ Because policies OR-combine, admins see both active rows (via the regular policy
 
 A few that come up but don't need full recipes:
 
-- **Force RLS for the table owner.** By default the table owner (`service_role` and the project Postgres user) bypasses RLS. To make RLS apply even to the owner (useful for safety in shared environments), use `ALTER TABLE ... FORCE ROW LEVEL SECURITY`. Don't use this on the `ai.*` tables — the platform's backend assumes service-role bypass.
+- **Force RLS for the table owner.** By default the table owner (`service_role` and the project Postgres user) bypasses RLS. To make RLS apply even to the owner (useful for safety in shared environments), use `ALTER TABLE ... FORCE ROW LEVEL SECURITY`. Don't use this on the `ai.*` tables; the platform's backend assumes service-role bypass.
 
-- **Permissive vs restrictive policies.** All policies are `PERMISSIVE` by default — they OR together. `RESTRICTIVE` policies AND together with the result. Useful when you want to layer a "no row may be deleted on Sundays" check on top of existing permissive policies without rewriting them.
+- **Permissive vs restrictive policies.** All policies are `PERMISSIVE` by default, so they OR together. `RESTRICTIVE` policies AND together with the result. Useful when you want to layer a "no row may be deleted on Sundays" check on top of existing permissive policies without rewriting them.
 
-- **Functions in policy expressions.** Postgres caches policy expression results per row per query. A `SELECT 1 FROM members WHERE ...` subquery is fine; an HTTP call from inside a policy (via `pg_net`) is not — it'll run thousands of times. Keep policy expressions cheap and deterministic.
+- **Functions in policy expressions.** Postgres caches policy expression results per row per query. A `SELECT 1 FROM members WHERE ...` subquery is fine; an HTTP call from inside a policy (via `pg_net`) is not, and it'll run thousands of times. Keep policy expressions cheap and deterministic.
 
 ## Next steps
 

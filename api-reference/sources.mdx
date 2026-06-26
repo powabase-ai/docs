@@ -4,11 +4,11 @@ description: "Upload, manage, and extract content from documents and files."
 icon: "file-lines"
 ---
 
-Sources represent uploaded documents in the platform. Each source goes through an asynchronous extraction pipeline that converts files into structured derivatives (page texts, markdown, per-page images). Sources are the raw material for knowledge bases — once extracted, their content can be chunked and indexed for semantic search.
+Sources represent uploaded documents in the platform. Each source goes through an asynchronous extraction pipeline that converts files into structured derivatives (page texts, markdown, per-page images). Sources are the raw material for knowledge bases: once extracted, their content can be chunked and indexed for semantic search.
 
 ## Common Patterns
 
-The typical flow is: upload a file (POST /api/sources/upload), poll for completion (GET /api/sources/\{id\} until extraction_status is 'extracted' or 'attention_required'), then retrieve extracted text (GET /api/sources/\{id\}/page-texts). For files already in project storage, use import-from-storage. For web pages, use import-url. To swap extraction backends after the fact, POST /api/sources/\{id\}/reextract with a new extraction_model.
+The typical flow: upload a file (POST /api/sources/upload), poll for completion (GET /api/sources/\{id\} until extraction_status is 'extracted' or 'attention_required'), then retrieve extracted text (GET /api/sources/\{id\}/page-texts). For files already in project storage, use import-from-storage. For web pages, use import-url. To swap extraction backends after the fact, POST /api/sources/\{id\}/reextract with a new extraction_model.
 
 ### GET /api/sources
 
@@ -39,7 +39,7 @@ curl '{BASE_URL}/api/sources' \
 
 ### POST /api/sources/upload
 
-Upload a file for extraction. Accepts PDF, DOCX, PPTX, XLSX, images (PNG/JPG/WebP/GIF/TIFF), and plain text. Uses multipart/form-data. Optional fields: name (display name), metadata (JSON string, preserved through indexing), extraction_model (PDF only — one of auto, mistral, paddleocr, lighton, opendataloader, fitz, pdfplumber).
+Upload a file for extraction. Accepts PDF, DOCX, PPTX, XLSX, images (PNG/JPG/WebP/GIF/TIFF), and plain text. Uses multipart/form-data. Optional fields: name (display name), metadata (JSON string, preserved through indexing), extraction_model (PDF only; one of auto, mistral, paddleocr, lighton, opendataloader, fitz, pdfplumber).
 
 <CodeGroup>
 
@@ -413,4 +413,4 @@ Source routes return `{"error": "<message>"}`.
 | 400 | `/page-texts`: invalid `page` query (must be an integer ≥ 1); `/derivatives/{type}/download`: invalid `index` query |
 | 404 | No source exists with the given ID; referenced file not found in storage (`/import-from-storage`); requested page or derivative does not exist; no file/derivative available for download |
 | 409 | `/cancel`: extraction is not in a cancellable state (must be `pending` or `extracting`) |
-| 500 | Upload, import, extraction, page download, or derivative download failed — body contains the underlying error message |
+| 500 | Upload, import, extraction, page download, or derivative download failed; body contains the underlying error message |

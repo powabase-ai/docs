@@ -8,6 +8,7 @@ icon: "tower-broadcast"
 
 Server-Sent Events (SSE) provide a one-directional stream from server to client over a single HTTP connection. When you call a streaming endpoint (e.g. /api/agents/\{id\}/run/stream), the response is a text/event-stream with individual events sent as they occur. Each event is a JSON object prefixed with 'data: ' on a single line, separated by blank lines.
 
+
 ## Agent Streaming Events
 
 | Event | Key Fields | Description |
@@ -29,13 +30,13 @@ Server-Sent Events (SSE) provide a one-directional stream from server to client 
 
 ### Keepalive
 
-If no event has been emitted for 30 seconds, the stream sends `: keepalive\n\n` (an SSE comment line). Most SSE clients ignore comment lines automatically — if you're rolling your own parser, drop any line that starts with `:`.
+If no event has been emitted for 30 seconds, the stream sends `: keepalive\n\n` (an SSE comment line). Most SSE clients ignore comment lines automatically. If you're rolling your own parser, drop any line that starts with `:`.
 
 ### Persisted vs. forwarded-only
 
 The platform distinguishes events that get written to the run record from events that are forwarded for UI ergonomics but not persisted:
 
-- **Forwarded only**: `content_delta`, `reasoning_delta` — these are per-token deltas; the assembled content / reasoning is persisted as one piece on `complete`.
+- **Forwarded only**: `content_delta`, `reasoning_delta`. These are per-token deltas; the assembled content / reasoning is persisted as one piece on `complete`.
 - **Persisted + forwarded**: everything else.
 
 If you replay a run via `GET /api/agents/runs/{run_id}`, you'll see the assembled content but not the individual deltas.
@@ -135,7 +136,7 @@ Orchestration streaming extends the agent event model with delegation events. Yo
 
 ## Workflow Streaming
 
-Workflow streaming sends per-block events as the engine traverses the DAG. The agent-block and orchestration-block streams interleave their own content_delta / reasoning_delta events directly into the workflow stream (so a downstream client can render the agent's tokens live while still seeing block-level structure):
+Workflow streaming sends per-block events as the engine traverses the DAG. The agent-block and orchestration-block streams interleave their own content_delta / reasoning_delta events directly into the workflow stream, so a downstream client can render the agent's tokens live while still seeing block-level structure:
 
 | Event | Key Fields | When |
 | --- | --- | --- |
@@ -149,12 +150,12 @@ Workflow streaming sends per-block events as the engine traverses the DAG. The a
 | `workflow_complete` | `execution_id`, `result` | The whole execution finished |
 | `workflow_error` | `execution_id`, `error` | The execution failed at the top level |
 
-The block-level events let you build a step indicator that updates as the DAG advances; the forwarded content/reasoning deltas let you stream the agent's response within the same UI surface.
+The block-level events let you build a step indicator that updates as the DAG advances, and the forwarded content/reasoning deltas let you stream the agent's response within the same UI surface.
 
 <Tip>
 **Buffer handling**
 
-SSE data may arrive in partial chunks — a single read() call might contain half an event or multiple events. Always buffer incoming data and split on newlines to ensure you process complete events.
+SSE data may arrive in partial chunks: a single read() call might contain half an event or multiple events. Always buffer incoming data and split on newlines to ensure you process complete events.
 </Tip>
 
 ## Next Steps

@@ -8,7 +8,7 @@ The `/api/database/*` endpoints are a thin auth-required proxy over PostgREST, s
 
 System schemas (`ai`, `auth`, `storage`, `pg_catalog`, `information_schema`, etc.) are blocked at this layer — those are managed via dedicated routes (`/api/agents`, `/api/knowledge-bases`, ...).
 
-When you need the full PostgREST query language (filter operators, embedded relations, ordering, RPC calls), use the [PostgREST endpoints](/api-reference/postgrest) instead. Use this proxy when you want a single auth model across all platform calls and don't need the full PostgREST surface.
+When you need the full PostgREST query language (filter operators, embedded relations, ordering, RPC calls), use the [PostgREST endpoints](/api-reference/postgrest) instead. Use this proxy when you want one auth model across all platform calls and don't need the full PostgREST surface.
 
 ## Common Patterns
 

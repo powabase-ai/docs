@@ -6,8 +6,8 @@ icon: "satellite-dish"
 
 The Realtime API is Supabase Realtime v2.65.3, mounted at two endpoints on every project:
 
-- **WebSocket:** `wss://{ref}.p.powabase.ai/realtime/v1/websocket` — for subscriptions.
-- **REST:** `https://{ref}.p.powabase.ai/realtime/v1/api` — for server-side broadcast.
+- **WebSocket:** `wss://{ref}.p.powabase.ai/realtime/v1/websocket` for subscriptions.
+- **REST:** `https://{ref}.p.powabase.ai/realtime/v1/api` for server-side broadcast.
 
 For the conceptual model, see [Realtime model](/concepts/realtime). For worked subscription patterns, see [Realtime subscriptions](/guides/realtime-subscriptions).
 
@@ -25,7 +25,7 @@ wss://{ref}.p.powabase.ai/realtime/v1/websocket?apikey=<TOKEN>&vsn=1.0.0
 | `vsn` | Yes | Protocol version. Use `1.0.0`. |
 | `log_level` | No | `error`, `warn`, `info`, `debug`. Server-side logging verbosity for this connection. |
 
-The REST endpoint uses standard headers — `apikey` + `Authorization: Bearer <token>` — and requires the Service Role Key (not the Anon Key).
+The REST endpoint uses standard headers (`apikey` plus `Authorization: Bearer <token>`) and requires the Service Role Key, not the Anon Key.
 
 ## Frame format
 
@@ -40,10 +40,10 @@ All WebSocket frames are Phoenix Channels JSON envelopes:
 }
 ```
 
-- **`topic`** — the channel name. Convention is `realtime:<schema>:<table>` for postgres_changes channels, or any arbitrary string for broadcast/presence.
-- **`event`** — what kind of frame (see below).
-- **`payload`** — event-specific data.
-- **`ref`** — client-chosen ID that the server echoes back on `phx_reply`. Useful for correlating sends with their acknowledgments.
+- **`topic`**: the channel name. Convention is `realtime:<schema>:<table>` for postgres_changes channels, or any arbitrary string for broadcast/presence.
+- **`event`**: what kind of frame (see below).
+- **`payload`**: event-specific data.
+- **`ref`**: client-chosen ID that the server echoes back on `phx_reply`. Useful for correlating sends with their acknowledgments.
 
 ## WebSocket events
 
@@ -69,22 +69,22 @@ Client → server. Subscribes to a channel.
 }
 ```
 
-All three config sections are optional. Omit them entirely and you get a bare channel you can broadcast to without receiving any of the three event types — useful for chat-room-style one-way emit.
+All three config sections are optional. Omit them entirely and you get a bare channel you can broadcast to without receiving any of the three event types, useful for chat-room-style one-way emit.
 
 **`config.broadcast`:**
-- `self` (bool, default `false`) — receive your own broadcast messages.
-- `ack` (bool, default `false`) — receive `phx_reply` confirming the broadcast was routed.
+- `self` (bool, default `false`): receive your own broadcast messages.
+- `ack` (bool, default `false`): receive `phx_reply` confirming the broadcast was routed.
 
 **`config.presence`:**
-- `key` (string) — unique identifier for this presence (typically the user id). Used for dedupe across multiple connections.
+- `key` (string): unique identifier for this presence (typically the user id). Used for dedupe across multiple connections.
 
-**`config.postgres_changes`** — array of filter specs:
-- `event` (string) — `INSERT`, `UPDATE`, `DELETE`, or `*` for all three.
-- `schema` (string) — target schema. `public` is the common case.
-- `table` (string) — target table.
-- `filter` (string, optional) — column equality in PostgREST-style syntax (e.g., `user_id=eq.<uuid>`, `status=eq.active`).
+**`config.postgres_changes`**, array of filter specs:
+- `event` (string): `INSERT`, `UPDATE`, `DELETE`, or `*` for all three.
+- `schema` (string): target schema. `public` is the common case.
+- `table` (string): target table.
+- `filter` (string, optional): column equality in PostgREST-style syntax (e.g., `user_id=eq.<uuid>`, `status=eq.active`).
 
-**`config.private`** (bool, default `false`) — when `true`, Realtime checks the SELECT policy on `realtime.messages` before letting you join. Without a passing policy, the join returns an error.
+**`config.private`** (bool, default `false`): when `true`, Realtime checks the SELECT policy on `realtime.messages` before letting you join. Without a passing policy, the join returns an error.
 
 ### phx_reply
 
@@ -127,7 +127,7 @@ Server → client. A row change matching a previously-subscribed postgres_change
 }
 ```
 
-For `UPDATE`, both `new` and `old` are populated. For `DELETE`, only `old` is. The columns the client sees depend on the table's REPLICA IDENTITY — `DEFAULT` shows changed columns plus the primary key on UPDATE; `FULL` shows every column. To set `FULL`:
+For `UPDATE`, both `new` and `old` are populated. For `DELETE`, only `old` is. The columns the client sees depend on the table's REPLICA IDENTITY: `DEFAULT` shows changed columns plus the primary key on UPDATE; `FULL` shows every column. To set `FULL`:
 
 ```sql
 ALTER TABLE public.orders REPLICA IDENTITY FULL;
@@ -185,7 +185,7 @@ Server → client. Initial snapshot of who's currently tracked in the channel, s
 }
 ```
 
-The top-level keys are the `key` values from each presence — typically user ids. The values are arrays because the same key can be tracked from multiple connections (e.g., two browser tabs by the same user).
+The top-level keys are the `key` values from each presence, typically user ids. The values are arrays because the same key can be tracked from multiple connections (e.g., two browser tabs by the same user).
 
 ### presence_diff
 
@@ -233,11 +233,11 @@ Server → client. Notifications about the channel itself (subscribed, unsubscri
 }
 ```
 
-Use this to confirm the postgres_changes subscription is actually live. A `system` frame with `status: "error"` here usually means the publication isn't set up — see [Realtime model](/concepts/realtime).
+Use this to confirm the postgres_changes subscription is actually live. A `system` frame with `status: "error"` here usually means the publication isn't set up. See [Realtime model](/concepts/realtime).
 
 ### phoenix heartbeat
 
-Client → server. The Phoenix Channels convention is a heartbeat every 30 seconds; if no heartbeat arrives for roughly two intervals (the Phoenix default — Powabase doesn't override it), Realtime closes the connection. Most clients send heartbeats automatically.
+Client → server. The Phoenix Channels convention is a heartbeat every 30 seconds; if no heartbeat arrives for roughly two intervals (the Phoenix default, which Powabase doesn't override), Realtime closes the connection. Most clients send heartbeats automatically.
 
 ```json
 {
@@ -248,7 +248,7 @@ Client → server. The Phoenix Channels convention is a heartbeat every 30 secon
 }
 ```
 
-The server responds with a `phx_reply` of `{ status: "ok" }`. If you don't get an OK within a few seconds, the connection is probably half-open — disconnect and reconnect.
+The server responds with a `phx_reply` of `{ status: "ok" }`. If you don't get an OK within a few seconds, the connection is probably half-open; disconnect and reconnect.
 
 ### phx_leave
 
@@ -346,7 +346,7 @@ curl -X POST '{BASE_URL}/realtime/v1/api/broadcast' \
 
 </CodeGroup>
 
-**Response:** `{ "message": "ok" }` on success. The endpoint is fire-and-forget — it doesn't tell you how many subscribers received the message.
+**Response:** `{ "message": "ok" }` on success. The endpoint is fire-and-forget: it doesn't tell you how many subscribers received the message.
 
 ## SQL: realtime.send() and realtime.broadcast_changes()
 
@@ -370,12 +370,12 @@ PERFORM realtime.send(
 Higher-level wrapper for "broadcast this row change." Designed to be called from a trigger function (see [Realtime model](/concepts/realtime) for a worked trigger example).
 
 The `level` parameter is the channel-privacy level:
-- `'topic'` (default) — sends to a private channel; subscribers need a passing RLS policy on `realtime.messages` to receive.
-- Any other string — treated as public.
+- `'topic'` (default): sends to a private channel; subscribers need a passing RLS policy on `realtime.messages` to receive.
+- Any other string: treated as public.
 
 ## Channel-private auth: realtime.messages
 
-Private channels gate join with a SELECT policy on `realtime.messages`. The function `realtime.topic()` returns the channel name being checked, which lets the policy condition the decision on the topic:
+Private channels gate join with a SELECT policy on `realtime.messages`. The function `realtime.topic()` returns the channel name being checked, so the policy can condition the decision on the topic:
 
 ```sql
 -- Only members of the room can join the room channel
@@ -419,7 +419,7 @@ REST errors: standard JSON shape, `{ "error": "<message>" }`.
 - Realtime: `v2.65.3`
 - Both routes (`/realtime/v1/` and `/realtime/v1/api`) use Kong's `preserve_host: true` to let Realtime parse `tenant_id` from the Host header.
 - Per-project Realtime pods are seeded with `SEED_SELF_HOST=true`, so the tenant is created on first connect rather than requiring an out-of-band provisioning step.
-- The Realtime `DB_ENC_KEY` is shared across Powabase deployments — it's an internal multi-tenant encryption key, not a per-project secret. Not user-relevant.
+- The Realtime `DB_ENC_KEY` is shared across Powabase deployments. It's an internal multi-tenant encryption key, not a per-project secret, and isn't user-relevant.
 
 ## Next steps
 

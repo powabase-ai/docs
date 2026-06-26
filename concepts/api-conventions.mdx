@@ -1,10 +1,10 @@
 ---
 title: "API conventions"
-description: "The shared patterns across all of Powabase's HTTP APIs — header conventions, naming, error envelopes, pagination, response shapes. Once you know these, every endpoint is easier to read."
+description: "The shared patterns across Powabase's HTTP APIs: header conventions, naming, error envelopes, pagination, response shapes. Once you know these, every endpoint is easier to read."
 icon: "ruler"
 ---
 
-Powabase exposes several HTTP surfaces — the agentic `/api/*`, PostgREST `/rest/v1/*`, GoTrue `/auth/v1/*`, Storage `/storage/v1/*`, and Realtime. They were built independently (most are upstream Supabase services Powabase ships) and have slightly different conventions. This page documents the shared patterns and where they diverge.
+Powabase exposes several HTTP surfaces: the agentic `/api/*`, PostgREST `/rest/v1/*`, GoTrue `/auth/v1/*`, Storage `/storage/v1/*`, and Realtime. They were built independently (most are upstream Supabase services Powabase ships) and have slightly different conventions. This page documents the shared patterns and where they diverge.
 
 For specific endpoints, see the relevant `/api-reference/*` pages.
 
@@ -33,7 +33,7 @@ The agentic `/api/*` surface is inconsistent here:
 | `/api/sources/{id}` | PATCH |
 | `/api/workflows/{id}` | PATCH |
 
-The pattern was that PATCH is partial-update (body keys not present aren't changed) and PUT is full-replace, but in practice the platform's PUT endpoints also work as partial updates. The choice is historical, not principled.
+The intent was that PATCH does partial updates (body keys not present aren't changed) and PUT does full replacement, but in practice the platform's PUT endpoints also work as partial updates. The choice is historical, not principled.
 
 PostgREST uses PATCH for partial updates and supports PUT only when you specify `Prefer: resolution=merge-duplicates` (which is really an upsert).
 
@@ -47,7 +47,7 @@ If you're writing client code, match what the docs say for each endpoint. Don't 
 
 The BaaS services have versioned paths: `/auth/v1/`, `/rest/v1/`, `/storage/v1/`, `/realtime/v1/`. The agentic `/api/*` surface is **not** versioned in the path.
 
-This isn't a hard product commitment — it's just where we are today. If the agentic surface needs versioning later, the most likely move is to introduce `/api/v2/*` alongside the existing `/api/*`. If you want maximum future-proofing, build a tiny indirection layer in your client code that constructs the URL from a constant.
+This isn't a hard product commitment, just where things stand today. If the agentic surface needs versioning later, the most likely move is to introduce `/api/v2/*` alongside the existing `/api/*`. To future-proof, build a tiny indirection layer in your client code that constructs the URL from a constant.
 
 ## Resource naming
 
@@ -59,7 +59,7 @@ Most resources use plural-noun URLs:
 
 A handful of endpoints use snake_case in the path:
 
-- `/api/ai-provider-keys/platform_supported` (underscore — this is the one most people get wrong)
+- `/api/ai-provider-keys/platform_supported` (underscore; this is the one most people get wrong)
 - `/api/config/kb-defaults` (hyphen)
 
 Match the docs literally. The platform's routing is case- and character-sensitive.
@@ -76,7 +76,7 @@ The agentic `/api/*` surface uses `{"error": "<message>"}` as the standard error
 { "error": "BYOK key decrypt failed", "code": "provider_key_decrypt_failed", "provider": "openai" }
 ```
 
-PostgREST uses a different shape — a JSON object with `code`, `message`, `details`, `hint`:
+PostgREST uses a different shape, a JSON object with `code`, `message`, `details`, `hint`:
 
 ```json
 {
@@ -89,7 +89,7 @@ PostgREST uses a different shape — a JSON object with `code`, `message`, `deta
 
 The `code` is the Postgres SQLSTATE (5-character class).
 
-GoTrue uses yet another shape — `{"error": "code", "error_description": "..."}` for OAuth-style errors and `{"msg": "..."}` for some validation errors:
+GoTrue uses yet another shape: `{"error": "code", "error_description": "..."}` for OAuth-style errors and `{"msg": "..."}` for some validation errors:
 
 ```json
 { "error": "invalid_grant", "error_description": "Invalid login credentials" }
@@ -101,7 +101,7 @@ Storage's error shape is `{"statusCode", "error", "message"}`:
 { "statusCode": "400", "error": "InvalidRequest", "message": "..." }
 ```
 
-This diversity is unfortunate. If you're writing a unified error handler in your client, fall back to checking `response.status` first, then try `.error || .message || .error_description || .msg` in that order.
+This diversity is unfortunate. If you're writing a unified error handler in your client, check `response.status` first, then try `.error || .message || .error_description || .msg` in that order.
 
 ## Pagination
 
@@ -119,7 +119,7 @@ GET /api/agents?limit=20&offset=0
 → { "agents": [...], "total": 47, "limit": 20, "offset": 0 }
 ```
 
-Defaults vary per endpoint — usually `limit=50` with a cap of 200.
+Defaults vary per endpoint, usually `limit=50` with a cap of 200.
 
 For listing endpoints that return many items (KB sources, source page texts), prefer the agentic endpoints' explicit pagination. The PostgREST `Range` approach is fine but easier to forget.
 
@@ -133,13 +133,13 @@ Inconsistency worth knowing about. List endpoints across the agentic surface use
 
 But not always. Some return a bare array. Some return `{ items: [...], total, ... }`. The audit-flagged-and-corrected wrong examples in PR A (#8) were spots where this inconsistency tripped the docs themselves.
 
-When in doubt, log the response and read its shape. The reference pages should show the actual shape — file an issue if you find one that doesn't.
+When in doubt, log the response and read its shape. The reference pages should show the actual shape; file an issue if you find one that doesn't.
 
 ## Idempotency
 
 The agentic `/api/*` surface does not honor an `Idempotency-Key` header (despite the convention being common). Idempotency is computed internally for billing charges (see [Billing model](/concepts/billing-model)) but the API itself doesn't deduplicate user-supplied retry headers.
 
-In practice: retrying a `POST /api/agents/{id}/run/stream` from a timeout creates a second run. Build your retry logic to handle that — usually by waiting longer between retries, or by checking session state before retrying.
+In practice: retrying a `POST /api/agents/{id}/run/stream` from a timeout creates a second run. Build your retry logic to handle that, usually by waiting longer between retries or by checking session state before retrying.
 
 PostgREST doesn't honor `Idempotency-Key` either. For inserts that need idempotency, use unique constraints + upserts (`Prefer: resolution=merge-duplicates`).
 

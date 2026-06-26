@@ -4,19 +4,19 @@ description: "Four worked patterns that pair the BaaS primitives (PostgREST, Aut
 icon: "book"
 ---
 
-The whole point of Powabase is that the BaaS substrate and the AI primitives compose. You can build an app that signs users in (Auth), stores their files (Storage), indexes those files into a knowledge base (Sources + KB), runs an agent that searches the KB (Agents), and streams the answer back to the user — all on one platform, with one auth model, with RLS gating the right things.
+The point of Powabase is that the BaaS substrate and the AI primitives compose. You can build an app that signs users in (Auth), stores their files (Storage), indexes those files into a knowledge base (Sources + KB), runs an agent that searches the KB (Agents), and streams the answer back to the user, all on one platform, with one auth model, with RLS gating the right things.
 
-This page is four worked patterns that string these primitives together. None of them is the only right way — they're starting points you'll adapt to your shape. For deeper dives on each primitive, see the per-area pages linked from the Cards at the end.
+This page is four worked patterns that string those primitives together. None of them is the only right way; treat them as starting points you'll adapt to your shape. For deeper dives on each primitive, see the per-area pages linked from the Cards at the end.
 
-For the audit-flagged limitation that drives Recipe 2 — **the platform does not forward end-user JWTs to agent tools** — see [JWT forwarding investigation](#why-recipe-2-is-shaped-this-way) below the recipes.
+One caveat drives Recipe 2: **the platform does not forward end-user JWTs to agent tools.** See [JWT forwarding investigation](#why-recipe-2-is-shaped-this-way) below the recipes.
 
-## Recipe 1 — RLS-aware agent context via PostgREST on ai.*
+## Recipe 1: RLS-aware agent context via PostgREST on ai.*
 
 The pattern: you have an agent that needs to retrieve from a knowledge base, but you want each end user to see only their own sources within that KB. The naive approach (agent has unrestricted KB access; you filter results in your app) leaks data via the response.
 
 The right approach: query `ai.chunks` directly via PostgREST under the user's JWT before invoking the agent, and pass the resulting context into the agent run as `context_items`.
 
-**Step 1 — RLS on `ai.indexed_sources` and `ai.chunks`** (assuming a `user_id` column on your `ai.sources` table tracks ownership):
+**Step 1: RLS on `ai.indexed_sources` and `ai.chunks`** (assuming a `user_id` column on your `ai.sources` table tracks ownership):
 
 ```sql
 -- ai.sources already has RLS enabled by default; tighten the authenticated
@@ -48,7 +48,7 @@ CREATE POLICY auth_read_own_chunks ON ai.chunks
   );
 ```
 
-**Step 2 — query for chunks from the browser**, using the user's access token:
+**Step 2: query for chunks from the browser**, using the user's access token:
 
 ```typescript
 async function retrieveContext(kbId: string, query: string, userToken: string) {
@@ -74,7 +74,7 @@ async function retrieveContext(kbId: string, query: string, userToken: string) {
 }
 ```
 
-**Step 3 — pass the retrieved chunks as agent context_items.** The agent run endpoint accepts a `context_items` array that bypasses the agent's own retrieval:
+**Step 3: pass the retrieved chunks as agent context_items.** The agent run endpoint accepts a `context_items` array that bypasses the agent's own retrieval:
 
 ```typescript
 async function askAgent(agentId: string, message: string, contextItems: any[], userToken: string) {
@@ -103,27 +103,27 @@ async function askAgent(agentId: string, message: string, contextItems: any[], u
 
 The agent run no longer touches `ai.chunks` itself (because we pre-fed the context). The data path is: user JWT → PostgREST → RLS-filtered chunks → context_items → agent. There's no point in the request where the agent has access to chunks the user shouldn't see.
 
-**Trade-offs.** This pattern works for read-only retrieval. You're doing the RAG retrieval yourself; you lose the platform's hybrid scoring, reranking, and the chunks→pages reflow that the typed search endpoint does for you. For full retrieval pipelines, the right answer is "use the typed search endpoint but call it from your backend, with your backend enforcing ownership before the call" — at the cost of a service-role layer in the middle.
+**Trade-offs.** This pattern works for read-only retrieval. You're doing the RAG retrieval yourself, so you lose the platform's hybrid scoring, reranking, and the chunks→pages reflow that the typed search endpoint does for you. For full retrieval pipelines, the right answer is "use the typed search endpoint but call it from your backend, with your backend enforcing ownership before the call," at the cost of a service-role layer in the middle.
 
-## Recipe 2 — Build-your-own authenticated chatbot
+## Recipe 2: Build-your-own authenticated chatbot
 
 A chat app where each user has their own agent (or shares an agent with others). The user sends a message, the agent runs, the response streams back to the user. RLS should ensure that user A's chat history isn't visible to user B.
 
-**Important up-front:** the obvious approach — "let the browser call `/api/agents/{id}/run/stream` directly with the user's access token" — looks like it works but is unsafe.
+**Important up-front:** the obvious approach, letting the browser call `/api/agents/{id}/run/stream` directly with the user's access token, looks like it works but is unsafe.
 
 ### Why the obvious approach is wrong
 
 When you send a request to `/api/agents/{id}/run/stream` with `Authorization: Bearer <user_jwt>`:
 
 1. The user's JWT is signed with the same `JWT_SECRET` as the Service Role Key, just with `role: "authenticated"` instead of `role: "service_role"`.
-2. `@require_auth` accepts both — the JWT signature validates and the request is authorized.
-3. **But** the platform does not propagate the user's identity to the agent's tools. The agent's `database_query`/`database_write` builtin tools run under a superuser Postgres role (`supabase_admin`) inside the project-service worker. Whatever the agent decides to query, it gets back unfiltered data — including other users' rows.
+2. `@require_auth` accepts both: the JWT signature validates and the request is authorized.
+3. **But** the platform does not propagate the user's identity to the agent's tools. The agent's `database_query`/`database_write` builtin tools run under a superuser Postgres role (`supabase_admin`) inside the project-service worker. Whatever the agent decides to query, it gets back unfiltered data, including other users' rows.
 
 So a user who hits `/run/stream` directly with their own JWT gets an answer, but the answer is computed with full project-wide DB access. If the agent has database tools, it can leak data from other users. **Don't expose `/api/agents/{id}/run/stream` to clients with their own JWTs.**
 
 ### The safe pattern
 
-Run the agent run from a trusted backend with the Service Role key. Inject user-scoped context yourself — either via `context_items` (Recipe 1's pattern) or by constructing a Custom HTTP Tool that calls a route on your own backend that's auth-checked.
+Run the agent run from a trusted backend with the Service Role key. Inject user-scoped context yourself, either via `context_items` (Recipe 1's pattern) or by constructing a Custom HTTP Tool that calls an auth-checked route on your own backend.
 
 ```typescript
 // Backend route. Express-style for illustration.
@@ -209,11 +209,11 @@ app.post("/internal/tools/search-articles", async (req, res) => {
 
 The pattern: pass an opaque `session_token` through the tool's arguments at call time. Your backend resolves it to the user identity and gates the query. The agent doesn't know who the user is; your backend does.
 
-The system prompt for the agent includes "always call `search_user_articles` with `session_token = <token>`" — you inject the current user's token into the system prompt at agent-run-time, server-side. From the agent's perspective, the token is opaque data it passes through.
+The system prompt for the agent includes "always call `search_user_articles` with `session_token = <token>`." You inject the current user's token into the system prompt at agent-run-time, server-side. From the agent's perspective, the token is opaque data it passes through.
 
 This pattern is more work than "the platform forwards my JWT" would be. It's the safe alternative given current platform behavior.
 
-## Recipe 3 — Storage vs ai.sources
+## Recipe 3: Storage vs ai.sources
 
 You have a multi-format app: users upload PDFs that need to be indexed for RAG, plus they upload images for display. Two distinct flows.
 
@@ -230,7 +230,7 @@ You have a multi-format app: users upload PDFs that need to be indexed for RAG, 
 
 The two flows use different buckets, different tables (`ai.sources` vs `storage.objects`), and have different RLS postures. **Don't try to share buckets between them.** The platform assumes ownership of its Sources bucket layout and will overwrite paths.
 
-For files that need to be both (e.g., a PDF the user uploaded that they should be able to download AND that's indexed for RAG): upload twice, once through each path. They're independent — one row in `storage.objects` (for download) and one row in `ai.sources` (for indexing). Or pick one path: upload to `ai.sources` and use the platform's pre-signed download URL for the user-facing download.
+For files that need to be both (e.g., a PDF the user uploaded that they should be able to download AND that's indexed for RAG): upload twice, once through each path. They're independent: one row in `storage.objects` (for download) and one row in `ai.sources` (for indexing). Or pick one path, upload to `ai.sources`, and use the platform's pre-signed download URL for the user-facing download.
 
 A worked end-to-end flow for an "upload a PDF, then chat with it" pattern:
 
@@ -274,9 +274,9 @@ async function uploadAndChat(file: File, userToken: string) {
 
 `public.documents` is your own table for "who owns which source." `ai.sources` is the platform's table; `public.documents.source_id` references it for the ownership graph.
 
-## Recipe 4 — Realtime + agent runs
+## Recipe 4: Realtime + agent runs
 
-For showing live progress during agent runs: the agent SSE stream is one event source, but if you want UI updates to also propagate to other devices (the user's phone watching while their laptop runs the chat), Realtime is the right second channel.
+For showing live progress during agent runs: the agent SSE stream is one event source, but if you want UI updates to reach other devices too (the user's phone watching while their laptop runs the chat), Realtime is the right second channel.
 
 Two patterns:
 
@@ -315,7 +315,7 @@ async function streamAndBroadcast(agentId: string, userId: string, message: stri
 }
 ```
 
-**Pattern 4b: Use a database trigger.** Insert each agent event into `public.chat_messages`; a trigger function calls `realtime.send()` to broadcast it. The application code doesn't need to call Realtime explicitly — the database side-effect drives the broadcast.
+**Pattern 4b: Use a database trigger.** Insert each agent event into `public.chat_messages`; a trigger function calls `realtime.send()` to broadcast it. The application code doesn't need to call Realtime explicitly; the database side-effect drives the broadcast.
 
 ```sql
 CREATE OR REPLACE FUNCTION broadcast_chat_message()
@@ -338,7 +338,7 @@ CREATE TRIGGER chat_realtime
   FOR EACH ROW EXECUTE FUNCTION broadcast_chat_message();
 ```
 
-Pair this with the matching RLS on `realtime.messages` (so only the user themselves can subscribe to their channel) and you have device-syncing chat for free, gated by the same auth model as the rest of the app. See [Realtime model](/concepts/realtime) for the function reference.
+Pair this with the matching RLS on `realtime.messages` (so only the user themselves can subscribe to their channel) and you have device-syncing chat, gated by the same auth model as the rest of the app. See [Realtime model](/concepts/realtime) for the function reference.
 
 ## Why Recipe 2 is shaped this way
 
@@ -349,7 +349,7 @@ A platform investigation while drafting the audit found that the agent surface d
 - The `database_query`/`database_write` builtin tools execute SQL via the project service's SQLAlchemy session, configured from `DATABASE_URL=postgres://supabase_admin:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}` (a superuser connection) with no `SET ROLE` and no `set_config('request.jwt.claims', ...)`
 - Custom HTTP tools forward only the `config.headers` set at tool-create time — no request-time auth injection
 
-The implication is that anyone reaching `/api/agents/{id}/run/stream` directly with a user JWT gets full project-wide database access from any tool the agent calls. This is the footgun Recipe 2's "safe pattern" works around. If/when the platform adds JWT forwarding (some kind of `act_as_user` parameter or automatic propagation), the safe pattern simplifies considerably.
+The implication: anyone reaching `/api/agents/{id}/run/stream` directly with a user JWT gets full project-wide database access from any tool the agent calls. This is the footgun Recipe 2's "safe pattern" works around. If and when the platform adds JWT forwarding (some kind of `act_as_user` parameter or automatic propagation), the safe pattern gets a lot simpler.
 
 For now: only call agent endpoints from trusted backends, with the Service Role key, with user-scoped context pre-injected.
 

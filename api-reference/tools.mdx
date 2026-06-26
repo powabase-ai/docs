@@ -4,11 +4,11 @@ description: "Manage custom tools and view builtin tools available to agents."
 icon: "wrench"
 ---
 
-Tools extend agent capabilities beyond conversation. The platform provides builtin tools (database_query, database_write, http_request, code_execute, storage_read, storage_write, web_search, web_scrape) and lets you create custom tools that call your own endpoints. Custom tools are defined with a name, description, JSON Schema for inputs, and an endpoint URL that the platform calls when the agent uses the tool.
+Tools extend agent capabilities beyond conversation. The platform provides builtin tools (database_query, database_write, http_request, code_execute, storage_read, storage_write, web_search, web_scrape) and lets you create custom tools that call your own endpoints. A custom tool is defined with a name, description, JSON Schema for inputs, and an endpoint URL that the platform calls when the agent uses the tool.
 
 ## Common Patterns
 
-List available tools with GET /api/tools to see both builtin and custom tools. Create custom tools with a clear description and input schema — agents use the description to decide when to call the tool. Assign tools to agents via the agent tools API (POST /api/agents/\{id\}/tools).
+List available tools with GET /api/tools to see both builtin and custom tools. Create custom tools with a clear description and input schema; agents use the description to decide when to call the tool. Assign tools to agents via the agent tools API (POST /api/agents/\{id\}/tools).
 
 ### GET /api/tools
 
@@ -32,7 +32,7 @@ curl '{BASE_URL}/api/tools' -H "apikey: {API_KEY}" -H "Authorization: Bearer {AP
 
 ### POST /api/tools
 
-Create a custom tool. Required: `name`, `description`, `type`, `input_schema`. The route also accepts an optional `config` object — for HTTP-callable tools, the runtime reads `config.endpoint`, `config.method` (default `POST`), `config.headers`, and `config.timeout_seconds` when an agent invokes the tool.
+Create a custom tool. Required: `name`, `description`, `type`, `input_schema`. The route also accepts an optional `config` object. For HTTP-callable tools, the runtime reads `config.endpoint`, `config.method` (default `POST`), `config.headers`, and `config.timeout_seconds` when an agent invokes the tool.
 
 <ParamField body="name" type="string" required>
 Display name; agents see this when deciding to call the tool.
@@ -51,11 +51,11 @@ JSON Schema for the tool's arguments. Not validated at create-time; passed strai
 </ParamField>
 
 <ParamField body="config" type="object">
-Tool-specific config. For custom HTTP tools, set `{ endpoint, method?, headers?, timeout_seconds? }` here — that's where the runtime reads them.
+Tool-specific config. For custom HTTP tools, set `{ endpoint, method?, headers?, timeout_seconds? }` here; that's where the runtime reads them.
 </ParamField>
 
 <Note>
-Top-level `endpoint_url` / `method` / `headers` are silently dropped at create-time — only `name`, `description`, `type`, `input_schema`, and `config` are persisted. `type` is stored as a free-form `String(50)`; the runtime does NOT switch on it. Agent-tool dispatch uses the assignment's own `tool_type` (`builtin` vs `custom`), not the Tool's `type` field.
+Top-level `endpoint_url` / `method` / `headers` are silently dropped at create-time; only `name`, `description`, `type`, `input_schema`, and `config` are persisted. `type` is stored as a free-form `String(50)`; the runtime does NOT switch on it. Agent-tool dispatch uses the assignment's own `tool_type` (`builtin` vs `custom`), not the Tool's `type` field.
 </Note>
 
 <RequestExample>

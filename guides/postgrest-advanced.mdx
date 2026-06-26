@@ -1,10 +1,10 @@
 ---
 title: "PostgREST advanced"
-description: "Beyond basic CRUD — embedded joins, full-text search, JSONB operators, counting, upserts, bulk inserts, and the headers that change response shape."
+description: "Beyond basic CRUD: embedded joins, full-text search, JSONB operators, counting, upserts, bulk inserts, and the headers that change response shape."
 icon: "table"
 ---
 
-The [PostgREST reference](/api-reference/postgrest) covers filter operators and the basic CRUD shape. This guide picks up where that leaves off — embedded resources, FTS, JSONB selectors, counting, upserts, bulk inserts, and the `Prefer` headers that change how responses come back.
+The [PostgREST reference](/api-reference/postgrest) covers filter operators and the basic CRUD shape. This guide picks up where that leaves off: embedded resources, FTS, JSONB selectors, counting, upserts, bulk inserts, and the `Prefer` headers that change how responses come back.
 
 For the framing, see [PostgREST reference](/api-reference/postgrest). For applying these patterns to the AI schema, see [ai-schema recipes](/guides/ai-schema-recipes).
 
@@ -72,7 +72,7 @@ GET /rest/v1/posts?body=phfts.machine.learning
 GET /rest/v1/posts?body=wfts."machine learning".OR.AI
 ```
 
-These require a `tsvector` column or expression index for performance. The bare `body=plfts.foo` form scans every row's text — fine for prototypes, terrible at scale.
+These require a `tsvector` column or expression index for performance. The bare `body=plfts.foo` form scans every row's text. Fine for prototypes, terrible at scale.
 
 ## JSONB operators
 
@@ -98,7 +98,7 @@ For complex queries (multiple JSONB conditions, indexing strategies), check the 
 
 ## Counting
 
-By default, PostgREST returns the matching rows without a total count — counting can be expensive. Opt in via the `Prefer` header:
+By default, PostgREST returns the matching rows without a total count, since counting can be expensive. Opt in via the `Prefer` header:
 
 ```bash
 curl '{BASE_URL}/rest/v1/posts?select=*' \
@@ -108,9 +108,9 @@ curl '{BASE_URL}/rest/v1/posts?select=*' \
 
 Three count modes:
 
-- **`count=exact`** — runs a separate `COUNT(*)` query. Accurate, slowest. The total comes back in the `Content-Range: 0-9/247` response header.
-- **`count=planned`** — uses Postgres's planner estimate. Fast, imprecise.
-- **`count=estimated`** — runs `COUNT(*)` only if planned > some threshold; planner estimate otherwise.
+- **`count=exact`**: runs a separate `COUNT(*)` query. Accurate, slowest. The total comes back in the `Content-Range: 0-9/247` response header.
+- **`count=planned`**: uses Postgres's planner estimate. Fast, imprecise.
+- **`count=estimated`**: runs `COUNT(*)` only if planned > some threshold; planner estimate otherwise.
 
 For paginated UIs, prefer `count=planned` unless the user explicitly asks for an exact total.
 
@@ -149,7 +149,7 @@ curl -X POST '{BASE_URL}/rest/v1/users' \
   ]'
 ```
 
-By default this is a single transaction — all succeed or all roll back. Set `Prefer: tx=rollback` to test without committing, or `Prefer: missing=default` to allow rows with omitted columns to use their defaults instead of failing.
+By default this is a single transaction: all succeed or all roll back. Set `Prefer: tx=rollback` to test without committing, or `Prefer: missing=default` to allow rows with omitted columns to use their defaults instead of failing.
 
 ## Response shape control
 
@@ -172,7 +172,7 @@ curl '{BASE_URL}/rest/v1/users?id=eq.<uuid>' \
   -H "Accept: application/vnd.pgrst.object+json"
 ```
 
-Returns `{...}` directly. **Fails with 406 if the filter doesn't match exactly one row.** Use this when you want "fail loudly if I expected one row and got zero or many."
+Returns `{...}` directly. **Fails with 406 if the filter doesn't match exactly one row.** Use this when you want to fail loudly if you expected one row and got zero or many.
 
 ## Partial response columns
 
@@ -186,7 +186,7 @@ curl '{BASE_URL}/rest/v1/posts?order=created_at.desc' \
 
 Returns items 0 through 19. Combine with `Prefer: count=exact` and the `Content-Range` response header tells the client how many total items exist.
 
-For cursor-style pagination (which is friendlier to large tables), use `id` comparisons instead — `?id=gt.<last_seen>&limit=20`.
+For cursor-style pagination, which is friendlier to large tables, use `id` comparisons instead: `?id=gt.<last_seen>&limit=20`.
 
 ## RPC for non-CRUD logic
 

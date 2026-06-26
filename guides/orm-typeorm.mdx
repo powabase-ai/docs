@@ -1,6 +1,6 @@
 ---
 title: "TypeORM"
-description: "Use TypeORM with Powabase — DataSource setup for the pooler, decorator-based entities, queries via the repository pattern, and TypeORM migrations."
+description: "Use TypeORM with Powabase: DataSource setup for the pooler, decorator-based entities, queries via the repository pattern, and TypeORM migrations."
 icon: "boxes-packing"
 ---
 
@@ -40,7 +40,7 @@ await AppDataSource.initialize();
 
 `poolSize: 10` keeps your app's connection share at half of PgBouncer's `default_pool_size = 20`, leaving room for migrations and other workloads.
 
-If you're using `pg` directly (TypeORM's default for `type: "postgres"`), prepared statements aren't enabled unless you call `client.query()` with the `name` option — which TypeORM's repository methods don't do. So unlike Prisma/Drizzle, no explicit `prepare=false` flag is needed. Just don't switch to a driver that does auto-prepare.
+If you're using `pg` directly (TypeORM's default for `type: "postgres"`), prepared statements aren't enabled unless you call `client.query()` with the `name` option, which TypeORM's repository methods don't do. So unlike Prisma and Drizzle, no explicit `prepare=false` flag is needed. Just don't switch to a driver that does auto-prepare.
 
 ## Entities
 
@@ -98,7 +98,7 @@ export class Post {
 }
 ```
 
-The `{ name: "users" }` / `{ name: "created_at" }` overrides map the TypeScript names to snake_case SQL — match whatever convention you've set for the rest of your schema.
+The `{ name: "users" }` / `{ name: "created_at" }` overrides map the TypeScript names to snake_case SQL. Match whatever convention you've set for the rest of your schema.
 
 ## Queries via repositories
 
@@ -134,7 +134,7 @@ await AppDataSource.transaction(async (tx) => {
 });
 ```
 
-For complex queries, use the QueryBuilder — it's the closest TypeORM gets to raw SQL:
+For complex queries, use the QueryBuilder. It's the closest TypeORM gets to raw SQL:
 
 ```typescript
 const recentPosts = await postRepo
@@ -162,11 +162,11 @@ npx typeorm migration:run -d src/data-source.ts
 npx typeorm migration:revert -d src/data-source.ts
 ```
 
-Migrations land in `src/migrations/` as TypeScript classes implementing `MigrationInterface`. Like Drizzle, the generated migration is largely SQL — easy to inspect before applying.
+Migrations land in `src/migrations/` as TypeScript classes implementing `MigrationInterface`. As with Drizzle, the generated migration is largely SQL, so it's easy to inspect before applying.
 
 TypeORM's tracking table is `migrations`. Don't touch it.
 
-The auto-generate caveat is worth knowing: TypeORM compares your entities against the live database schema, which means **you need a development database that matches your production schema** for autogenerate to produce a clean diff. Most teams keep a local Postgres pinned to production's schema for this.
+One autogenerate caveat is worth knowing: TypeORM compares your entities against the live database schema, so **you need a development database that matches your production schema** for autogenerate to produce a clean diff. Most teams keep a local Postgres pinned to production's schema for this.
 
 ## RLS from TypeORM
 
@@ -184,7 +184,7 @@ await AppDataSource.transaction(async (tx) => {
 });
 ```
 
-Inside the transaction, RLS applies. The `tx.query` here is the raw-SQL escape hatch on the transactional connection.
+Inside the transaction, RLS applies. The `tx.query` calls here are the raw-SQL escape hatch on the transactional connection.
 
 ## TypeORM in NestJS
 
@@ -236,7 +236,7 @@ TypeORM's runner in the context of the other ORMs.
 </Card>
 
 <Card title="Direct Postgres" href="/guides/direct-postgres">
-For SQL TypeORM doesn't express — bulk imports, schema introspection.
+For SQL TypeORM doesn't express: bulk imports, schema introspection.
 </Card>
 
 <Card title="Prisma" href="/guides/orm-prisma">

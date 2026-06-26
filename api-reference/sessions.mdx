@@ -4,7 +4,7 @@ description: "Manage multi-turn chat sessions and their message/run history."
 icon: "message"
 ---
 
-Sessions store the conversation history between users and agents. Each session contains messages (user inputs, assistant responses, tool calls, tool results, plus the retrieved context that grounded each assistant turn) and can span multiple agent runs. Sessions also track reasoning configuration on a per-run basis when the agent is configured for reasoning. Sessions persist until explicitly deleted, enabling long-running multi-turn conversations.
+Sessions store the conversation history between users and agents. Each session contains messages (user inputs, assistant responses, tool calls, tool results, plus the retrieved context that grounded each assistant turn) and can span multiple agent runs. When the agent is configured for reasoning, sessions also track reasoning configuration per run. Sessions persist until explicitly deleted.
 
 ## Common Patterns
 
@@ -84,7 +84,7 @@ curl '{BASE_URL}/api/sessions/{id}/runs' -H "apikey: {API_KEY}" -H "Authorizatio
 
 ### GET /api/sessions/{id}/runs/{run_id}/retrieved-context
 
-Get the retrieved context (knowledge-base chunks fetched during retrieval) for a single run within a session. Useful for debugging RAG behavior — you can see exactly which chunks the agent saw before generating a given turn, separate from the assembled `/messages` view.
+Get the retrieved context (knowledge-base chunks fetched during retrieval) for a single run within a session. Useful for debugging RAG behavior: you can see which chunks the agent saw before generating a given turn, separate from the assembled `/messages` view.
 
 <ParamField path="id" type="string" required>Session ID</ParamField>
 <ParamField path="run_id" type="string" required>Run ID (the `run_id` of an `agent_run` belonging to this session)</ParamField>

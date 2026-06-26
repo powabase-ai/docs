@@ -4,11 +4,11 @@ description: "Combine multiple agents into coordinated multi-agent systems."
 icon: "diagram-project"
 ---
 
-Orchestrations coordinate multiple agents to handle complex, multi-domain tasks. A coordinator agent analyzes incoming messages and delegates subtasks to specialized entity agents based on their role descriptions. The coordinator synthesizes entity responses into a unified reply.
+Orchestrations coordinate multiple agents across multi-domain tasks. A coordinator agent analyzes incoming messages and delegates subtasks to specialized entity agents based on their role descriptions, then synthesizes the entity responses into a single reply.
 
 ## Common Patterns
 
-Create an orchestration, add entity agents with clear role descriptions, then use the streaming endpoint. The coordinator automatically handles delegation. Entity role descriptions should be specific and non-overlapping so the coordinator can make clear routing decisions.
+Create an orchestration, add entity agents with clear role descriptions, then use the streaming endpoint. The coordinator handles delegation. Keep entity role descriptions specific and non-overlapping so the coordinator can route cleanly.
 
 ## CRUD
 
@@ -143,7 +143,7 @@ Orchestration ID
 </ParamField>
 
 <ParamField body="entity_type" type="string" required>
-Use `"agent"`. The route accepts any string ≤50 chars, but the orchestrator's execution path only invokes entities where `entity_type === "agent"` — other values are stored but silently skipped at run time.
+Use `"agent"`. The route accepts any string ≤50 chars, but the orchestrator's execution path only invokes entities where `entity_type === "agent"`; other values are stored but silently skipped at run time.
 </ParamField>
 
 <ParamField body="entity_ref_id" type="string" required>
@@ -220,7 +220,7 @@ curl '{BASE_URL}/api/orchestrations/{id}/entities' -H "apikey: {API_KEY}" -H "Au
 
 ### PUT /api/orchestrations/{id}/entities/{eid}
 
-Update an entity. Only `role_description`, `config`, and `position` are writable — any other top-level keys are silently ignored. `entity_type` and `entity_ref_id` are not updatable; create a new entity instead.
+Update an entity. Only `role_description`, `config`, and `position` are writable; any other top-level keys are silently ignored. `entity_type` and `entity_ref_id` are not updatable; create a new entity instead.
 
 <ParamField path="id" type="string" required>
 Orchestration ID
@@ -354,12 +354,12 @@ curl '{BASE_URL}/api/orchestrations/runs/{run_id}' -H "apikey: {API_KEY}" -H "Au
 
 ## Hooks
 
-These endpoints register hooks against an orchestration using the same `ai.hooks` model as [agent hooks](/api-reference/agents#hooks) — `event`, `type`, `config`, `matcher`, `enabled`, and `position`.
+These endpoints register hooks against an orchestration using the same `ai.hooks` model as [agent hooks](/api-reference/agents#hooks): `event`, `type`, `config`, `matcher`, `enabled`, and `position`.
 
 <Warning>
-**Orchestration hooks are not executed yet.** The CRUD endpoints below work — you can create, list, and delete hook rows — but the orchestration engine does not currently fire them at runtime, so a registered hook has no effect on an orchestration run today. Register them only for forward-compatibility. When execution lands, orchestration hooks will follow the [agent hook contract](/concepts/agents-tools#hooks--middleware) (events such as `OnRunStart`/`OnRunComplete`, types `http`/`rule`/`approval`). The `event` and `type` you send are stored verbatim and not validated.
+**Orchestration hooks are not executed yet.** The CRUD endpoints below work (you can create, list, and delete hook rows), but the orchestration engine does not currently fire them at runtime, so a registered hook has no effect on an orchestration run today. Register them only for forward-compatibility. When execution lands, orchestration hooks will follow the [agent hook contract](/concepts/agents-tools#hooks--middleware) (events such as `OnRunStart`/`OnRunComplete`, types `http`/`rule`/`approval`). The `event` and `type` you send are stored verbatim and not validated.
 
-Note also that hooks attached to a **member agent** do not fire while that agent runs *inside* an orchestration — only [standalone agent runs](/api-reference/agents#hooks) execute hooks today. If you rely on an agent's approval or policy hook, run that agent directly rather than as part of an orchestration until this lands.
+Hooks attached to a **member agent** also do not fire while that agent runs *inside* an orchestration; only [standalone agent runs](/api-reference/agents#hooks) execute hooks today. If you rely on an agent's approval or policy hook, run that agent directly rather than as part of an orchestration until this lands.
 </Warning>
 
 ### POST /api/orchestrations/{id}/hooks
@@ -369,7 +369,7 @@ Add a hook.
 <ParamField path="id" type="string" required>Orchestration ID</ParamField>
 
 <ParamField body="event" type="string" required>Lifecycle event name. Stored verbatim; not validated.</ParamField>
-<ParamField body="type" type="string" required>Hook handler type — `http`, `rule`, or `approval` (see the agent hook contract).</ParamField>
+<ParamField body="type" type="string" required>Hook handler type: `http`, `rule`, or `approval` (see the agent hook contract).</ParamField>
 <ParamField body="config" type="object" required>Handler-specific configuration (for `http`, includes `url`).</ParamField>
 <ParamField body="matcher" type="string">Optional filter narrowing when the hook fires.</ParamField>
 <ParamField body="enabled" type="boolean">Defaults to `true`.</ParamField>
@@ -505,7 +505,7 @@ Orchestration routes return `{"error": "<message>"}` (no structured error code f
 
 | Status | Description |
 | --- | --- |
-| 400 | The orchestration has no entity agents — add at least one before running |
+| 400 | The orchestration has no entity agents; add at least one before running |
 | 400 | Hook POST is missing one of `event`, `type`, or `config` |
 | 404 | No orchestration exists with the given ID |
 | 404 | No hook exists with the given ID for this orchestration |

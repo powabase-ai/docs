@@ -4,7 +4,7 @@ description: "Fire HTTP requests when rows change, using the supabase_functions.
 icon: "webhook"
 ---
 
-You can fire an HTTP request from inside Postgres when a row in a table changes. The mechanism is a trigger function (`supabase_functions.http_request()`) plus `pg_net` (the async HTTP extension) — both preloaded in every Powabase project. This is the pattern for "tell our internal API every time a user signs up," "post to Slack on order creation," or "invalidate a cache when this row updates."
+You can fire an HTTP request from inside Postgres when a row in a table changes. The mechanism is a trigger function (`supabase_functions.http_request()`) plus `pg_net`, the async HTTP extension, both preloaded in every Powabase project. Reach for it when you want to "tell our internal API every time a user signs up," "post to Slack on order creation," or "invalidate a cache when this row updates."
 
 **This is NOT the same as the agentic webhooks at `/api/webhooks`.** Those are the inbound side: external systems triggering workflows. Database webhooks are the outbound side: Postgres rows changing and Postgres calling out to some HTTP endpoint. Don't confuse them.
 
@@ -29,13 +29,13 @@ CREATE TRIGGER notify_on_order_insert
 
 Arguments to `http_request`:
 
-1. **URL** — where to POST.
-2. **Method** — typically `POST`; `PUT`/`PATCH`/`DELETE` also work.
-3. **Headers** (JSONB) — your auth, content-type, custom headers.
-4. **Params** (JSONB) — query string params, if any.
-5. **Timeout** (ms) — how long pg_net waits before giving up.
+1. **URL**: where to POST.
+2. **Method**: typically `POST`; `PUT`/`PATCH`/`DELETE` also work.
+3. **Headers** (JSONB): your auth, content-type, custom headers.
+4. **Params** (JSONB): query string params, if any.
+5. **Timeout** (ms): how long pg_net waits before giving up.
 
-The request body is the **`NEW` row** for INSERT/UPDATE triggers, serialized as JSON. For DELETE triggers, it's the `OLD` row. The function doesn't let you customize the body — see below for that.
+The request body is the **`NEW` row** for INSERT/UPDATE triggers, serialized as JSON. For DELETE triggers, it's the `OLD` row. The function doesn't let you customize the body; see below for that.
 
 ## Customizing the body
 
@@ -77,7 +77,7 @@ CREATE TRIGGER orders_webhook
   FOR EACH ROW EXECUTE FUNCTION public.notify_order_webhook();
 ```
 
-`pg_net.http_post` returns a `request_id`. The actual HTTP response (or error) lands later in the `net._http_response` table — async.
+`pg_net.http_post` returns a `request_id`. The actual HTTP response (or error) lands later in the `net._http_response` table, asynchronously.
 
 ## Async semantics
 
@@ -86,7 +86,7 @@ CREATE TRIGGER orders_webhook
 - **The trigger doesn't block on the HTTP response.** Your INSERT commits as soon as the trigger queues the request. The HTTP call can fail without rolling back the INSERT.
 - **You can't get the response synchronously.** If your trigger needs to know whether the call succeeded (for retry logic, for a transactional outbox pattern), you have to poll `net._http_response`.
 
-For most "side-effect" use cases (Slack notifications, cache invalidation), the async model is what you want. For "the INSERT shouldn't succeed unless the webhook went through," use a transactional outbox pattern instead — insert into an outbox table inside the same transaction, then have a separate worker (or workflow) drain the outbox and call the webhook.
+For side-effect use cases like Slack notifications or cache invalidation, the async model is what you want. When the INSERT shouldn't succeed unless the webhook went through, use a transactional outbox pattern instead: insert into an outbox table inside the same transaction, then have a separate worker (or workflow) drain the outbox and call the webhook.
 
 ## Querying responses
 
@@ -113,7 +113,7 @@ Or set up a maintenance job via a workflow that runs nightly.
 
 `pg_net` does not retry failed requests. If your endpoint is down when the trigger fires, the request is lost.
 
-Three retry patterns, picking depending on what you need:
+Three retry patterns, depending on what you need:
 
 **Option 1: Application-level retry on the receiving end.** The webhook arrives once; if the receiver wants idempotency, it dedupes by an event id you include in the payload.
 
@@ -140,7 +140,7 @@ CREATE TRIGGER slack_new_order
   );
 ```
 
-The body is the new `orders` row serialized as JSON. Slack's webhook format expects `{ "text": "..." }` — this won't format nicely. Use a custom function (Pattern: "Customizing the body" above) to build a Slack-shaped payload.
+The body is the new `orders` row serialized as JSON. Slack's webhook format expects `{ "text": "..." }`, so the raw row won't format nicely. Use a custom function (see "Customizing the body" above) to build a Slack-shaped payload.
 
 ### Cache invalidation on update
 
@@ -166,7 +166,7 @@ CREATE TRIGGER users_cache_invalidate
 
 ### Audit log to S3
 
-For row-change auditing where you want to ship every row change off-platform, point the webhook at an HTTPS endpoint that writes to S3 (a Lambda, a small webhook service, your own ingestion pipeline). The async nature of pg_net means your INSERT doesn't wait — the audit writes happen on the side.
+To ship every row change off-platform for auditing, point the webhook at an HTTPS endpoint that writes to S3: a Lambda, a small webhook service, or your own ingestion pipeline. Because pg_net is async, your INSERT doesn't wait, and the audit writes happen on the side.
 
 ## DB webhooks vs Realtime postgres_changes
 
@@ -187,7 +187,7 @@ If your receivers are clients (browsers, mobile apps), use Realtime. If they're 
 <CardGroup cols={2}>
 
 <Card title="Webhooks reference" href="/api-reference/webhooks">
-The inbound side — external systems triggering workflows via /api/webhooks. Different surface, easily confused.
+The inbound side: external systems triggering workflows via /api/webhooks. A different surface, often confused with this one.
 </Card>
 
 <Card title="Realtime model" href="/concepts/realtime">

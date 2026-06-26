@@ -1,14 +1,14 @@
 ---
 title: "Platform Overview"
-description: "Powabase is a complete, fully managed backend — database, auth, storage, and AI — that your favorite coding agent can build on top of. Point Claude Code, Cursor, Copilot, or an AI app builder like Replit, Base44, or Lovable at your project, and ship a real app without standing up any infrastructure."
+description: "Powabase is a fully managed backend (database, auth, storage, and AI) that your coding agent can build on top of. Point Claude Code, Cursor, Copilot, or an AI app builder like Replit, Base44, or Lovable at your project, and ship a real app without standing up any infrastructure."
 icon: "book-open"
 ---
 
 ## What is Powabase?
 
-Powabase is the backend for your app — a single, fully managed service that gives you a Postgres database, user authentication, file storage, realtime, and a full suite of AI features behind one API. You don't deploy or operate anything. You create a project, copy two values, and start building.
+Powabase is the backend for your app: one managed service that gives you a Postgres database, user authentication, file storage, realtime, and a suite of AI features behind a single API. You don't deploy or operate anything. You create a project, copy two values, and start building.
 
-The thing that makes Powabase a great fit for how people build today: **you don't have to write the backend by hand.** Your coding agent can. Powabase speaks the same conventions the popular tools already know, so an agent like Claude Code, Cursor, or GitHub Copilot — or an AI app builder like Replit, Base44, Lovable, or Bolt — can wire your frontend up to a production backend for you. Powabase becomes the one-stop-shop backend your app talks to; your agent writes the code that talks to it.
+The thing that makes Powabase a good fit for how people build today is that you don't have to write the backend by hand. Your coding agent can. Powabase speaks the same conventions the popular tools already know, so an agent like Claude Code, Cursor, or GitHub Copilot, or an AI app builder like Replit, Base44, Lovable, or Bolt, can wire your frontend up to a production backend for you. Powabase is the backend your app talks to; your agent writes the code that talks to it.
 
 If you can copy a URL and an API key, you have everything you need to get started. The rest is your agent's job.
 
@@ -16,7 +16,7 @@ If you can copy a URL and an API key, you have everything you need to get starte
 
 You don't need to be a backend engineer to build on Powabase. You need the tool you're already using.
 
-Every Powabase project exposes its connection details in one place — the **Connect modal** in the Studio. It gives you a Project URL and an API key (plus ready-to-paste connection strings in nine languages). Those two values are the entire handshake between your app and your backend.
+Every Powabase project exposes its connection details in one place: the **Connect modal** in the Studio. It gives you a Project URL and an API key, plus ready-to-paste connection strings in nine languages. Those two values are the entire handshake between your app and your backend.
 
 <Steps>
 
@@ -29,16 +29,16 @@ Tell your agent what you're building and paste in the connection details. For ex
 </Step>
 
 <Step title="Ship">
-Review what your agent produced, run it, and iterate. Because Powabase is fully managed, there's nothing to deploy or scale on the backend — the project is already live.
+Review what your agent produced, run it, and iterate. Because Powabase is fully managed, there's nothing to deploy or scale on the backend; the project is already live.
 </Step>
 
 </Steps>
 
 <Tip>
-**Already using an AI app builder?** Tools like Replit, Base44, Lovable, and Bolt know how to talk to a Supabase-style backend. Powabase is built on those same building blocks and follows the same API conventions — so anywhere a tool expects that kind of backend, you can give it your Powabase Project URL and key instead, and the database, auth, and storage just work. See [Migrating from Supabase](/guides/migrating-from-supabase) for the specifics.
+**Already using an AI app builder?** Tools like Replit, Base44, Lovable, and Bolt know how to talk to a Supabase-style backend. Powabase is built on those same building blocks and follows the same API conventions, so anywhere a tool expects that kind of backend, you can give it your Powabase Project URL and key instead, and the database, auth, and storage just work. See [Migrating from Supabase](/guides/migrating-from-supabase) for the specifics.
 </Tip>
 
-It works this smoothly for a simple reason: every endpoint follows consistent, predictable patterns — the same authentication, the same error format, the same streaming protocol everywhere. That consistency is exactly what an AI assistant needs to generate code that runs the first time.
+This works because every endpoint follows the same patterns: the same authentication, the same error format, the same streaming protocol everywhere. That consistency is what an AI assistant needs to generate code that runs the first time.
 
 <CardGroup cols={2}>
 
@@ -64,24 +64,24 @@ Most apps need the same handful of backend pieces. Powabase includes all of them
 | Live updates | Realtime subscriptions for changes as they happen |
 | AI features | Document search (RAG), agents, and automated workflows — built in |
 
-The database, auth, and storage surfaces follow the same conventions as Supabase, so the patterns you (or your agent) already know carry straight over. The difference is everything in that last row: AI is a first-class part of the backend, not something you bolt on later.
+The database, auth, and storage surfaces follow the same conventions as Supabase, so the patterns you (or your agent) already know carry straight over. The difference is that last row: AI is part of the backend, not something you bolt on later.
 
 ## The AI features that set Powabase apart
 
-When your app needs to do more than store and serve data — when it needs to understand documents, hold a conversation, or automate a multi-step process — those capabilities are already in the box. You can ignore them until you need them, and reach for only the ones a given feature requires.
+When your app needs to do more than store and serve data, those capabilities are already in the box: understanding documents, holding a conversation, automating a multi-step process. You can ignore them until you need them, and reach for only the ones a given feature requires.
 
 <CardGroup cols={2}>
 
 <Card title="Context Engineering (RAG)" href="/concepts/knowledge-bases-indexing">
-Upload PDFs, Word docs, images, or spreadsheets and get search that understands them — extraction, indexing, and retrieval handled for you, with multiple strategies for different document types.
+Upload PDFs, Word docs, images, or spreadsheets and get search that understands them. Extraction, indexing, and retrieval are handled for you, with multiple strategies for different document types.
 </Card>
 
 <Card title="Agents & Tools" href="/concepts/agents-tools">
-LLM-powered agents that reason, call tools (database, web search, your own endpoints, MCP servers), and stream answers in real time — with optional human approval for high-stakes actions.
+LLM-powered agents that reason, call tools (database, web search, your own endpoints, MCP servers), and stream answers in real time, with optional human approval for high-stakes actions.
 </Card>
 
 <Card title="Multi-Agent Orchestration" href="/concepts/orchestrations-concept">
-A coordinator that routes work to specialized agents — a billing agent, a support agent, a sales agent — all behind one endpoint.
+A coordinator that routes work to specialized agents (a billing agent, a support agent, a sales agent) all behind one endpoint.
 </Card>
 
 <Card title="Workflow Automation" href="/concepts/workflows-concept">
@@ -93,12 +93,12 @@ DAG-based pipelines for the steps you know in advance, with AI reasoning inside 
 These compose. A knowledge base can back an agent; an agent can be a step in a workflow; a workflow can search a knowledge base or call your database. You use as much or as little as your app needs.
 
 <Tip>
-**Example: a support assistant in three pieces.** Upload your help docs into a knowledge base, attach it to an agent so it answers grounded in your content, and wrap that agent in a workflow that escalates to a human when confidence is low. Each piece is a few API calls — and your coding agent can write all of them.
+**Example: a support assistant in three pieces.** Upload your help docs into a knowledge base, attach it to an agent so it answers grounded in your content, and wrap that agent in a workflow that escalates to a human when confidence is low. Each piece is a few API calls, and your coding agent can write all of them.
 </Tip>
 
 ## Per-project isolation
 
-Every project gets its own fully isolated stack: a dedicated Postgres database with `pgvector`, an API gateway, an auth service, file storage, and an AI service worker. There's no shared state between projects — isolation is enforced at the infrastructure level — so what you build is genuinely yours, and ready for production from day one.
+Every project gets its own isolated stack: a dedicated Postgres database with `pgvector`, an API gateway, an auth service, file storage, and an AI service worker. There's no shared state between projects, and isolation is enforced at the infrastructure level, so what you build is genuinely yours and ready for production from day one.
 
 <CardGroup cols={2}>
 

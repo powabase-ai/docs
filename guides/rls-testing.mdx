@@ -4,7 +4,7 @@ description: "Verify RLS policies in psql or the Studio SQL Editor without spinn
 icon: "shield-halved"
 ---
 
-You wrote a policy. Before you ship it to a thousand users, you want to confirm it does what you think it does. The trick is that PostgREST sets the role and JWT claims for you on real requests — when you're in a SQL session you have to do that setup by hand.
+You wrote a policy. Before you ship it to a thousand users, you want to confirm it does what you think it does. The trick is that PostgREST sets the role and JWT claims for you on real requests. In a SQL session you have to do that setup by hand.
 
 This guide shows how to impersonate `anon` and `authenticated` (with any `auth.uid()` you choose) from `psql` or the Studio SQL Editor, then run your reads and writes against the policy to confirm it accepts the right things and rejects the wrong things. For the policies themselves, see the [RLS Cookbook](/guides/rls-policies). For the model that determines who gets which role, see [RLS Model](/concepts/rls-model).
 
@@ -42,7 +42,7 @@ INSERT INTO public.posts (title, body) VALUES ('hi', 'oh no');
 ROLLBACK;
 ```
 
-The `ROLLBACK` undoes the `SET LOCAL ROLE` and any rows you happened to insert that the policy let through. Use it religiously while iterating — without it, you'll accidentally leave the session in an unexpected role and the next query will mislead you.
+The `ROLLBACK` undoes the `SET LOCAL ROLE` and any rows you happened to insert that the policy let through. Use it religiously while iterating. Without it, you'll accidentally leave the session in an unexpected role and the next query will mislead you.
 
 ## Test as a specific signed-in user
 
@@ -123,7 +123,7 @@ SELECT * FROM public.todos WHERE id = 'some-uuid';
 ROLLBACK;
 ```
 
-If `service_role` returns a row but `authenticated` doesn't, the policy is doing its job. If `service_role` doesn't return it either, the row doesn't exist — you have a different bug.
+If `service_role` returns a row but `authenticated` doesn't, the policy is doing its job. If `service_role` doesn't return it either, the row doesn't exist, and you have a different bug.
 
 ## A small harness for iteration
 
@@ -161,17 +161,17 @@ SET LOCAL request.jwt.claims =
 ROLLBACK;
 ```
 
-In the Studio SQL Editor, run each block as a separate snippet — the editor doesn't preserve session state across "Run" presses, so you re-`SET LOCAL` every time.
+In the Studio SQL Editor, run each block as a separate snippet. The editor doesn't preserve session state across "Run" presses, so you re-`SET LOCAL` every time.
 
 ## Common things that aren't what they seem
 
-- **Querying `auth.users` directly** returns rows because the `auth.users` table is owned by `supabase_auth_admin`, not `authenticated`. Don't be fooled — policies on tables you create *do* apply.
+- **Querying `auth.users` directly** returns rows because the `auth.users` table is owned by `supabase_auth_admin`, not `authenticated`. Don't be fooled: policies on tables you create *do* apply.
 
-- **`RAISE NOTICE 'auth.uid is %', auth.uid();`** doesn't fail if the role/claims aren't set — it just prints `NULL`. If you're getting unexpected RLS denials, add a `SELECT auth.uid(), auth.role();` at the top of your test block to confirm what the session thinks it is.
+- **`RAISE NOTICE 'auth.uid is %', auth.uid();`** doesn't fail if the role/claims aren't set; it just prints `NULL`. If you're getting unexpected RLS denials, add a `SELECT auth.uid(), auth.role();` at the top of your test block to confirm what the session thinks it is.
 
 - **`SET ROLE` (without `LOCAL`) persists across the session.** If you accidentally use it and later wonder why your policies are denying everything, run `RESET ROLE` and you'll be back to the connecting user.
 
-- **The Studio SQL Editor runs as `postgres`** (the project owner) by default. Without `SET LOCAL ROLE`, RLS is bypassed entirely — every query looks like it works. Always `SET LOCAL ROLE` first.
+- **The Studio SQL Editor runs as `postgres`** (the project owner) by default. Without `SET LOCAL ROLE`, RLS is bypassed entirely and every query looks like it works. Always `SET LOCAL ROLE` first.
 
 ## Next steps
 

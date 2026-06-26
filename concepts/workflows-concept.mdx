@@ -6,7 +6,7 @@ icon: "share-nodes"
 
 ## What is a Workflow?
 
-A Workflow is a directed acyclic graph (DAG) of blocks connected by edges. Each block performs a specific action — calling an LLM, running code, evaluating a condition, or executing an agent. Data flows from block to block through the edges. Unlike orchestrations (where the coordinator decides what happens), workflows follow a fixed, predetermined path every time.
+A Workflow is a directed acyclic graph (DAG) of blocks connected by edges. Each block performs a specific action: calling an LLM, running code, evaluating a condition, or executing an agent. Data flows from block to block through the edges. Unlike orchestrations (where the coordinator decides what happens), workflows follow a fixed, predetermined path every time.
 
 ## Block Types
 
@@ -29,7 +29,7 @@ Unknown block types are rejected at `PUT /api/workflows/{id}/graph` with `400 Un
 
 ## Graph Execution
 
-When you execute a workflow, the engine evaluates blocks in topological order. Each block receives the outputs of its upstream blocks as input. Condition blocks create branches — only the matching branch continues execution. The workflow finishes when all output blocks have been reached.
+When you execute a workflow, the engine evaluates blocks in topological order. Each block receives the outputs of its upstream blocks as input. Condition blocks create branches, and only the matching branch continues execution. The workflow finishes when all output blocks have been reached.
 
 <Frame caption="Workflow DAG with branching logic">
   <img src="/diagrams/workflow-execution.svg" alt="Workflow execution DAG: Input block → LLM block (processes input) → Condition block (branches based on result) → Branch A: Output A / Branch B: Output B. Blocks are connected by directional edges showing data flow." />
@@ -37,7 +37,7 @@ When you execute a workflow, the engine evaluates blocks in topological order. E
 
 ## Programmatic vs Copilot
 
-You can build workflows two ways. The programmatic approach uses the PUT /api/workflows/\{id\}/graph endpoint to define blocks and edges as JSON. The Copilot approach uses natural language — describe what you want, and the AI copilot generates the workflow graph for you. Both produce the same underlying graph structure.
+You can build workflows two ways. The programmatic approach uses the PUT /api/workflows/\{id\}/graph endpoint to define blocks and edges as JSON. The Copilot approach uses natural language: describe what you want, and the AI copilot generates the workflow graph for you. Both produce the same underlying graph structure.
 
 ## Variables and references
 
@@ -53,13 +53,13 @@ The resolver walks the dotted path against the upstream block's output dict. Blo
 
 Two contexts:
 - **Inside a string** (most block configs): every `<blockId.output.field>` placeholder gets substituted as a string. `"Hello <fetch.output.name>!"` becomes `"Hello Alice!"`.
-- **Inside a JSON value** (e.g. `general_api` body, `code` inputs, agent block messages): if the entire string is one reference, the resolved value is returned **with its original type** (so you can pass a number, array, or object — not just a string). `"<extract.output.tags>"` returns `["foo", "bar"]` rather than `'["foo", "bar"]'`.
+- **Inside a JSON value** (e.g. `general_api` body, `code` inputs, agent block messages): if the entire string is one reference, the resolved value is returned **with its original type** (so you can pass a number, array, or object, not just a string). `"<extract.output.tags>"` returns `["foo", "bar"]` rather than `'["foo", "bar"]'`.
 
-The starter block's variables surface as `<starter.output.variableName>`, and you'll also see the older `{{variables.x}}` syntax in agent / code block templates — both work; the angle-bracket form is canonical and applies to every block.
+The starter block's variables surface as `<starter.output.variableName>`, and you'll also see the older `{{variables.x}}` syntax in agent / code block templates. Both work; the angle-bracket form is canonical and applies to every block.
 
 Unresolvable references (block not yet run, missing field) leave the placeholder string as-is so you can see what failed when inspecting block logs.
 
-For condition blocks, the expression evaluator uses a Python-safe AST subset — comparisons, BoolOp (`and`/`or`/`not`), BinOp (`+`/`-`/`*`/`/`), attribute access, and subscripting. Function calls are not permitted.
+For condition blocks, the expression evaluator uses a Python-safe AST subset: comparisons, BoolOp (`and`/`or`/`not`), BinOp (`+`/`-`/`*`/`/`), attribute access, and subscripting. Function calls are not permitted.
 
 ## Scheduling
 
@@ -80,21 +80,21 @@ The starter block's config takes:
 
 On `/deploy`, the platform reads these from the starter block, normalizes them into `schedule_config` on the workflow row, resets `schedule_run_count` to 0, and the tick worker picks it up. `/undeploy` clears `schedule_config` and stops further scheduled runs.
 
-Scheduled runs execute as if invoked through `/execute` — the starter block's variables get whatever default values are configured (no per-run override is possible from the schedule itself).
+Scheduled runs execute as if invoked through `/execute`: the starter block's variables get whatever default values are configured (no per-run override is possible from the schedule itself).
 
 ## Deployment & Webhooks
 
 Workflows expose two activation modes for their webhook block:
 
-- **Deploy** (`POST /api/workflows/{id}/deploy`) — sets `state = "deployed"`. The webhook accepts unlimited calls until you `undeploy`. Use this for production.
-- **Arm** (`POST /api/workflows/{id}/arm`) — leaves `state = "internal"` but opens a 10-minute window during which the webhook accepts exactly one call. After it fires (or expires), you must arm again. Use this for one-shot tests.
+- **Deploy** (`POST /api/workflows/{id}/deploy`) sets `state = "deployed"`. The webhook accepts unlimited calls until you `undeploy`. Use this for production.
+- **Arm** (`POST /api/workflows/{id}/arm`) leaves `state = "internal"` but opens a 10-minute window during which the webhook accepts exactly one call. After it fires (or expires), you must arm again. Use this for one-shot tests.
 
-The `webhook_id` and `webhook_secret` live in the **webhook block's config** — they're stored on the block when you add it to the graph. The studio editor mints both client-side when you drag in a webhook block. Neither `/deploy` nor `/arm` returns secrets — `/deploy` returns `{"ok": true, "state": "deployed"}` and `/arm` returns `{"ok": true, "armed_until": "<iso8601>"}`. To retrieve credentials programmatically, fetch the workflow with `GET /api/workflows/{id}` and read them from the webhook block's config.
+The `webhook_id` and `webhook_secret` live in the **webhook block's config**; they're stored on the block when you add it to the graph. The studio editor mints both client-side when you drag in a webhook block. Neither `/deploy` nor `/arm` returns secrets: `/deploy` returns `{"ok": true, "state": "deployed"}` and `/arm` returns `{"ok": true, "armed_until": "<iso8601>"}`. To retrieve credentials programmatically, fetch the workflow with `GET /api/workflows/{id}` and read them from the webhook block's config.
 
 <Tip>
 **Webhook security**
 
-Each webhook block has a fixed `webhook_secret` set when the block was created — it does **not** rotate on arm/deploy. External callers include it as a `Bearer` token in the `Authorization` header (preferred) or as a `?token=` query parameter. There is no body-HMAC signature scheme and no replay-window beyond the 10-min arm TTL.
+Each webhook block has a fixed `webhook_secret` set when the block was created; it does **not** rotate on arm/deploy. External callers include it as a `Bearer` token in the `Authorization` header (preferred) or as a `?token=` query parameter. There is no body-HMAC signature scheme and no replay-window beyond the 10-min arm TTL.
 </Tip>
 
 ## Next Steps

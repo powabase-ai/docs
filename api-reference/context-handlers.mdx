@@ -4,7 +4,7 @@ description: "Execute standalone knowledge retrieval outside of agent runs. Usef
 icon: "layer-group"
 ---
 
-Context handlers provide standalone RAG retrieval without requiring an agent. Send a query with one or more knowledge base configurations, and the handler retrieves the most relevant chunks from each knowledge base. This is useful when you want to implement your own LLM integration but still leverage the platform's vector search.
+Context handlers run standalone RAG retrieval without an agent. Send a query with one or more knowledge base configurations, and the handler retrieves the most relevant chunks from each knowledge base. Use this when you want your own LLM integration but still want the platform's vector search.
 
 ## Common Patterns
 
@@ -32,7 +32,7 @@ curl '{BASE_URL}/api/context-handlers' -H "apikey: {API_KEY}" -H "Authorization:
 
 ### POST /api/context-handlers
 
-Create and execute a context handler — retrieves relevant chunks from one or more knowledge bases.
+Create and execute a context handler. Retrieves relevant chunks from one or more knowledge bases.
 
 <RequestExample>
 
@@ -76,7 +76,7 @@ curl -X POST '{BASE_URL}/api/context-handlers' -H "apikey: {API_KEY}" -H "Author
 </CodeGroup>
 
 <Note>
-Request body uses `knowledge_bases`; the response payload carries it back as `knowledge_base_configs`. The response also includes a `metadata` object (with `query_enrichment`: the rewritten / expanded queries the platform actually issued) and `errors` (per-KB partial failures, if any).
+Request body uses `knowledge_bases`; the response payload carries it back as `knowledge_base_configs`. The response also includes a `metadata` object (with `query_enrichment`: the rewritten or expanded queries the platform actually issued) and `errors` (per-KB partial failures, if any).
 </Note>
 
 ### GET /api/context-handlers/{id}

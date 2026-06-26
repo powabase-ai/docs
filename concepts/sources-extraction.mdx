@@ -6,7 +6,7 @@ icon: "file-lines"
 
 ## What is a Source?
 
-A Source represents a single uploaded document. When you upload a file, the platform creates a Source record, stores the original file, and kicks off an asynchronous extraction pipeline. The pipeline extracts text content from the document — handling PDFs, Word documents, images (via OCR), and other file types. The result is clean, structured text organized by page.
+A Source represents a single uploaded document. When you upload a file, the platform creates a Source record, stores the original file, and kicks off an asynchronous extraction pipeline. The pipeline extracts text content from the document, handling PDFs, Word documents, images (via OCR), and other file types. The result is clean, structured text organized by page.
 
 ## Supported File Types
 
@@ -36,7 +36,7 @@ For PDFs you can choose how the text is extracted by passing extraction_model at
 
 ## Extraction Pipeline
 
-When you upload a file, it goes through several stages: the file is stored in project storage, a Celery worker picks up the extraction task, the appropriate strategy is selected based on file type, and the extracted content is stored as derivatives (page texts, markdown, per-page images) associated with the source. This process runs asynchronously — poll the source status to check progress.
+When you upload a file, it goes through several stages: the file is stored in project storage, a Celery worker picks up the extraction task, the appropriate strategy is selected based on file type, and the extracted content is stored as derivatives (page texts, markdown, per-page images) associated with the source. This runs asynchronously, so poll the source status to check progress.
 
 <Frame caption="Document extraction pipeline from upload to structured derivatives">
   <img src="/diagrams/extraction-pipeline.svg" alt="Extraction pipeline: File Upload → Project Storage → Celery Worker (selects strategy: PDF extractor, DOCX parser, OCR engine) → Derivatives (page texts, markdown, images) → Source record updated to extracted status." />
@@ -44,7 +44,7 @@ When you upload a file, it goes through several stages: the file is stored in pr
 
 ## Status Lifecycle
 
-Every source goes through an extraction_status lifecycle. After upload the source is pending; a worker picks it up and it moves to extracting; on success it becomes extracted. If some pages fail but others succeed the status is attention_required (partial success — the source is still indexable). Terminal states are extracted, failed, attention_required, and cancelled.
+Every source goes through an extraction_status lifecycle. After upload the source is pending; a worker picks it up and it moves to extracting; on success it becomes extracted. If some pages fail but others succeed the status is attention_required (a partial success that's still indexable). Terminal states are extracted, failed, attention_required, and cancelled.
 
 | Status | Meaning |
 | --- | --- |

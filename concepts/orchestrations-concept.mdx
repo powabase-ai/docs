@@ -1,12 +1,12 @@
 ---
 title: "Multi-Agent Orchestration"
-description: "Orchestrations coordinate multiple agents to solve complex tasks. Three execution strategies — Supervisor, Sequential, and Parallel — give you different patterns for multi-agent collaboration, from autonomous delegation to pipeline processing to concurrent fan-out with merged results."
+description: "Orchestrations coordinate multiple agents to solve complex tasks. Three execution strategies (Supervisor, Sequential, and Parallel) give you different patterns for multi-agent collaboration, from autonomous delegation to pipeline processing to concurrent fan-out with merged results."
 icon: "diagram-project"
 ---
 
 ## What is an Orchestration?
 
-An Orchestration is a container that groups multiple agents (entities) and runs them using a coordination strategy. Each entity agent has its own system prompt, tools, and knowledge bases — the orchestration handles how they interact. You choose a strategy that matches your use case: Supervisor for autonomous delegation, Sequential for pipeline processing, or Parallel for concurrent execution with merged results.
+An Orchestration is a container that groups multiple agents (entities) and runs them using a coordination strategy. Each entity agent has its own system prompt, tools, and knowledge bases, and the orchestration handles how they interact. You choose a strategy that matches your use case: Supervisor for autonomous delegation, Sequential for pipeline processing, or Parallel for concurrent execution with merged results.
 
 ## Execution Strategies
 
@@ -18,7 +18,7 @@ An Orchestration is a container that groups multiple agents (entities) and runs 
 
 ### Supervisor Strategy
 
-The Supervisor strategy creates a coordinator agent that has access to a delegation tool for each entity agent. When a user message arrives, the coordinator reasons about which entity should handle it and calls the appropriate delegate\_to\_{name} tool with a task description. The entity agent runs with its own tools and knowledge bases (up to 10 ReAct steps by default) and returns its result. The coordinator can delegate to multiple entities in sequence or use the results from one delegation to inform the next. The coordinator's own ReAct loop runs for up to 25 steps.
+The Supervisor strategy creates a coordinator agent that has access to a delegation tool for each entity agent. When a user message arrives, the coordinator reasons about which entity should handle it and calls the appropriate delegate\_to\_{name} tool with a task description. The entity agent runs with its own tools and knowledge bases (up to 10 ReAct steps by default) and returns its result. The coordinator can delegate to several entities in sequence, or feed the result of one delegation into the next. Its own ReAct loop runs for up to 25 steps.
 
 <Frame caption="Supervisor strategy: coordinator delegates to specialized agents">
   ![Orchestration flow: User → Coordinator → delegates to Agent A and Agent B → results merge → Coordinator synthesizes → Final Response.](/diagrams/orchestration-flow.svg)
@@ -26,7 +26,7 @@ The Supervisor strategy creates a coordinator agent that has access to a delegat
 
 Each delegation creates a child execution context with an incremented depth (max depth: 3, preventing infinite recursive delegation). The child context gets a budget allocation from the parent's remaining token budget. Entity agents share the parent's abort signal, so cancelling the orchestration cancels all active entity runs.
 
-The coordinator's system prompt is auto-generated from the entity role descriptions. Write specific, non-overlapping role descriptions to help the coordinator make clear routing decisions — for example, "Handles billing inquiries, invoices, and payment issues" rather than "Handles customer questions."
+The coordinator's system prompt is auto-generated from the entity role descriptions. Write specific, non-overlapping role descriptions to help the coordinator make clear routing decisions. "Handles billing inquiries, invoices, and payment issues" routes better than "Handles customer questions."
 
 ### Sequential Strategy
 
@@ -44,7 +44,7 @@ The Parallel strategy runs all entity agents concurrently on the same input usin
 
 ## Entity Configuration
 
-Each entity in an orchestration has a role description and optional configuration. The role description is critical for the Supervisor strategy — it tells the coordinator what the entity specializes in. For Sequential and Parallel, the role is descriptive metadata. Entity config can override max\_steps (default 10) to control how many ReAct iterations the entity agent runs.
+Each entity in an orchestration has a role description and optional configuration. The role description is critical for the Supervisor strategy, since it tells the coordinator what the entity specializes in. For Sequential and Parallel, the role is descriptive metadata. Entity config can override max\_steps (default 10) to control how many ReAct iterations the entity agent runs.
 
 <CodeGroup>
 
