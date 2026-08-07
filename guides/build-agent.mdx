@@ -116,6 +116,10 @@ curl -X POST '{BASE_URL}/api/agents/{agent_id}/tools' \
 
 Assign a knowledge base and the agent automatically gets a search tool for it. During a conversation it can search the KB to ground its responses.
 
+<Tip>
+Don't want a permanent attachment? Pass `runtime_knowledge_bases` on `POST /api/agents/{id}/run/stream` instead — the agent gets the same `knowledge_search` tool over the KBs you name, for that one request only. See [Runtime knowledge base references](/api-reference/agents#runtime-knowledge-base-references).
+</Tip>
+
 **Endpoint:** `POST /api/agents/{id}/knowledge-bases`
 
 <CodeGroup>

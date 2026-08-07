@@ -300,6 +300,8 @@ curl -X DELETE '{BASE_URL}/api/orchestrations/{id}/entities/{eid}' -H "apikey: {
 
 Run orchestration with streaming SSE. Includes delegation events.
 
+Accepts `runtime_knowledge_bases` — the same query-scoped KB references as the [agent streaming endpoint](/api-reference/agents#runtime-knowledge-base-references), with the same entry shape, validation, and 10-entry cap. The references flow to **every sub-agent** in the orchestration: each sub-agent's `knowledge_search` tool merges them with its own attached KBs for this request only (a sub-agent with no attached KBs gains the tool for the run). One caveat differs per sub-agent: an entry's `max_context_tokens` is honored only for sub-agents whose search tool resolves to exactly one KB.
+
 <ParamField path="id" type="string" required>
 Orchestration ID
 </ParamField>
