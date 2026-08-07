@@ -703,6 +703,19 @@ Run agent with streaming SSE. Supports tools, the ReAct loop, and multi-turn via
 
 The streaming endpoint accepts the **same context-selection surface** as `/run` above (`knowledge_bases` / `context_handler_id` / `context_override` / `context_items`, mutually exclusive), plus all the same `max_context_tokens`, `citations_enabled`, `temperature`, and `response_format` fields. See [Streaming](/concepts/streaming-patterns) for the full SSE event catalog.
 
+<RequestExample>
+
+```json Request
+{
+  "message": "Hello",
+  "session_id": "optional-session-uuid",
+  "reasoning_requested": false,
+  "runtime_knowledge_bases": [{ "id": "kb-uuid", "top_k": 5 }]
+}
+```
+
+</RequestExample>
+
 #### Runtime knowledge base references
 
 `runtime_knowledge_bases` gives the agent a real `knowledge_search` tool over knowledge bases you name **for this one request** — agentic search (the model decides when and what to search, and can search repeatedly), without attaching anything to the agent. Use it when a query should be grounded in a document set that isn't part of the agent's permanent configuration.
@@ -724,14 +737,14 @@ The streaming endpoint accepts the **same context-selection surface** as `/run` 
 | `similarity_threshold` | number | 0–1 |
 | `filter_metadata` | object | Metadata filter applied at retrieval |
 | `source_ids` | array | Restrict retrieval to these sources — each must be indexed in **that entry's** knowledge base |
-| `max_context_tokens` | int | 1000–128000. Honored only when the run's search tool resolves to exactly one KB (attached + runtime combined) |
+| `max_context_tokens` | int | **Per-entry knob** — distinct from the top-level `max_context_tokens` request field (which caps injected context and is always honored). 1000–128000; honored only when the run's search tool resolves to exactly one KB (attached + runtime combined) |
 
 Behavior to know:
 
 - **Strictly per-request.** Nothing is persisted — follow-up messages in the same session must re-send the field.
 - **Merges with attached KBs** into the run's single `knowledge_search` tool. An entry naming a KB that is also attached **overrides that attachment's config for the run** (e.g. tighten `top_k` or scope `source_ids` for one query).
 - **Validated before the stream opens.** Unknown ids, out-of-range knobs, unknown entry keys (typos like `top_K` are rejected, not ignored), more than **10** entries, or duplicate ids all return `400` — no billing, no stream.
-- **Combinable** with the context fields above (it adds a tool, not injected context). Combined with the preload `knowledge_bases` field, both retrievals run and are billed; no dedup.
+- **Combinable** with the context fields above (it adds a tool, not injected context). Combined with the preload `knowledge_bases` field, the preload retrieval runs up front, plus each `knowledge_search` call the model makes — both billed, no dedup.
 - **Streaming only.** The non-streaming `/run` has no tool loop and rejects the field with `400`.
 - **Authorization note:** any caller authorized to run the agent can reference any KB in the project via this field — this matches the project-wide access posture of the `ai` schema and is not restricted per-agent. Expose the endpoint from trusted backends only.
 
@@ -739,18 +752,6 @@ Behavior to know:
 Agent ID
 </ParamField>
 
-<RequestExample>
-
-```json Request
-{
-  "message": "Hello",
-  "session_id": "optional-session-uuid",
-  "reasoning_requested": false,
-  "knowledge_bases": [{ "id": "kb-uuid", "top_k": 5 }]
-}
-```
-
-</RequestExample>
 
 <CodeGroup>
 
