@@ -1,46 +1,48 @@
 ---
-title: "Querying the ai schema via PostgREST"
-description: "Every AI-surface table (sources, knowledge_bases, agents, runs, sessions, workflows) is queryable via /rest/v1/* under RLS. Use it for dashboards, bulk operations, custom analytics, and anything the typed /api/* endpoints don't cover."
+title: "The ai schema"
+description: "Where the AI surface's state (sources, knowledge bases, agents, runs, sessions, workflows) lives, and why it's backend-only: the ai schema isn't exposed through PostgREST. Reach AI resources through the typed /api/* endpoints."
 icon: "binoculars"
 ---
 
-The typed `/api/*` surface gives you opinionated, RPC-style access to the AI features. Underneath, all the state those endpoints manage lives in a single Postgres schema, `ai`, and PostgREST exposes that schema as a standard REST CRUD surface at `/rest/v1/*`.
+The typed `/api/*` surface gives you RPC-style access to the AI features. Underneath, the state those endpoints manage lives in a single Postgres schema, `ai`: sources, knowledge bases, chunks, agents, runs, sessions, workflows and the rest.
 
-That means **everything you can do with `/api/agents`, `/api/sessions`, `/api/runs`, `/api/knowledge-bases`, etc., you can also do directly against the underlying tables.** SQL-style filters, joins, JSONB selectors, pagination via `Content-Range`, embeds: all the PostgREST machinery that powers `public.*` access works for `ai.*` too. This is the right tool when:
+The `ai` schema is **backend-only**. Only the project service, using the Service Role, touches it. It isn't exposed through PostgREST, and signed-in users and the Anon key have no access to it. Earlier versions of this page described querying `ai.*` via `/rest/v1/*`; that no longer works.
 
-- You need filters or joins the typed endpoint doesn't expose (e.g., "all runs from the last 7 days where the agent's `system_prompt` contains 'refund'").
-- You're building a dashboard and want one query for usage analytics instead of N round-trips.
-- You're bulk-tagging or migrating sources and don't want to call `PATCH /api/sources/{id}` in a loop.
-- You want Realtime subscriptions on a state change the typed API doesn't broadcast.
+## How `ai.*` is locked down
 
-It's **not** the right tool for state changes the platform's own services manage (run lifecycle, indexing dispatch, workflow execution). Those endpoints aren't just "a CRUD with extra steps"; they coordinate Celery tasks, RAG pipelines, and external LLM calls. Use the typed `/api/*` for state-changing operations on dynamic state, and PostgREST for reads and for writes on static, user-owned configuration.
+Since project-service migration `0025_lock_ai_schema_class_b`:
 
-## How `ai.*` is exposed
+- `ai` is not in PostgREST's exposed schemas (`PGRST_DB_SCHEMAS`), so `/rest/v1/*` requests with `Accept-Profile: ai` or `Content-Profile: ai` are rejected, whichever key you use.
+- Every `authenticated` and `anon` grant on the schema, its tables, sequences and RPC functions is revoked, and every `authenticated` / `anon` RLS policy on `ai.*` is dropped.
+- RLS stays enabled with no client policies, so access is deny-by-default. The service role bypasses RLS, which is how the project service reads and writes.
 
-PostgREST is configured to serve four schemas: `public, storage, graphql_public, ai`. The `ai` schema sits alongside your own `public` schema as a fully routed PostgREST surface. Every table follows the standard PostgREST URL pattern:
+There are no per-user or per-tenant database policies on `ai.*`.
 
-```
-GET    /rest/v1/{table}                # list
-GET    /rest/v1/{table}?id=eq.{id}     # filter
-POST   /rest/v1/{table}                # insert
-PATCH  /rest/v1/{table}?id=eq.{id}     # update
-DELETE /rest/v1/{table}?id=eq.{id}     # delete
-```
+## Reaching AI resources
 
-To target the `ai` schema instead of `public`, add the `Accept-Profile` (read) or `Content-Profile` (write) header:
+Use the typed `/api/*` endpoints. They accept either the Service Role (Secret) Key or a signed-in user's JWT from the project's GoTrue.
 
-```bash
-curl '{BASE_URL}/rest/v1/agent_runs?limit=10' \
-  -H "Accept-Profile: ai" \
-  -H "apikey: {API_KEY}" \
-  -H "Authorization: Bearer {API_KEY}"
-```
+Per-user scoping on that surface is enforced in application code, and only for sessions and runs:
 
-Without `Accept-Profile`, PostgREST looks in the default `public` schema and 404s.
+- Reading a session or its messages returns `404` unless the caller owns the session.
+- An agent run refuses to continue a session that belongs to another user.
+- Session listings are scoped to the caller.
+
+Service Role callers bypass these checks. Agents, knowledge bases, workflows and knowledge-base search have no per-user ownership check: any valid user JWT for the project can reach them.
+
+<Warning>
+**Multi-user projects: AI resources are project-wide.**
+
+If end users shouldn't see each other's agents, knowledge bases or search results, keep the Service Role key on your own backend, call `/api/*` from there, and enforce access in your backend (for example, one knowledge base per tenant, or tenant filters your backend adds to every search). For hard isolation between customers, give each customer its own project.
+</Warning>
+
+## Your own tables
+
+Tables you create in `public` work the normal way: PostgREST exposes them at `/rest/v1/*` and Row Level Security with `auth.uid()` / `auth.jwt()` protects them. See the [RLS Model](/concepts/rls-model) page and the [RLS Cookbook](/guides/rls-policies).
 
 ## Tables in the ai schema
 
-Every state-bearing entity in the AI surface has a corresponding table. The full list (35 tables):
+For reference, the main tables:
 
 | Domain | Tables |
 |---|---|
@@ -55,68 +57,26 @@ Every state-bearing entity in the AI surface has a corresponding table. The full
 | **Copilot** | `copilot_sessions`, `copilot_messages` |
 | **Settings** | `project_settings`, `ai_provider_keys` |
 
-Schemas can grow; consult `GET /rest/v1/` with `Accept-Profile: ai` for the live OpenAPI spec PostgREST emits.
-
-## RLS posture
-
-Every `ai.*` table has Row Level Security enabled. The default policies are:
-
-- **`service_role`**: full access on every table (`FOR ALL USING (true) WITH CHECK (true)`). This is what the platform's own backend uses.
-- **`authenticated`** (any signed-in GoTrue user): **read access on every table**. Write access on most user-configurable tables (agents, workflows, tools, knowledge_bases, sources, etc.). Per-user filtering on session-shaped tables (`agent_sessions`, `agent_runs`, `orchestration_sessions`, `orchestration_runs`) via `auth.uid() = user_id`.
-- **`anon`**: **no access**. Querying `ai.*` with the Anon (Publishable) Key returns empty result sets.
-
-What this means in practice:
-
-| Caller | Reads | Writes |
-|---|---|---|
-| Service Role (Secret) Key | Everything | Everything |
-| Signed-in user JWT (authenticated) | Everything in the project | Most config tables, scoped runs/sessions |
-| Anon (Publishable) Key | Nothing | Nothing |
-
-<Warning>
-**Multi-user projects: `authenticated` is project-wide, not per-user.**
-
-The default policies grant `authenticated` blanket read access to every record in the project, including other users' agents, workflows, and knowledge bases. Per-user scoping only applies to `agent_sessions`, `agent_runs`, `orchestration_sessions`, and `orchestration_runs` (where the `user_id` column lets `auth.uid()` filter).
-
-If your project has multiple end-users and you don't want them seeing each other's data, you must either (a) tighten the default policies, (b) gate `ai.*` reads behind your own backend with the Service Role key, or (c) only let end users hit `/api/*` (the typed surface enforces ownership where it matters).
-</Warning>
-
-See the [RLS Model](/concepts/rls-model) page for how `auth.uid()`, `auth.jwt()`, and the role mapping work, and the [RLS Cookbook](/guides/rls-policies) for concrete tightening patterns.
-
-## When to use PostgREST vs `/api/*`
-
-| You want to… | Use… |
-|---|---|
-| Create an agent / workflow / KB | `POST /api/{resource}` |
-| Run an agent | `POST /api/agents/{id}/run` or `/run/stream` |
-| List/filter/sort/paginate by SQL-style criteria | `GET /rest/v1/{table}` |
-| Bulk-update tags or names | `PATCH /rest/v1/{table}` with a filter |
-| Join across resources in one request | `GET /rest/v1/{table}?select=*,relation(*)` |
-| Aggregate (count, sum, group by) | RPC or `Range-Unit` headers via PostgREST |
-| Subscribe to row changes | Realtime `postgres_changes` on `ai.*` |
-| Delete a source from a KB | `DELETE /api/knowledge-bases/{id}/sources/{indexed_source_id}` (NOT direct PostgREST — cascades through 8 tables and revokes Celery tasks) |
-| Cancel/cleanup mid-flight indexing | `POST /api/knowledge-bases/{id}/sources/{indexed_source_id}/cancel` (typed endpoint handles Celery revoke) |
-
-Anything where the platform runs side-effects (Celery dispatch, LLM calls, file processing) belongs on the typed surface. Everything read-only or static-config belongs anywhere.
+The schema grows as the platform adds features. Treat it as the platform's internal storage, not a stable API.
 
 ## Next steps
 
 <CardGroup cols={2}>
 
-<Card title="ai-schema recipes" href="/guides/ai-schema-recipes">
-Four worked examples: hybrid search on chunks, usage analytics on runs, bulk source tagging, cross-KB joins.
+<Card title="Agents Reference" href="/api-reference/agents">
+The typed endpoints for agents, runs and sessions.
+</Card>
+
+<Card title="Knowledge Bases Reference" href="/api-reference/knowledge-bases">
+The typed endpoints for knowledge bases, indexing and search.
 </Card>
 
 <Card title="RLS Model" href="/concepts/rls-model">
-How roles, JWT claims, and auth.uid() compose to gate ai.* and public.* access.
-</Card>
-
-<Card title="PostgREST Reference" href="/api-reference/postgrest">
-Filter operators, embeds, headers, error responses.
+How roles, JWT claims, and auth.uid() compose to gate access to your own tables.
 </Card>
 
 <Card title="Database Access" href="/concepts/database-access">
-The three ways into your project's Postgres — typed API, PostgREST, direct connection.
+The ways into your project's Postgres: typed API, PostgREST, direct connection.
 </Card>
 
 </CardGroup>

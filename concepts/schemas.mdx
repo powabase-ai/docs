@@ -26,11 +26,11 @@ PostgREST exposes `public` at `/rest/v1/*` without needing the `Accept-Profile` 
 
 ### `ai`: the AI surface's state
 
-Where the typed `/api/*` endpoints store their data. 35+ tables for sources, knowledge_bases, indexed_sources, chunks, embeddings, agents, agent_sessions, agent_runs, workflows, workflow_executions, etc. Full inventory in [Querying the ai schema](/concepts/ai-schema-postgrest#tables-in-the-ai-schema).
+Where the typed `/api/*` endpoints store their data. 35+ tables for sources, knowledge_bases, indexed_sources, chunks, embeddings, agents, agent_sessions, agent_runs, workflows, workflow_executions, etc. Full inventory in [The ai schema](/concepts/ai-schema-postgrest#tables-in-the-ai-schema).
 
-**Don't migrate `ai.*`.** The platform's services assume the schema's invariants, and modifying them risks data corruption or service-side breakage. Read freely (RLS lets `authenticated` SELECT most tables); never schema-change.
+**Don't migrate `ai.*`.** The platform's services assume the schema's invariants, and modifying them risks data corruption or service-side breakage. Never schema-change.
 
-PostgREST exposes `ai` at `/rest/v1/*` with `Accept-Profile: ai` for reads and `Content-Profile: ai` for writes. RLS gates which rows each role can touch.
+The `ai` schema is backend-only: PostgREST doesn't expose it, and `authenticated` and `anon` have no access to it. Reach AI resources through the typed `/api/*` endpoints.
 
 ### `auth`: GoTrue's state
 
@@ -92,8 +92,8 @@ Each Postgres role has different `USAGE` grants on each schema. The defaults tha
 
 | Role | `public` | `ai` | `auth` | `storage` |
 |---|---|---|---|---|
-| `anon` | USAGE | USAGE (RLS denies all) | — | USAGE |
-| `authenticated` | USAGE | USAGE (RLS-gated) | — | USAGE |
+| `anon` | USAGE | — | — | USAGE |
+| `authenticated` | USAGE | — | — | USAGE |
 | `service_role` | USAGE | USAGE (RLS bypassed) | — | USAGE |
 | `supabase_admin` (you in psql / migrations) | USAGE | USAGE | USAGE | USAGE |
 
@@ -103,8 +103,8 @@ Schema USAGE is just "can the role know this schema exists"; RLS policies on ind
 
 <CardGroup cols={2}>
 
-<Card title="Querying the ai schema" href="/concepts/ai-schema-postgrest">
-What's in ai.* and how to query it under RLS.
+<Card title="The ai schema" href="/concepts/ai-schema-postgrest">
+What's in ai.* and why it's backend-only.
 </Card>
 
 <Card title="Extensions" href="/api-reference/extensions">

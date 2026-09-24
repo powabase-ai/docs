@@ -81,7 +81,7 @@ What to use instead, depending on what you used Edge Functions for:
 
 ### `ai` schema is new
 
-The most novel thing about Powabase is the `ai` schema. It's where the AI surface's state lives: sources, knowledge_bases, agents, workflows, and the rest. You can query it via PostgREST under RLS (35+ tables exposed); see [Querying the ai schema](/concepts/ai-schema-postgrest).
+The most novel thing about Powabase is the `ai` schema. It's where the AI surface's state lives: sources, knowledge_bases, agents, workflows, and the rest. It's backend-only: not exposed via PostgREST. You reach it through the typed `/api/*` endpoints; see [The ai schema](/concepts/ai-schema-postgrest).
 
 If you're porting a Supabase project that built RAG yourself with pgvector tables in `public`, you have two options:
 
@@ -131,8 +131,8 @@ See [Platform overview](/concepts/platform-overview) for the full surface.
 1. **Update the Database URL:** new format, new pooler hostname.
 2. **Strip `pg_cron` / `supabase functions` references:** port to workflows or self-hosted.
 3. **Repoint GraphQL** from `/graphql/v1` to `/rest/v1/rpc/graphql`.
-4. **Audit RLS on `ai.*`** if your app exposes the AI surface to clients; defaults are permissive for `authenticated`.
-5. **Replace billing assumptions:** soft limits become a hard 402 with credit refill.
+4. **Gate the AI surface in your backend** if your app exposes it to clients: `/api/*` accepts any signed-in user's JWT and only enforces ownership on sessions and runs.
+5. **Replace billing assumptions:** soft limits become a hard 402 when credits run out (top up or upgrade; the free plan doesn't refill).
 6. **Decide on RAG path:** keep your pgvector tables, or migrate to the typed Sources + KB surface.
 7. **Move scheduled jobs to workflows:** cron-triggered workflows replace `pg_cron`.
 
