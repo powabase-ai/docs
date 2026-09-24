@@ -70,7 +70,7 @@ The Connect modal in the Studio surfaces the **Project URL**, **Anon Key**, **Se
 
 **`public`** schema. Where your application tables live. You own it.
 
-**`ai`** schema. Where the AI surface's state lives. Platform-owned but queryable via PostgREST under RLS. See [Querying the ai schema](/concepts/ai-schema-postgrest).
+**`ai`** schema. Where the AI surface's state lives. Platform-owned and backend-only: not exposed via PostgREST; reach it through the typed `/api/*` endpoints. See [The ai schema](/concepts/ai-schema-postgrest).
 
 **`auth`** schema. Where GoTrue's state lives. Platform-owned, not exposed via PostgREST.
 

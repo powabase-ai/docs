@@ -1,6 +1,6 @@
 ---
 title: "Common pitfalls"
-description: "The footguns Powabase users hit most: silent failures, wrong field placements, default-permissive RLS on ai.*, the differences between agentic and database webhooks. With concrete fixes."
+description: "The footguns Powabase users hit most: silent failures, wrong field placements, the backend-only ai schema, the differences between agentic and database webhooks. With concrete fixes."
 icon: "triangle-exclamation"
 ---
 
@@ -30,13 +30,13 @@ Probably an RLS policy issue. The signed-in user has the `authenticated` role; c
 
 ## RLS and the ai schema
 
-### "Anyone signed in can read every other user's agents"
+### "Any signed-in user can reach every other user's agents"
 
-This is the default `ai.*` RLS posture. The `authenticated` role has blanket SELECT on most `ai.*` tables; only session-shaped tables (`agent_sessions`, `agent_runs`, `orchestration_sessions`, `orchestration_runs`) filter by `auth.uid()`. For multi-user projects, either tighten the policies or only let end users hit the typed `/api/*`, which the platform's backend enforces ownership against. See [Querying the ai schema](/concepts/ai-schema-postgrest).
+Not through the database: the `ai` schema is backend-only, and `authenticated` and `anon` have no grants or policies on it. But the typed `/api/*` surface accepts any signed-in user's JWT, and it only enforces ownership on sessions and runs. Agents, knowledge bases, workflows and knowledge-base search are project-wide. For multi-user projects, call `/api/*` from your own backend with the Service Role key and enforce access there. See [The ai schema](/concepts/ai-schema-postgrest).
 
-### `query.from(...).select()` is empty even though rows exist
+### Querying `ai.*` via PostgREST fails, even with `Accept-Profile: ai`
 
-If you're querying `ai.*` from PostgREST, you need `Accept-Profile: ai`. Without it, PostgREST looks in `public` and returns nothing (or 404).
+The `ai` schema isn't exposed through PostgREST (it's not in `PGRST_DB_SCHEMAS`), whichever key you send. Reach AI resources through the typed `/api/*` endpoints instead.
 
 ### "I added an RLS policy but my old policy still applies"
 

@@ -49,11 +49,11 @@ Each project database has four user-visible schemas. The `ai` schema is managed 
 | Schema | Owner | Purpose | PostgREST exposed? |
 | --- | --- | --- | --- |
 | `public` | You | Your application tables | Yes |
-| `ai` | Platform | Sources, knowledge bases, chunks, embeddings, agents, sessions, runs, workflows | Yes (read+write under RLS) |
+| `ai` | Platform | Sources, knowledge bases, chunks, embeddings, agents, sessions, runs, workflows | No (backend-only; use the typed `/api/*`) |
 | `storage` | Storage API | File metadata, bucket configuration | Yes |
 | `auth` | GoTrue | User accounts, sessions, tokens | No (use the Auth API) |
 
-PostgREST is configured to expose `public`, `ai`, `storage`, and `graphql_public` schemas. That means you can query, filter, and (with the right RLS posture) write to `ai.*` tables directly via `/rest/v1/*`. This is useful for custom dashboards over agent runs, bulk operations on sources, or any case where the typed `/api/*` endpoints don't cover what you need. Treat `ai.*` writes carefully: the platform's own services assume the schema's invariants, so prefer the typed endpoints for state-changing operations on agent / KB / workflow tables.
+PostgREST is configured to expose `public`, `storage`, and `graphql_public` schemas. The `ai` schema is backend-only: it isn't exposed through PostgREST, and only the project service (using the service role) reads and writes it. Reach AI resources through the typed `/api/*` endpoints.
 
 ## Next Steps
 
