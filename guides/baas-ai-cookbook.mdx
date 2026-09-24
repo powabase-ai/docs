@@ -10,81 +10,68 @@ This page is four worked patterns that string those primitives together. None of
 
 One caveat drives Recipe 2: **the platform does not forward end-user JWTs to agent tools.** See [JWT forwarding investigation](#why-recipe-2-is-shaped-this-way) below the recipes.
 
-## Recipe 1: RLS-aware agent context via PostgREST on ai.*
+## Recipe 1: User-scoped agent context
 
-The pattern: you have an agent that needs to retrieve from a knowledge base, but you want each end user to see only their own sources within that KB. The naive approach (agent has unrestricted KB access; you filter results in your app) leaks data via the response.
+The pattern: you have an agent that needs to retrieve from a knowledge base, but each end user should see only their own sources within that KB. The naive approach (agent has unrestricted KB access; you filter results in your app) leaks data via the response.
 
-The right approach: query `ai.chunks` directly via PostgREST under the user's JWT before invoking the agent, and pass the resulting context into the agent run as `context_items`.
+The `ai` schema is backend-only, so you can't put RLS policies on `ai.chunks` and query it under the user's JWT. (Earlier versions of this recipe did that; since the `ai` schema lockdown, PostgREST rejects `Accept-Profile: ai`.) Instead, keep ownership in your own `public` table, where RLS does apply, and have your backend pass the user's source ids to the typed search endpoint.
 
-**Step 1: RLS on `ai.indexed_sources` and `ai.chunks`** (assuming a `user_id` column on your `ai.sources` table tracks ownership):
+**Step 1: an ownership table in `public` with RLS**:
 
 ```sql
--- ai.sources already has RLS enabled by default; tighten the authenticated
--- read policy to only show user's own sources.
-DROP POLICY IF EXISTS auth_read_sources ON ai.sources;
-CREATE POLICY auth_read_own_sources ON ai.sources
-  FOR SELECT TO authenticated
-  USING (
-    -- Adapt to wherever your "who owns this source" lives — most apps
-    -- have a public.documents row with owner_id that joins to ai.sources.id
-    EXISTS (
-      SELECT 1 FROM public.documents
-      WHERE source_id = ai.sources.id
-        AND owner_id = auth.uid()
-    )
-  );
+CREATE TABLE public.documents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_id uuid NOT NULL,          -- the id returned by POST /api/sources/upload
+  owner_id uuid NOT NULL DEFAULT auth.uid(),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 
--- ai.chunks inherits the source's ownership.
-DROP POLICY IF EXISTS auth_read_chunks ON ai.chunks;
-CREATE POLICY auth_read_own_chunks ON ai.chunks
+ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY own_documents ON public.documents
   FOR SELECT TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM ai.indexed_sources ix
-      JOIN public.documents d ON d.source_id = ix.source_id
-      WHERE ix.id = ai.chunks.indexed_source_id
-        AND d.owner_id = auth.uid()
-    )
-  );
+  USING (owner_id = auth.uid());
 ```
 
-**Step 2: query for chunks from the browser**, using the user's access token:
+**Step 2: on your backend, resolve the user's sources, then search.** Read `public.documents` via PostgREST with the user's access token, so RLS returns only their rows (and an invalid token gets a `401`). Then call the typed search endpoint with the Service Role key, restricted to those sources with `source_ids`:
 
 ```typescript
+// Runs on your backend. The browser sends its access token; it never
+// chooses the source_ids itself.
 async function retrieveContext(kbId: string, query: string, userToken: string) {
-  // PostgREST does the RLS-filtered hybrid search; we just need top-K chunks
-  // ordered by similarity. For real hybrid search, you'd typically POST to
-  // /api/knowledge-bases/{kbId}/search instead — but that runs with the
-  // service role and skips RLS. Hand-rolling against ai.chunks under the
-  // user's JWT gets per-user filtering for free.
-  const params = new URLSearchParams({
-    select: "id,text,score,source_id,meta",
-    knowledge_base_id: `eq.${kbId}`,
-    order: "score.desc",
-    limit: "10",
+  const docsRes = await fetch(`${BASE_URL}/rest/v1/documents?select=source_id`, {
+    headers: { apikey: ANON_KEY, Authorization: `Bearer ${userToken}` },
   });
-  const res = await fetch(`${BASE_URL}/rest/v1/chunks?${params}`, {
+  if (!docsRes.ok) throw new Error(`documents lookup failed: ${docsRes.status}`);
+  const sourceIds = (await docsRes.json()).map((d: { source_id: string }) => d.source_id);
+  if (sourceIds.length === 0) return [];
+
+  const searchRes = await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/search`, {
+    method: "POST",
     headers: {
-      "Accept-Profile": "ai",
-      apikey: ANON_KEY,
-      Authorization: `Bearer ${userToken}`,
+      apikey: SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
     },
+    body: JSON.stringify({ query, top_k: 10, source_ids: sourceIds }),
   });
-  return res.json();
+  const { results } = await searchRes.json();
+  return results; // [{ chunk_id, text, score, source_id, meta }]
 }
 ```
 
-**Step 3: pass the retrieved chunks as agent context_items.** The agent run endpoint accepts a `context_items` array that bypasses the agent's own retrieval:
+Don't let the browser call `/api/knowledge-bases/{id}/search` with its own token and its own `source_ids`: that endpoint accepts any valid user JWT for the project and doesn't check who owns the sources.
+
+**Step 3: pass the retrieved chunks as agent `context_items`.** The agent run endpoint accepts a `context_items` array that replaces the agent's own retrieval:
 
 ```typescript
-async function askAgent(agentId: string, message: string, contextItems: any[], userToken: string) {
-  // The agent run endpoint runs under the service role internally — it does
-  // not check RLS on its own tools. Filtering happened above, when we
-  // retrieved chunks under the user's JWT.
+async function askAgent(agentId: string, message: string, contextItems: any[]) {
+  // Also on your backend. The agent run uses the Service Role key and does
+  // not check ownership itself; the filtering happened in retrieveContext().
   const res = await fetch(`${BASE_URL}/api/agents/${agentId}/run`, {
     method: "POST",
     headers: {
-      apikey: ANON_KEY,
+      apikey: SERVICE_ROLE_KEY,
       Authorization: `Bearer ${SERVICE_ROLE_KEY}`,  // see Recipe 2 about why
       "Content-Type": "application/json",
     },
@@ -92,8 +79,7 @@ async function askAgent(agentId: string, message: string, contextItems: any[], u
       message,
       context_items: contextItems.map((c) => ({
         text: c.text,
-        source_id: c.source_id,
-        meta: c.meta,
+        meta: { ...c.meta, source_id: c.source_id },
       })),
     }),
   });
@@ -101,9 +87,9 @@ async function askAgent(agentId: string, message: string, contextItems: any[], u
 }
 ```
 
-The agent run no longer touches `ai.chunks` itself (because we pre-fed the context). The data path is: user JWT → PostgREST → RLS-filtered chunks → context_items → agent. There's no point in the request where the agent has access to chunks the user shouldn't see.
+The data path is: user JWT → PostgREST (RLS on `public.documents`) → the user's source ids → typed search restricted to those sources → `context_items` → agent. `/run` makes a single LLM call with no tools, so the agent never sees chunks from sources the user doesn't own. If you switch to `/run/stream` for tool use, keep knowledge-base and database tools off this agent, or it can reach project-wide data anyway (see Recipe 2).
 
-**Trade-offs.** This pattern works for read-only retrieval. You're doing the RAG retrieval yourself, so you lose the platform's hybrid scoring, reranking, and the chunks→pages reflow that the typed search endpoint does for you. For full retrieval pipelines, the right answer is "use the typed search endpoint but call it from your backend, with your backend enforcing ownership before the call," at the cost of a service-role layer in the middle.
+**Trade-offs.** You keep the platform's hybrid scoring and reranking, because the typed search endpoint still does the retrieval. The cost is a backend in the middle holding the Service Role key. If users never share sources, one knowledge base per user (or per tenant) is simpler still: your backend picks the KB, and no `source_ids` list is needed.
 
 ## Recipe 2: Build-your-own authenticated chatbot
 
@@ -357,8 +343,8 @@ For now: only call agent endpoints from trusted backends, with the Service Role 
 
 <CardGroup cols={2}>
 
-<Card title="ai schema recipes" href="/guides/ai-schema-recipes">
-PostgREST patterns on ai.* that complement these higher-level cookbooks.
+<Card title="AI resource recipes" href="/guides/ai-schema-recipes">
+Typed /api/* patterns for multi-KB search, usage summaries and bulk source updates.
 </Card>
 
 <Card title="RLS Cookbook" href="/guides/rls-policies">

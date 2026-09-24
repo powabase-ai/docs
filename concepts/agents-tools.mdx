@@ -26,7 +26,7 @@ Agents can use three categories of tools: builtin tools provided by the platform
 
 ### Builtin Tools
 
-The platform provides eight builtin tools. Assign them to an agent by name via POST /api/agents/\{id\}/tools. The database tools include schema-level access control: when assigning them, you configure which schemas and tables the agent can access.
+The platform provides eight builtin tools. Assign them to an agent by name via POST /api/agents/\{id\}/tools. The database tools need a table list: when assigning them, you configure which schemas and tables the agent can use (`config_override.schemas`, a map of schema to table names); with no tables configured, the tool isn't given to the agent. What that list enforces differs between the two tools. `database_write` rejects any table that isn't in the list. `database_query` only uses the list to set `search_path` and to describe the tables to the model: it doesn't parse the SQL, so a schema-qualified `SELECT` against a table outside the list (including in `ai` or `auth`) is not blocked. Both run on the project service's database connection, which bypasses RLS. Treat `database_query` as project-wide read access, and don't give it to agents that act for untrusted users.
 
 | Tool | Description | Constraints |
 | --- | --- | --- |

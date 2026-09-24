@@ -153,7 +153,7 @@ Postgres errors come with a 5-character SQLSTATE class. The classes you'll see m
 | `40P01` | deadlock_detected | Two transactions waiting on each other; Postgres killed one. The killed transaction should retry. |
 | `42501` | insufficient_privilege | Tried to act on something you don't have permissions for (rare as `supabase_admin`) |
 | `42883` | undefined_function | Called a function with wrong argument types, often a cast issue |
-| `42P01` | undefined_table | Table doesn't exist (or you forgot `Accept-Profile`/`search_path` for `ai.*`) |
+| `42P01` | undefined_table | Table doesn't exist (or you forgot to schema-qualify it or set `search_path`, e.g. for `ai.*`) |
 | `26000` | invalid_sql_statement_name | **PgBouncer footgun.** Your prepared statement isn't on this server connection. See [Connection pooling](/guides/connection-pooling). |
 | `08006` | connection_failure | Connection dropped. Almost always retryable. |
 
@@ -205,7 +205,7 @@ A rough decision tree:
 | Schema changes (CREATE TABLE, ADD COLUMN, etc.) | Direct Postgres |
 | Read-only queries with complex JOINs / aggregations | Direct Postgres or PostgREST RPC |
 | AI features (run agent, search KB, upload source) | Typed `/api/*` |
-| Custom analytics on `ai.*` tables | PostgREST with `Accept-Profile: ai` |
+| Reports on AI resources (agents, sources, KB status) | Typed `/api/*` (`ai.*` isn't exposed through PostgREST) |
 | Pub/sub-style notifications | Realtime (not LISTEN/NOTIFY through the pooler) |
 
 The typed `/api/*` is the only path for AI operations, and PostgREST is the right path for client-side CRUD. Direct Postgres covers everything else, especially anything that touches schema or runs many statements.
