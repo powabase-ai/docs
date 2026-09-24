@@ -6,7 +6,7 @@ icon: "table"
 
 The [PostgREST reference](/api-reference/postgrest) covers filter operators and the basic CRUD shape. This guide picks up where that leaves off: embedded resources, FTS, JSONB selectors, counting, upserts, bulk inserts, and the `Prefer` headers that change how responses come back.
 
-For the framing, see [PostgREST reference](/api-reference/postgrest). For applying these patterns to the AI schema, see [ai-schema recipes](/guides/ai-schema-recipes).
+For the framing, see [PostgREST reference](/api-reference/postgrest). These patterns apply to your own schemas (`public`, `storage`); the `ai` schema isn't exposed through PostgREST, so for AI resources see [AI resource recipes](/guides/ai-schema-recipes).
 
 ## Embedded resources (joins in one request)
 
@@ -224,8 +224,8 @@ RPCs are how you keep complex logic in the database (where it has full SQL power
 The base CRUD surface these patterns extend.
 </Card>
 
-<Card title="ai-schema recipes" href="/guides/ai-schema-recipes">
-The same techniques applied to ai.* tables.
+<Card title="AI resource recipes" href="/guides/ai-schema-recipes">
+The ai schema isn't exposed through PostgREST; these recipes use the typed /api/* endpoints instead.
 </Card>
 
 <Card title="RLS Cookbook" href="/guides/rls-policies">

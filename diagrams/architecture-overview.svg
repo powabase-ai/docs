@@ -178,7 +178,7 @@
         fill="#A1A1AA"
         font-size="11.2"
       >
-        Isolated per project · :9000+
+        Isolated per project · gateway shared on Cloud
       </text>
 
       
@@ -210,7 +210,7 @@
         fill="#A1A1AA"
         font-size="10.08"
       >
-        API Gateway
+        Shared gateway
       </text>
 
       

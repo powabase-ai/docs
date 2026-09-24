@@ -218,7 +218,7 @@ The body MUST use the key `config_override`. Passing `config` (or any other top-
 
 **How `config_override` works per tool type:**
 
-- **Database tools (`database_query`, `database_write`)**: `config_override.schemas: { <schema>: [<table>, ...] }` controls which tables the agent can read/write. Schemas must be a dict, schema names must match `^[a-zA-Z_][a-zA-Z0-9_]{0,63}$`, system schemas (`ai`, `auth`, `storage`, `pg_*`, etc.) are rejected, and each value must be a list of valid table names.
+- **Database tools (`database_query`, `database_write`)**: `config_override.schemas: { <schema>: [<table>, ...] }` is the table list. `database_write` rejects tables outside it; `database_query` only sets `search_path` from it, so a schema-qualified `SELECT` on other tables isn't blocked (see [Agents & Tools](/concepts/agents-tools#builtin-tools)). Schemas must be a dict, schema names must match `^[a-zA-Z_][a-zA-Z0-9_]{0,63}$`, system schemas (`ai`, `auth`, `storage`, `pg_*`, etc.) are rejected, and each value must be a list of valid table names.
 
 - **All other builtin tools (`web_search`, `web_scrape`, `http_request`, `code_execute`, `storage_read`, `storage_write`)**: any key in `config_override` whose name matches a parameter in the tool's `input_schema` is **force-injected into every call's arguments**. Keys not in the schema are silently dropped (no error, no warning). For example, setting `config_override: { "max_results": 3, "include_domains": ["example.com"] }` on a `web_search` assignment locks every search the agent does to 3 results from `example.com`.
 

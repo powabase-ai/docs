@@ -60,21 +60,18 @@ CREATE POLICY only_admins ON public.audit_log
 
 ## The defaults
 
-When a new project is provisioned, `public` ships empty (you bring your own tables) and `ai` ships with a full default policy set.
+When a new project is provisioned, `public` ships empty (you bring your own tables) and `ai` is locked to the backend.
 
-**`public` schema, empty by default.** RLS is enabled on no tables until you create some. When you create a table in `public`, RLS is **off** by default. You must `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` and add policies, otherwise PostgREST will refuse the request (it requires either RLS-enabled with policies, or grants, see the [Cookbook](/guides/rls-policies)).
+**`public` schema, empty by default.** When you create a table in `public`, RLS is **off**, and the project's Postgres image grants `anon` and `authenticated` full privileges on new `public` tables by default (`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ... anon, authenticated, service_role` in the Postgres image's initial schema). PostgREST doesn't refuse such a table: until you enable RLS, **anyone holding the Anon key can read and write every row** through `/rest/v1/*`. Enable RLS as part of creating every table, then add policies:
 
-**`ai` schema, RLS enabled on every table.** Default policies are:
+```sql
+ALTER TABLE public.my_table ENABLE ROW LEVEL SECURITY;
+-- With RLS on and no policies, anon and authenticated see nothing.
+```
 
-- **`service_role`** has full access (`FOR ALL USING (true) WITH CHECK (true)`) on every table. This is what the platform's own backend uses.
-- **`authenticated`** has read access on every table. Most config tables (`agents`, `workflows`, `tools`, `knowledge_bases`, `sources`) are also writable. Session-shaped tables (`agent_sessions`, `agent_runs`, `orchestration_sessions`, `orchestration_runs`) read with per-user filtering via `auth.uid() = user_id OR user_id IS NULL`.
-- **`anon`** has no policies. Anon-key requests against `ai.*` return empty.
+See the [Cookbook](/guides/rls-policies) for policy patterns. If a table should never be reachable from clients, also `REVOKE ALL ON public.my_table FROM anon, authenticated`.
 
-<Warning>
-**The default `authenticated` policies on `ai.*` are project-wide, not per-user.**
-
-If two users sign into the same project, they can see each other's agents, workflows, knowledge bases, and configurations. Only the session-shaped tables filter by `user_id`. For multi-tenant scenarios where you don't want this, see the tenant-isolation pattern in the [RLS Cookbook](/guides/rls-policies).
-</Warning>
+**`ai` schema, backend-only.** Since project-service migration `0025`, `anon` and `authenticated` have no grants and no policies on `ai.*`, and `ai` isn't in PostgREST's exposed schemas. RLS stays enabled with no client policies, so access is deny-by-default; the project service reaches it with the service role, which bypasses RLS. There's nothing to tighten here: end users can't query `ai.*` directly under any key. See [The ai schema](/concepts/ai-schema-postgrest).
 
 ## Client-side vs server-side: when each role is right
 
@@ -90,9 +87,9 @@ Service Role and Anon aren't "tiers of privilege." They're for different setting
 
 ## Composition with the typed `/api/*` surface
 
-The typed AI endpoints (`/api/agents`, `/api/sessions`, etc.) authenticate with the Service Role key and do their own ownership checks at the application layer. That means the RLS policies on `ai.*` don't directly affect those endpoints; the backend is already running with full access.
+RLS doesn't govern the typed AI endpoints (`/api/agents`, `/api/knowledge-bases`, and so on). They accept the Service Role key or a signed-in user's JWT, and the project service runs their queries against `ai.*` itself.
 
-What RLS does affect is **what your end users see when they query `ai.*` directly via PostgREST.** If you're not exposing `ai.*` to end users (you only hit `/api/*` from your backend), the defaults are fine; nobody on a user JWT ever touches it. If you are exposing `ai.*` reads to end users (custom dashboards, real-time subscriptions), watch out for the defaults' "any authenticated user sees everything" posture.
+The only per-user checks on that surface are in application code, on sessions and runs: reading another user's session returns `404`, and an agent run won't continue a session that belongs to someone else. Agents, knowledge bases, workflows and knowledge-base search are project-wide for any valid user JWT. If end users shouldn't see each other's AI resources, call `/api/*` from your own backend and enforce access there; see [The ai schema](/concepts/ai-schema-postgrest#reaching-ai-resources).
 
 ## Next steps
 
@@ -110,8 +107,8 @@ Test policies in psql or the SQL Editor without a frontend.
 Where the four credentials come from in the Studio.
 </Card>
 
-<Card title="Querying the ai schema" href="/concepts/ai-schema-postgrest">
-The companion page for how RLS interacts with the AI-surface tables.
+<Card title="The ai schema" href="/concepts/ai-schema-postgrest">
+Why ai.* is backend-only and how to reach AI resources.
 </Card>
 
 </CardGroup>
