@@ -79,6 +79,8 @@ curl -X POST '{BASE_URL}/api/agents' \
 
 Enable the agent to use builtin tools like database_query, http_request, or code_execute.
 
+Database tools also need a table list before the agent gets them: set `config_override.schemas` on the assignment (see [Tool assignments](/api-reference/agents#tool-assignments)). The tools act as whoever starts the run, as described in [What agent data tools act as](/guides/auth-connection#what-agent-data-tools-act-as).
+
 **Endpoint:** `POST /api/agents/{id}/tools`
 
 <CodeGroup>
@@ -163,6 +165,10 @@ Send a message and receive a Server-Sent Events (SSE) stream. Events include too
 SSE events: start, chunk, step_started, tool_call, tool_result, step_completed, approval_requested, complete, error.
 </Note>
 
+<Tip>
+These samples use the Service Role key from your backend. `/run/stream` is also one of the [end-user conversation routes](/guides/auth-connection#end-user-routes): a browser can make the same call with the Anon key as `apikey` and the signed-in user's access token as `Authorization`. The run then uses the agent's configured knowledge bases, and its data tools act as that user.
+</Tip>
+
 <CodeGroup>
 
 ```python Python
@@ -234,7 +240,7 @@ curl -N -X POST '{BASE_URL}/api/agents/{agent_id}/run/stream' \
 
 <Step title="Continue the conversation">
 
-Pass the session_id from the previous run to continue the multi-turn conversation. The agent retains full message history within the session.
+Pass the session_id from the previous run to continue the multi-turn conversation. The agent retains full message history within the session. With an end user's access token, only a session that already belongs to that user can be continued; see [Rules for end-user runs](/guides/auth-connection#rules-for-end-user-runs).
 
 **Endpoint:** `POST /api/agents/{id}/run/stream`
 

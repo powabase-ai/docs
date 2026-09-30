@@ -400,6 +400,8 @@ curl -N --max-time 60 -X POST '{BASE_URL}/api/agents/{agent_id}/run/stream' \
 
 The `start` event includes a `session_id`. Pass it in subsequent requests to continue the conversation with full message history.
 
+These samples use the Service Role key, but this pattern works unchanged with a signed-in user's access token (Anon key as `apikey`, user token as `Authorization`), because `/run/stream` is an [end-user conversation route](/guides/auth-connection#end-user-routes). With a user token, omit `session_id` on the first turn and reuse only the id the run returns: an end user can't name a new session id.
+
 **Endpoint:** `POST /api/agents/{id}/run/stream`
 
 <Note>
