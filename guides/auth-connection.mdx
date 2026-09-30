@@ -1,10 +1,14 @@
 ---
 title: "Auth & Connection"
-description: "Find your project's credentials in the Connect modal, pick the right key for each surface, and make your first authenticated request."
+description: "Find your project's credentials in the Connect modal, see which key each /api route accepts, and make your first authenticated request."
 icon: "plug"
 ---
 
 Every Powabase project keeps its connection details in one place: the **Connect modal** in the Studio. It holds the Project URL, both API keys (Anon and Service Role), the JWT Secret, the Database URL, and ready-to-paste Postgres connection strings in nine driver formats. Open it once, copy what you need, and you can call any part of the platform.
+
+<Warning>
+**Breaking change in 0.12.0: most `/api/*` routes now require the service role key.** A signed-in user's access token works only on the 16 conversation routes listed in [Which key for which route](#which-key-for-which-route). Knowledge bases, sources, agent configuration, workflows and every other `/api/*` route answer it with `403`. If your app sends user tokens to the AI API, read [Migrating from earlier versions](#migrating-from-earlier-versions) before you upgrade.
+</Warning>
 
 ## Open the Connect modal
 
@@ -29,16 +33,105 @@ You can also open the modal by appending `?showConnect=true` to any project URL,
 | Field | Use it for | Safe to ship to clients? |
 | --- | --- | --- |
 | **Project URL** | The `BASE_URL` for every HTTP call — `/api/*`, `/rest/v1/*`, `/auth/*`, `/storage/*` | Yes |
-| **Anon (Publishable) Key** | Client-side calls to PostgREST and Storage that respect Row Level Security | Yes |
-| **Service Role (Secret) Key** | Server-side calls to `/api/*` (AI surface) and any RLS-bypassing PostgREST access | **No — server only** |
+| **Anon (Publishable) Key** | Client-side calls to PostgREST, Auth and Storage that respect Row Level Security. Also the `apikey` header when a signed-in user calls one of the [end-user conversation routes](#end-user-routes) | Yes |
+| **Service Role (Secret) Key** | Server-side calls to `/api/*` (the AI surface; required on every route except the [end-user conversation routes](#end-user-routes)) and any RLS-bypassing PostgREST access | **No — server only** |
 | **JWT Secret** | Verifying user-signed JWTs on your own backend | **No — server only** |
 | **Database URL** | Direct Postgres access (psql, migrations, ORMs, BI tools) | **No — server only** |
 
-The rest of this guide uses the **Service Role (Secret) Key** as `API_KEY`. It authenticates every endpoint under `/api/*`, which is what most of the platform docs assume.
+The rest of this guide uses the **Service Role (Secret) Key** as `API_KEY`. It authenticates every endpoint under `/api/*`, which is what most of the platform docs assume. Most of those endpoints accept nothing else; see [Which key for which route](#which-key-for-which-route).
 
 <Warning>
 Never expose the Service Role key, JWT Secret, or Database URL to a browser, mobile app, or any environment outside your control. The Anon key is the only field in the modal safe to bundle into a client.
 </Warning>
+
+## Which key for which route
+
+Every `/api/*` route takes a bearer token in `Authorization`. There are two kinds of caller:
+
+- **Your backend, with the service role key.** Send the key as both `apikey` and `Authorization: Bearer`. Every `/api/*` route accepts it. The Studio calls the API the same way.
+- **A signed-in end user, with their own access token.** Send the Anon key as `apikey` and the user's access token (the JWT your project's Auth service returned at sign-in) as `Authorization: Bearer`. Only the 16 conversation routes below accept it, and only for that user's own sessions and runs.
+
+Every other `/api/*` route answers an end-user token with `403`:
+
+```json
+{"error": "This endpoint requires the project's service role key"}
+```
+
+That covers knowledge bases and knowledge-base search, sources, agent and orchestration configuration (tools, knowledge-base assignments, MCP servers, hooks), workflows, Copilot, tools, context handlers, AI provider keys, settings, observability, and the [`/api/database/*` proxy](/api-reference/database). Two routes take no bearer at all because they verify their own secret: the inbound workflow webhook (`POST /api/webhooks/{webhook_id}`, verified by the per-webhook secret; see [Webhooks](/api-reference/webhooks)) and the documentation search used by the Studio's Copilot (`POST /api/internal/docs/search`).
+
+<Warning>
+Never ship the service role key to a browser or a mobile app. Anyone who holds it can call every route as an administrator. Browsers and apps call the conversation routes with the signed-in user's own token, and everything else goes through your backend.
+</Warning>
+
+### End-user routes
+
+These are the only routes an end user's access token may call. The service role key works on them too.
+
+| Method | Path | What an end user may do |
+| --- | --- | --- |
+| `GET` | `/api/agents/{agent_id}/sessions` | List their own sessions with the agent |
+| `POST` | `/api/agents/{agent_id}/sessions` | Create a session, owned by them |
+| `DELETE` | `/api/agents/{agent_id}/sessions/{session_id}` | Delete their own session |
+| `POST` | `/api/agents/{agent_id}/run` | Run the agent, in a new session or their own |
+| `POST` | `/api/agents/{agent_id}/run/stream` | The same, streamed |
+| `GET` | `/api/agents/runs/{run_id}` | Read a run in their own session |
+| `POST` | `/api/agents/runs/{run_id}/approve` | Approve or reject their own paused run |
+| `GET` | `/api/sessions/{session_id}` | Read their own session |
+| `GET` | `/api/sessions/{session_id}/messages` | Read its messages |
+| `GET` | `/api/sessions/{session_id}/runs` | Read its runs |
+| `GET` | `/api/sessions/{session_id}/runs/{run_id}/retrieved-context` | Read a run's retrieved context |
+| `DELETE` | `/api/sessions/{session_id}` | Delete their own session |
+| `GET` | `/api/orchestrations/{orch_id}/sessions` | List their own orchestration sessions |
+| `GET` | `/api/orchestrations/{orch_id}/sessions/{session_id}/messages` | Read their own orchestration session's messages |
+| `POST` | `/api/orchestrations/{orch_id}/run/stream` | Run the orchestration, in a new session or their own session of it |
+| `GET` | `/api/orchestrations/runs/{run_id}` | Read an orchestration run in their own session |
+
+A session, run or paused run that belongs to someone else, or that your backend created without a `user_id`, answers `404` as if it didn't exist. There is no end-user route to create or delete an orchestration session: a run creates one.
+
+### Rules for end-user runs
+
+- **The token must name the user and expire.** The API accepts a JWT with audience `authenticated`, signed with your project's JWT secret, whose `sub` is a UUID and which carries an `exp`. Anything else answers `401`. Tokens from your project's Auth service always qualify; this matters only if you mint your own.
+- **The run uses the agent's own knowledge bases.** An end user's run body may not set `knowledge_bases`, `runtime_knowledge_bases`, `context_handler_id`, or by-reference `context_items` (items with an `item_id`). Sending any of them answers `403` with a body that names the fields:
+
+  ```json
+  {"error": "knowledge_bases may only be set with the project's service role key; an end user's run uses the knowledge bases configured on the agent"}
+  ```
+
+  `context_override` and by-value `context_items` (items with `text`) are still allowed, because the user supplies that text themselves.
+- **An end user can continue only their own existing session, and can never name a new one.** A `session_id` in a run body or a path must be a string of at most 255 characters, or the request answers `400`. A run continues a session only if it already exists and belongs to the caller, for the same agent or orchestration; any other `session_id` answers `404` (a streamed run ends with the event `{"event": "error", "error": "Session not found"}`). To start a conversation, omit `session_id` (the run creates a session owned by the user and returns its id) or call `POST /api/agents/{agent_id}/sessions`. This stops a user from creating a session under an id your backend would later pick, such as one derived from a phone number, and reading or steering what your backend's runs say in it.
+- **An end user approves only the paused runs they started.** A run your backend started with the service role key has no end-user owner, even in a session created with that user's `user_id`, so only the service role key can approve it. Relay the user's decision from your backend.
+
+### Running agents for a user from your backend
+
+When a run needs something end users can't send, such as knowledge bases chosen per request, run it from your backend with the service role key. Pass `user_id` when you create the session (`POST /api/agents/{agent_id}/sessions` with `{"user_id": "<the user's id>"}`) so the conversation still belongs to that user: they can list it, read it, and continue it with their own token. Only the service role key may set `user_id`; an end user who sends it gets `403`.
+
+A run made with the service role key is a service-role run, even in a session owned by a user. Its data tools don't act as that user; see the next section.
+
+### What agent data tools act as
+
+An agent's `database_query`, `database_write`, `storage_read` and `storage_write` tools act as whoever started the run:
+
+| Run started with | Database tools | Storage tools |
+| --- | --- | --- |
+| An end user's access token | Postgres as the `authenticated` role with that user's JWT claims, limited to the tables configured on the agent's database tools. Your grants and RLS policies for that user apply. | Storage with the user's own token. Your Storage policies for that user apply. |
+| The service role key | The agent's own database login, which holds grants on exactly the tables configured on its database tools and bypasses RLS on those tables only. | Storage with the service role key: every bucket except the internal `sources` bucket, which holds the original files of ingested sources. |
+
+<Warning>
+When your backend runs an agent for a user with the service role key, the agent's data tools see everything in the tables and buckets they're configured with, whoever the session belongs to. Configure such an agent only with tables and buckets every user it serves may see in full, or let the user's own token start runs of agents that carry data tools.
+</Warning>
+
+The per-tool limits (which tables can be configured, what `database_query` accepts, the 30-second timeout, and the bucket and path rules for storage tools) are in the [Tools reference](/api-reference/tools#data-tool-access-and-limits).
+
+### Migrating from earlier versions
+
+Before 0.12.0, most `/api/*` routes accepted any signed-in user's token. To upgrade:
+
+- **If your backend forwarded an end-user JWT to knowledge-base or source routes** (or any other route outside the table above), switch those calls to the service role key.
+- **If your client sent `knowledge_bases` on a run** (or `runtime_knowledge_bases`, `context_handler_id`, or by-reference `context_items`), configure the knowledge bases on the agent instead with `POST /api/agents/{id}/knowledge-bases`. If the choice has to be made per request, run the agent from your backend with the service role key and pass `user_id` when you create the session.
+- **If your clients started sessions under ids they chose**, have them omit `session_id` on the first run or call `POST /api/agents/{agent_id}/sessions`, and use the id that comes back.
+- **If you mint your own user JWTs**, give them a UUID `sub` and an `exp`.
+- **If you self-host**, set `SERVICE_ROLE_KEY` on the API service. Without it no caller counts as the service role: a request that bears the service role key is decoded as an end-user token and answers `401`, and every management route is unreachable.
+- **If an agent has database tools**, check its configured tables. They must be plain or partitioned tables or views created `WITH (security_invoker = true)`, and service-role runs now reach exactly those tables and nothing else.
 
 ## Use it from code
 
@@ -46,7 +139,7 @@ Never expose the Service Role key, JWT Secret, or Database URL to a browser, mob
 
 <Step title="Set your Base URL and headers">
 
-Every request to /api/* and /rest/v1/* needs **both** an `apikey` header and an `Authorization: Bearer` header, set to the same key. Use the Service Role (Secret) Key for /api/* and server-side PostgREST.
+Every request to /api/* and /rest/v1/* needs **both** an `apikey` header and an `Authorization: Bearer` header. From your backend, set both to the Service Role (Secret) Key; that's what /api/* and server-side PostgREST calls use. (A browser calling an [end-user conversation route](#end-user-routes) sends the Anon key as `apikey` and the user's access token as `Authorization` instead.)
 
 **Endpoint:** `Headers: apikey + Authorization`
 
