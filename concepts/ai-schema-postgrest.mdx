@@ -20,20 +20,21 @@ There are no per-user or per-tenant database policies on `ai.*`.
 
 ## Reaching AI resources
 
-Use the typed `/api/*` endpoints. They accept either the Service Role (Secret) Key or a signed-in user's JWT from the project's GoTrue.
+Use the typed `/api/*` endpoints. Almost all of them require the Service Role (Secret) Key. A signed-in user's JWT from the project's GoTrue works only on the conversation routes: the user's own agent and orchestration sessions, runs on them, and approvals of their own paused runs. The full list is in [Which key for which route](/guides/auth-connection#which-key-for-which-route).
 
-Per-user scoping on that surface is enforced in application code, and only for sessions and runs:
+Per-user scoping on those conversation routes is enforced in application code:
 
-- Reading a session or its messages returns `404` unless the caller owns the session.
-- An agent run refuses to continue a session that belongs to another user.
+- Reading a session, its messages or its runs returns `404` unless the caller owns the session.
+- A run continues only an existing session that belongs to the caller, and an end user can't name a new session id.
 - Session listings are scoped to the caller.
+- An end user's run uses the knowledge bases configured on the agent; it can't name other knowledge bases or stored context.
 
-Service Role callers bypass these checks. Agents, knowledge bases, workflows and knowledge-base search have no per-user ownership check: any valid user JWT for the project can reach them.
+Service Role callers bypass these checks. Knowledge bases, knowledge-base search, sources, agent configuration and workflows answer an end user's token with `403`.
 
 <Warning>
 **Multi-user projects: AI resources are project-wide.**
 
-If end users shouldn't see each other's agents, knowledge bases or search results, keep the Service Role key on your own backend, call `/api/*` from there, and enforce access in your backend (for example, one knowledge base per tenant, or tenant filters your backend adds to every search). For hard isolation between customers, give each customer its own project.
+Every knowledge base, agent and workflow in a project is visible to anything holding the Service Role key, and an agent's configured knowledge bases are searched the same way for every user who talks to it. If end users shouldn't see each other's documents or search results, enforce that in your backend (for example, one knowledge base per tenant, or tenant filters your backend adds to every search). For hard isolation between customers, give each customer its own project.
 </Warning>
 
 ## Your own tables

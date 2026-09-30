@@ -30,9 +30,11 @@ Probably an RLS policy issue. The signed-in user has the `authenticated` role; c
 
 ## RLS and the ai schema
 
-### "Any signed-in user can reach every other user's agents"
+### "My user's token gets `403` on `/api/*`"
 
-Not through the database: the `ai` schema is backend-only, and `authenticated` and `anon` have no grants or policies on it. But the typed `/api/*` surface accepts any signed-in user's JWT, and it only enforces ownership on sessions and runs. Agents, knowledge bases, workflows and knowledge-base search are project-wide. For multi-user projects, call `/api/*` from your own backend with the Service Role key and enforce access there. See [The ai schema](/concepts/ai-schema-postgrest).
+Since 0.12.0, a signed-in user's JWT works only on the conversation routes: their own agent and orchestration sessions, runs on them, and approvals of their own paused runs. Every other `/api/*` route, including knowledge bases, knowledge-base search and sources, answers `403` with `This endpoint requires the project's service role key`. Call those routes from your backend with the Service Role key. The route list is in [Which key for which route](/guides/auth-connection#which-key-for-which-route).
+
+A `403` on `/run` or `/run/stream` that names `knowledge_bases` (or `runtime_knowledge_bases`, `context_handler_id`, `context_items[].item_id`) means an end user's run tried to choose its own knowledge bases or stored context. Configure the knowledge bases on the agent, or run the agent from your backend. A `404` on a run with a `session_id` means the session doesn't exist or isn't that user's; end users can't name a new session id. See [Rules for end-user runs](/guides/auth-connection#rules-for-end-user-runs).
 
 ### Querying `ai.*` via PostgREST fails, even with `Accept-Profile: ai`
 
@@ -44,9 +46,9 @@ RLS policies are additive (OR-combined) by default. Adding a permissive policy d
 
 ## Agent runs
 
-### Agent runs with end-user JWTs leak data
+### Agent data tools see more on backend runs than on user runs
 
-The platform does NOT forward end-user JWTs to agent tools. `database_query` and `database_write` builtins run as superuser regardless of who invoked the run. If you expose `/api/agents/{id}/run` to clients with their own access tokens, the agent has full project-wide DB access, not the caller's RLS-filtered view. See [BaaS+AI cookbook Recipe 2](/guides/baas-ai-cookbook). Always run agents from a trusted backend.
+An agent's data tools act as whoever started the run. With a user's own JWT, `database_query` and `database_write` run as the `authenticated` role with that user's claims, so your RLS policies apply to the agent's configured tables, and the storage tools use the user's token. With the Service Role key, they use the agent's own database login, which bypasses RLS on its configured tables, and the storage tools see every bucket except the internal `sources` bucket, even in a session owned by a user. If your backend runs agents for users, configure those agents only with tables and buckets every such user may see in full. See [What agent data tools act as](/guides/auth-connection#what-agent-data-tools-act-as) and [BaaS+AI cookbook Recipe 2](/guides/baas-ai-cookbook).
 
 ### `temperature` at the top level of agent body silently dropped
 

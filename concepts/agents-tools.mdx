@@ -26,16 +26,16 @@ Agents can use three categories of tools: builtin tools provided by the platform
 
 ### Builtin Tools
 
-The platform provides eight builtin tools. Assign them to an agent by name via POST /api/agents/\{id\}/tools. The database tools need a table list: when assigning them, you configure which schemas and tables the agent can use (`config_override.schemas`, a map of schema to table names); with no tables configured, the tool isn't given to the agent. What that list enforces differs between the two tools. `database_write` rejects any table that isn't in the list. `database_query` only uses the list to set `search_path` and to describe the tables to the model: it doesn't parse the SQL, so a schema-qualified `SELECT` against a table outside the list (including in `ai` or `auth`) is not blocked. Both run on the project service's database connection, which bypasses RLS. Treat `database_query` as project-wide read access, and don't give it to agents that act for untrusted users.
+The platform provides eight builtin tools. Assign them to an agent by name via POST /api/agents/\{id\}/tools. The database tools need a table list: when assigning them, you configure which schemas and tables the agent can use (`config_override.schemas`, a map of schema to table names); with no tables configured, the tool isn't given to the agent. The list is everything the tools can reach: `database_write` rejects any table outside it, and `database_query` parses each query and rejects references to other tables, functions outside a fixed allowlist, and anything that writes or locks. Only plain tables, partitioned tables and views created `WITH (security_invoker = true)` may be listed. The tools act as whoever started the run: a run started with a user's own JWT queries as the `authenticated` role with that user's claims, so your RLS policies apply; a run started with the Service Role key uses the agent's own database login, which bypasses RLS on its configured tables only. The storage tools follow the same split. See [What agent data tools act as](/guides/auth-connection#what-agent-data-tools-act-as) and the [Tools reference](/api-reference/tools#data-tool-access-and-limits) for the limits.
 
 | Tool | Description | Constraints |
 | --- | --- | --- |
-| database_query | Execute read-only SQL SELECT queries against the project database | Must start with SELECT. Multi-statement blocked (no semicolons). Results capped at 50,000 chars. Rollback after read. |
-| database_write | Execute INSERT, UPDATE, and DELETE operations | UPDATE requires a WHERE clause (no mass updates). DELETE requires a WHERE clause (no mass deletes). All identifiers validated against injection. |
+| database_query | Execute read-only SQL SELECT queries against the agent's configured tables | One `SELECT` that writes and locks nothing, over configured tables only, with allowlisted functions, operators and casts. Results capped at 50,000 chars. 30-second statement timeout. |
+| database_write | Execute INSERT, UPDATE, and DELETE operations on the agent's configured tables | UPDATE requires a WHERE clause (no mass updates). DELETE requires a WHERE clause (no mass deletes). All identifiers validated against injection. 30-second statement timeout. |
 | http_request | Make HTTP requests to external APIs | Response capped at 10,000 chars. 30-second timeout. **No SSRF validation** — see warning below. |
 | code_execute | Run Python or JavaScript in a sandboxed environment | Delegated to external sandbox service. Default 30-second timeout, configurable per call. |
-| storage_read | List and download files from project storage buckets | Binary files return a signed URL instead of content. Supports list (with prefix/limit/offset) and download operations. |
-| storage_write | Upload text content to project storage buckets | UTF-8 text content only. Returns path and file size. |
+| storage_read | List and download files from project storage buckets | Binary files return a signed URL instead of content. Supports list (with prefix/limit/offset) and download operations. Acts as the end user on their runs; never reaches the internal `sources` bucket. |
+| storage_write | Upload text content to project storage buckets | UTF-8 text content only. Returns path and file size. Acts as the end user on their runs; never reaches the internal `sources` bucket. |
 | web_search | Search the web using Exa.ai. Five `search_type` modes (`auto`, `neural`, `keyword`, plus the agentic `deep` and `deep-reasoning` tiers), domain filters, date ranges, category filter, and content depth control | Results capped at 20K-50K chars by content mode. 1-10 results. Requires EXA_API_KEY. `deep` / `deep-reasoning` are slower and bill at higher tiers — see below. |
 | web_scrape | Extract content from web pages as clean markdown, with optional AI vision image analysis | Results capped at 200K chars. Supports markdown/HTML/links formats. include_images uses gpt-4.1-mini vision. Direct image URLs bypass Firecrawl. Requires FIRECRAWL_API_KEY. |
 
@@ -67,10 +67,10 @@ Some builtin tools need an API key or sandbox configured before they'll work. If
 
 | Tool | What it needs | Where to set it |
 | --- | --- | --- |
-| `database_query` / `database_write` | — | No setup. Uses the project's superuser connection automatically. |
+| `database_query` / `database_write` | A table list (`config_override.schemas`) on the tool assignment | Set it when you assign the tool. The platform creates the agent's database login and its grants for you. |
 | `http_request` | — | No setup. |
 | `code_execute` | A code sandbox service (`CODE_SANDBOX_URL`, optional `CODE_SANDBOX_API_KEY`) | Platform-level env var — set by the platform team for managed cloud; self-host operators configure their own sandbox. Without it the tool returns `"Code sandbox is not configured"`. |
-| `storage_read` / `storage_write` | — | No setup. Uses the project's Storage service. |
+| `storage_read` / `storage_write` | — | No setup. Uses the project's Storage service, with the end user's token or the Service Role key depending on who started the run. |
 | `web_search` | `EXA_API_KEY` setting | Studio → Settings → Tools, or `PUT /api/settings/EXA_API_KEY` |
 | `web_scrape` | `FIRECRAWL_API_KEY` setting (and optional `VISION_MODEL` if `include_images: true`) | Studio → Settings → Tools, or `PUT /api/settings/FIRECRAWL_API_KEY`. `VISION_MODEL` defaults to `gpt-4.1-mini`. |
 

@@ -87,9 +87,9 @@ Service Role and Anon aren't "tiers of privilege." They're for different setting
 
 ## Composition with the typed `/api/*` surface
 
-RLS doesn't govern the typed AI endpoints (`/api/agents`, `/api/knowledge-bases`, and so on). They accept the Service Role key or a signed-in user's JWT, and the project service runs their queries against `ai.*` itself.
+RLS doesn't govern the typed AI endpoints (`/api/agents`, `/api/knowledge-bases`, and so on); the project service runs their queries against `ai.*` itself. Most of them require the Service Role key. A signed-in user's JWT works only on the conversation routes, where application code scopes everything to the user's own sessions and runs: another user's session returns `404`, and a run won't continue a session that isn't the caller's. See [Which key for which route](/guides/auth-connection#which-key-for-which-route).
 
-The only per-user checks on that surface are in application code, on sessions and runs: reading another user's session returns `404`, and an agent run won't continue a session that belongs to someone else. Agents, knowledge bases, workflows and knowledge-base search are project-wide for any valid user JWT. If end users shouldn't see each other's AI resources, call `/api/*` from your own backend and enforce access there; see [The ai schema](/concepts/ai-schema-postgrest#reaching-ai-resources).
+RLS does come back into play inside an agent run. When a user's own JWT starts the run, the agent's `database_query` and `database_write` tools query Postgres as the `authenticated` role with that user's claims, so your policies on the agent's configured tables apply to what the agent reads and writes. When your backend starts the run with the Service Role key, the tools use the agent's own database login, which bypasses RLS on its configured tables. See [What agent data tools act as](/guides/auth-connection#what-agent-data-tools-act-as).
 
 ## Next steps
 
