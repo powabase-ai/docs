@@ -8,7 +8,7 @@ The point of Powabase is that the BaaS substrate and the AI primitives compose. 
 
 This page is four worked patterns that string those primitives together. None of them is the only right way; treat them as starting points you'll adapt to your shape. For deeper dives on each primitive, see the per-area pages linked from the Cards at the end.
 
-One caveat drives Recipe 2: **the platform does not forward end-user JWTs to agent tools.** See [JWT forwarding investigation](#why-recipe-2-is-shaped-this-way) below the recipes.
+Two rules from the [authorization model](/guides/auth-connection#which-key-for-which-route) shape these recipes. First, a signed-in user's JWT works only on the conversation routes (their own sessions, runs and approvals); knowledge bases, sources and search need the Service Role key, so those calls go through your backend. Second, an agent's data tools act as whoever started the run: the user on a run started with their JWT, the agent's own database login on a run started with the Service Role key.
 
 ## Recipe 1: User-scoped agent context
 
@@ -60,19 +60,19 @@ async function retrieveContext(kbId: string, query: string, userToken: string) {
 }
 ```
 
-Don't let the browser call `/api/knowledge-bases/{id}/search` with its own token and its own `source_ids`: that endpoint accepts any valid user JWT for the project and doesn't check who owns the sources.
+The browser can't call `/api/knowledge-bases/{id}/search` itself: the route requires the Service Role key and answers a user's JWT with `403`. Keep it that way in your own API too. Never forward `source_ids` the browser chose, because the search endpoint doesn't check who owns the sources.
 
 **Step 3: pass the retrieved chunks as agent `context_items`.** The agent run endpoint accepts a `context_items` array that replaces the agent's own retrieval:
 
 ```typescript
 async function askAgent(agentId: string, message: string, contextItems: any[]) {
-  // Also on your backend. The agent run uses the Service Role key and does
-  // not check ownership itself; the filtering happened in retrieveContext().
+  // Also on your backend, with the Service Role key. The run doesn't check
+  // who owns the chunks; the filtering happened in retrieveContext().
   const res = await fetch(`${BASE_URL}/api/agents/${agentId}/run`, {
     method: "POST",
     headers: {
       apikey: SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,  // see Recipe 2 about why
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -87,57 +87,83 @@ async function askAgent(agentId: string, message: string, contextItems: any[]) {
 }
 ```
 
-The data path is: user JWT → PostgREST (RLS on `public.documents`) → the user's source ids → typed search restricted to those sources → `context_items` → agent. `/run` makes a single LLM call with no tools, so the agent never sees chunks from sources the user doesn't own. If you switch to `/run/stream` for tool use, keep knowledge-base and database tools off this agent, or it can reach project-wide data anyway (see Recipe 2).
+The data path is: user JWT → PostgREST (RLS on `public.documents`) → the user's source ids → typed search restricted to those sources → `context_items` → agent. `/run` makes a single LLM call with no tools, so the agent never sees chunks from sources the user doesn't own. If you switch to `/run/stream` for tool use, remember this is a service-role run: the knowledge bases configured on the agent are searched without your ownership filter, and its database tools bypass RLS on their configured tables. Keep those off this agent (see Recipe 2).
 
 **Trade-offs.** You keep the platform's hybrid scoring and reranking, because the typed search endpoint still does the retrieval. The cost is a backend in the middle holding the Service Role key. If users never share sources, one knowledge base per user (or per tenant) is simpler still: your backend picks the KB, and no `source_ids` list is needed.
 
 ## Recipe 2: Build-your-own authenticated chatbot
 
-A chat app where each user has their own agent (or shares an agent with others). The user sends a message, the agent runs, the response streams back to the user. RLS should ensure that user A's chat history isn't visible to user B.
+A chat app where each user talks to an agent and the response streams back to them. User A's chat history must not be visible to user B. There are two working shapes; pick by what the agent needs.
 
-**Important up-front:** the obvious approach, letting the browser call `/api/agents/{id}/run/stream` directly with the user's access token, looks like it works but is unsafe.
+### Option A: the browser calls the conversation routes
 
-### Why the obvious approach is wrong
-
-When you send a request to `/api/agents/{id}/run/stream` with `Authorization: Bearer <user_jwt>`:
-
-1. The user's JWT is signed with the same `JWT_SECRET` as the Service Role Key, just with `role: "authenticated"` instead of `role: "service_role"`.
-2. `@require_auth` accepts both: the JWT signature validates and the request is authorized.
-3. **But** the platform does not propagate the user's identity to the agent's tools. The agent's `database_query`/`database_write` builtin tools run under a superuser Postgres role (`supabase_admin`) inside the project-service worker. Whatever the agent decides to query, it gets back unfiltered data, including other users' rows.
-
-So a user who hits `/run/stream` directly with their own JWT gets an answer, but the answer is computed with full project-wide DB access. If the agent has database tools, it can leak data from other users. **Don't expose `/api/agents/{id}/run/stream` to clients with their own JWTs.**
-
-### The safe pattern
-
-Run the agent run from a trusted backend with the Service Role key. Inject user-scoped context yourself, either via `context_items` (Recipe 1's pattern) or by constructing a Custom HTTP Tool that calls an auth-checked route on your own backend.
+Agent runs, sessions and approvals are [end-user routes](/guides/auth-connection#end-user-routes), so the browser can stream a run with the signed-in user's own access token. No Service Role key is involved:
 
 ```typescript
-// Backend route. Express-style for illustration.
-app.post("/api/chat", requireUserAuth, async (req, res) => {
-  const { userId, userJwt } = req.user;  // from your own auth middleware
-  const { message } = req.body;
-
-  // Look up the user's agent — or use a shared agent ID for the whole app.
-  const agentId = await getAgentForUser(userId);
-
-  // Persist the chat message to your own table for history. RLS-protected
-  // public.chat_messages with owner_id = userId enforces per-user history.
-  const sessionId = await ensureSession(userId);
-
-  // Stream the agent run from the backend to the client. The platform's SSE
-  // stream is preserved by streaming the response body through your handler.
-  const agentRes = await fetch(`${POWABASE_URL}/api/agents/${agentId}/run/stream`, {
+// Runs in the browser, with the user's own access token. /run/stream is an
+// end-user route, so this is allowed; knowledge-base and source routes aren't.
+async function sendMessage(agentId: string, message: string, sessionId?: string) {
+  return fetch(`${BASE_URL}/api/agents/${agentId}/run/stream`, {
     method: "POST",
     headers: {
-      apikey: SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${accessToken}`,  // the signed-in user's token
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
       message,
-      session_id: sessionId,
-      // If you need the agent to access user-specific data, pre-fetch and
-      // inject as context_items here. See Recipe 1.
+      // Omit on the first turn. Afterwards, reuse the session_id from the
+      // start event; an end user can't name a new session id.
+      ...(sessionId ? { session_id: sessionId } : {}),
+    }),
+  });
+}
+```
+
+What the platform enforces for you:
+
+- **History is per user.** The run creates a session owned by the user. `GET /api/agents/{id}/sessions` with their token lists only their sessions, and another user's `session_id` answers `404`.
+- **Data tools act as the user.** The agent's `database_query` and `database_write` tools query Postgres as the `authenticated` role with the user's claims, so your RLS policies on the agent's configured tables decide what it can read and write. Its storage tools use the user's token, so your Storage policies apply.
+- **The run can't choose knowledge bases.** It searches the knowledge bases configured on the agent; sending `knowledge_bases` or `runtime_knowledge_bases` answers `403`. Every user of the agent searches the same knowledge bases, so don't attach a knowledge base holding one user's private documents to a shared agent. Use Recipe 1 or Option B for per-user retrieval.
+
+Creating the agent, attaching its tools and knowledge bases, and uploading sources stay on your backend with the Service Role key.
+
+### Option B: your backend runs the agent
+
+When a run needs something an end user can't send, such as knowledge bases chosen per request or `context_items` your backend filtered (Recipe 1), run it from your backend with the Service Role key. Create the session with the user's `user_id`, so the conversation still belongs to them: they can list and read it with their own token.
+
+```typescript
+// Backend route. Express-style for illustration.
+const serviceHeaders = {
+  apikey: SERVICE_ROLE_KEY,
+  Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+  "Content-Type": "application/json",
+};
+
+app.post("/api/chat", requireUserAuth, async (req, res) => {
+  const { userId } = req.user;  // from your own auth middleware
+  const { message, sessionId } = req.body;
+  const agentId = await getAgentForUser(userId);
+
+  // First turn: create a session owned by this user. Only the Service Role
+  // key may set user_id. On later turns, check the session is this user's
+  // before using it: a service-role run can continue any session.
+  const sid = sessionId && (await sessionBelongsTo(sessionId, userId))
+    ? sessionId
+    : (await (await fetch(`${POWABASE_URL}/api/agents/${agentId}/sessions`, {
+        method: "POST",
+        headers: serviceHeaders,
+        body: JSON.stringify({ user_id: userId }),
+      })).json()).session_id;
+
+  const agentRes = await fetch(`${POWABASE_URL}/api/agents/${agentId}/run/stream`, {
+    method: "POST",
+    headers: serviceHeaders,
+    body: JSON.stringify({
+      message,
+      session_id: sid,
+      // Service-role runs may set knowledge_bases or context_items here.
+      // See Recipe 1 for user-scoped context_items.
     }),
   });
 
@@ -149,11 +175,15 @@ app.post("/api/chat", requireUserAuth, async (req, res) => {
 });
 ```
 
-The client never sees the Service Role key; only your backend does. Your backend enforces who can call `/api/chat` (via `requireUserAuth`), and the agent run happens with full database access but only acts on context you injected.
+The client never sees the Service Role key; only your backend does. Your backend decides who may call `/api/chat` and which session they may continue.
+
+<Warning>
+A run your backend starts with the Service Role key is a service-role run, even in a session owned by the user. The agent's database tools use its own database login, which bypasses RLS on its configured tables, and its storage tools see every bucket except the internal `sources` bucket. Give an Option B agent data tools only over tables and buckets every user it serves may see in full, or use Option A for agents that carry data tools. If such a run pauses for approval, only the Service Role key can approve it, so relay the user's decision through your backend.
+</Warning>
 
 ### Adding a Custom Tool that's user-aware
 
-For agents that need to query user-specific data dynamically (e.g., "search through my saved articles"), register a Custom HTTP Tool that points at your own backend:
+On Option A runs, the builtin database tools already act as the user. For user-specific data that lives outside this project's Postgres, or for agents run from your backend (Option B), register a Custom HTTP Tool that points at your own backend:
 
 ```bash
 POST /api/tools
@@ -197,7 +227,7 @@ The pattern: pass an opaque `session_token` through the tool's arguments at call
 
 The system prompt for the agent includes "always call `search_user_articles` with `session_token = <token>`." You inject the current user's token into the system prompt at agent-run-time, server-side. From the agent's perspective, the token is opaque data it passes through.
 
-This pattern is more work than "the platform forwards my JWT" would be. It's the safe alternative given current platform behavior.
+Custom HTTP tools send only the headers configured on the tool, never the caller's token, which is why the identity travels as an argument your backend resolves.
 
 ## Recipe 3: Storage vs ai.sources
 
@@ -221,15 +251,15 @@ For files that need to be both (e.g., a PDF the user uploaded that they should b
 A worked end-to-end flow for an "upload a PDF, then chat with it" pattern:
 
 ```typescript
-async function uploadAndChat(file: File, userToken: string) {
-  // Step 1: Upload to Sources (will be indexed). The user's access token here
-  // is for record-keeping; the actual upload runs server-side via your backend
-  // if you want auth scoping on what the user can upload.
+// Runs on your backend: the Sources and knowledge-base routes require the
+// Service Role key, so the browser sends the file to you, not to Powabase.
+async function uploadAndChat(file: Blob, userId: string) {
+  // Step 1: Upload to Sources (will be indexed).
   const sourceRes = await fetch(`${BASE_URL}/api/sources/upload`, {
     method: "POST",
     headers: {
-      apikey: ANON_KEY,
-      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,  // Service role — see Recipe 2
+      apikey: SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
     },
     body: (() => {
       const fd = new FormData();
@@ -249,12 +279,14 @@ async function uploadAndChat(file: File, userToken: string) {
   const kbId = await getUserKb(userId);
   await fetch(`${BASE_URL}/api/knowledge-bases/${kbId}/sources`, {
     method: "POST",
-    headers: { apikey: ANON_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+    headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({ source_id: sourceId }),
   });
 
-  // Step 5: Now an agent linked to that KB can answer questions about the PDF.
-  return runChat(kbId, userToken);
+  // Step 5: Chat about the PDF. The KB is chosen per user, so this is an
+  // Option B run from Recipe 2: Service Role key, knowledge_bases in the run
+  // body, in a session created with this user's user_id.
+  return runChat(kbId, userId);
 }
 ```
 
@@ -325,19 +357,6 @@ CREATE TRIGGER chat_realtime
 ```
 
 Pair this with the matching RLS on `realtime.messages` (so only the user themselves can subscribe to their channel) and you have device-syncing chat, gated by the same auth model as the rest of the app. See [Realtime model](/concepts/realtime) for the function reference.
-
-## Why Recipe 2 is shaped this way
-
-A platform investigation while drafting the audit found that the agent surface does **not** forward end-user JWTs to its tools. Concretely:
-
-- `@require_auth` accepts user JWTs and sets `g.user_id` from the `sub` claim
-- `g.user_id` is consumed only by session-ownership checks; never propagated to tool dispatch
-- The `database_query`/`database_write` builtin tools execute SQL via the project service's SQLAlchemy session, configured from `DATABASE_URL=postgres://supabase_admin:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}` (a superuser connection) with no `SET ROLE` and no `set_config('request.jwt.claims', ...)`
-- Custom HTTP tools forward only the `config.headers` set at tool-create time — no request-time auth injection
-
-The implication: anyone reaching `/api/agents/{id}/run/stream` directly with a user JWT gets full project-wide database access from any tool the agent calls. This is the footgun Recipe 2's "safe pattern" works around. If and when the platform adds JWT forwarding (some kind of `act_as_user` parameter or automatic propagation), the safe pattern gets a lot simpler.
-
-For now: only call agent endpoints from trusted backends, with the Service Role key, with user-scoped context pre-injected.
 
 ## Next steps
 

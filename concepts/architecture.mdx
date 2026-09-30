@@ -26,7 +26,7 @@ Each project gets its own infrastructure stack in its own Kubernetes namespace (
 
 ## API Authentication
 
-Every API request requires two headers: an apikey header and a Bearer token in the Authorization header, both set to the same key. Powabase ships two keys per project, both surfaced in the Studio's Connect modal. The Service Role (Secret) Key gives full access and bypasses Row Level Security, so use it for server-side calls only. The Anon (Publishable) Key respects RLS policies and is safe to embed in browsers and mobile clients.
+Every API request requires two headers: an apikey header and a Bearer token in the Authorization header. Server-side calls set both to the same key; a browser sends the Anon key as apikey and the signed-in user's access token as the Bearer token. Powabase ships two keys per project, both surfaced in the Studio's Connect modal. The Service Role (Secret) Key gives full access and bypasses Row Level Security, so use it for server-side calls only. The Anon (Publishable) Key respects RLS policies and is safe to embed in browsers and mobile clients. On the AI surface (`/api/*`), only the conversation routes accept a signed-in user's token; the rest need the Service Role key. See [Which key for which route](/guides/auth-connection#which-key-for-which-route).
 
 <Warning>
 **Never expose the Service Role key**

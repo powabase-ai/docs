@@ -10,6 +10,8 @@ Tools extend agent capabilities beyond conversation. The platform provides built
 
 List available tools with GET /api/tools to see both builtin and custom tools. Create custom tools with a clear description and input schema; agents use the description to decide when to call the tool. Assign tools to agents via the agent tools API (POST /api/agents/\{id\}/tools).
 
+Every route on this page requires the project's service role key; an end user's access token gets `403`. See [Which key for which route](/guides/auth-connection#which-key-for-which-route).
+
 ### GET /api/tools
 
 List all tools (builtin: database_query, database_write, http_request, code_execute, storage_read, storage_write, web_search, web_scrape + custom).
@@ -178,6 +180,34 @@ curl -X DELETE '{BASE_URL}/api/tools/{id}' -H "apikey: {API_KEY}" -H "Authorizat
 ```
 
 </CodeGroup>
+
+## Data tool access and limits
+
+The builtin data tools, `database_query`, `database_write`, `storage_read` and `storage_write`, act as whoever started the run, never with the API service's own database privileges. A run started with an end user's access token is held to that user's grants, RLS policies and Storage policies; a run started with the service role key uses the agent's own database login and the service role key for Storage. The side-by-side table is in [What agent data tools act as](/guides/auth-connection#what-agent-data-tools-act-as). The limits below apply to both kinds of run.
+
+### Database tools
+
+- **Configured tables are the whole reach.** The table list in the tool assignment's `config_override.schemas` (set with `PATCH /api/agents/{id}/tools/{assignment_id}`; see [Tool assignments](/api-reference/agents#tool-assignments)) is everything the tool can read or write. An agent with no table list reaches nothing.
+- **Only tables and `security_invoker` views.** You may configure plain tables, partitioned tables, and views created `WITH (security_invoker = true)`. Naming a view without `security_invoker`, a materialized view, or a foreign table answers `400` when you assign or update the tool, and the check runs again at run time. A table that doesn't exist yet may be configured.
+- **`database_query` is parsed, not trusted.** It accepts one `SELECT` that writes and locks nothing and references only the configured tables. It may call only a fixed allowlist of built-in functions, matched as Postgres resolves them (a quoted `"Sum"` is not `sum`), use only allowlisted operators, and cast only to built-in types. Functions that change or read settings or run a SQL string, your own functions, operators written in SQL or PL/pgSQL in your schemas, and casts to domains are rejected. An operator an installed extension defines is accepted when its symbol is on the list (pgvector's distances `<->`, `<=>`, `<#>` and `<+>`, and symbols such as `&&`, `@>` or `->`) and the extension lives in one of the agent's configured schemas; an extension installed in a schema the agent isn't configured with, such as the default `extensions` schema, isn't visible to its queries. Functions that extensions add are rejected. The allowlists are fixed and can't be configured. A rejected query returns an error to the agent naming what was refused:
+
+  ```text
+  Function <name> is not allowed: only a fixed set of built-in functions may be called
+  Operator <operator> is not allowed
+  ```
+- **Timeouts.** Every tool transaction has a 30-second statement timeout and a 5-second lock timeout, whatever timeout the `authenticated` role has elsewhere.
+- **Logins.** End-user runs use one shared login, `powabase_agent_user`, which can only become `authenticated` and carries the user's JWT claims. Each agent that has a database tool gets its own login, `powabase_agent_<agent id without dashes>`, which is a member of no other role; an agent without database tools gets none. None of these logins is a superuser, and deleting an agent drops its login.
+- **Expired tokens.** Tool calls on an end user's run are refused once that user's token has expired.
+
+Postgres also runs some functions implicitly, such as a domain's `CHECK` when a value is written, or the equality operator of a column's type when a query groups or joins on it. Configure agents only with tables whose column types you trust.
+
+### Storage tools
+
+- On an end user's run, the tools call Storage with the user's own token, so your Storage policies for that user apply. On a service-role run they use the service role key.
+- Bucket names must match `^[A-Za-z0-9_-]+$`, which is stricter than Storage itself: a bucket whose name contains a `.` or a space can't be used from a tool.
+- Each `/`-separated part of a path must be a name: not empty, `.` or `..`, and without `%`, `\`, `?`, `#` or control characters.
+- The internal `sources` bucket, which holds the original files of ingested sources, is never reachable from a tool.
+- Errors come back to the agent as short messages: not found, access denied, or failed with a status.
 
 ## Error Responses
 

@@ -6,6 +6,10 @@ icon: "sliders"
 
 Project Settings expose a typed registry of configuration knobs (extraction defaults, copilot behavior, model selection, etc.). The registry defines each setting's default; user overrides are stored per-project and merged at read time. Secret-typed settings are returned with a mask placeholder, and sending that placeholder back is treated as "no change".
 
+<Note>
+Every route on this page requires the project's service role key. A signed-in user's access token gets `403`, so call these routes from your backend. See [Which key for which route](/guides/auth-connection#which-key-for-which-route).
+</Note>
+
 Setting keys come from the registry as-is. Most use `UPPER_SNAKE_CASE` (e.g. `EXTRACTION_DEFAULT_METHOD`, `COPILOT_TEMPERATURE`), with a few historical lowercase keys (e.g. `copilot_model`). All values are persisted as strings, so when sending bools or numbers, stringify them (`"true"`, `"0.7"`).
 
 Categories defined by the registry: `copilot`, `agents`, `tools`, `knowledge-indexing`, `knowledge-retrieval`, `compaction`, `sources`.

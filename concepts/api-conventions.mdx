@@ -19,6 +19,8 @@ Authorization: Bearer <Anon Key | Service Role Key | User Access Token>
 
 The `apikey` header is required by Kong's `key-auth` plugin for routing. The `Authorization` header is what the downstream service (PostgREST, GoTrue, etc.) actually verifies for role assignment. They can be different values: `apikey: Anon` + `Authorization: Bearer <user-access-token>` is the standard browser-side pattern after sign-in.
 
+The agentic `/api/*` surface accepts a user access token only on its conversation routes; everything else there requires the Service Role Key in both headers. See [Which key for which route](/guides/auth-connection#which-key-for-which-route).
+
 For Realtime WebSocket connections, both pieces come in as query parameters: `?apikey=<KEY>&vsn=1.0.0`. WebSocket APIs in browsers don't let you set headers on the upgrade request.
 
 ## PUT vs PATCH for updates
@@ -131,7 +133,7 @@ Inconsistency worth knowing about. List endpoints across the agentic surface use
 { "agents": [...], "total": N, "limit": L, "offset": O }
 ```
 
-But not always. Some return a bare array. Some return `{ items: [...], total, ... }`. The audit-flagged-and-corrected wrong examples in PR A (#8) were spots where this inconsistency tripped the docs themselves.
+But not always. Some return a bare array. Some return `{ items: [...], total, ... }`. Don't assume one list shape across resources; handle each endpoint's shape explicitly.
 
 When in doubt, log the response and read its shape. The reference pages should show the actual shape; file an issue if you find one that doesn't.
 
@@ -162,7 +164,7 @@ A short list of headers that change behavior across multiple endpoints:
 
 | Service | Auth shape |
 |---|---|
-| Agentic `/api/*` | `apikey` + `Authorization: Bearer` |
+| Agentic `/api/*` | `apikey` + `Authorization: Bearer` (Service Role Key; a user access token only on the [end-user conversation routes](/guides/auth-connection#end-user-routes)) |
 | PostgREST `/rest/v1/*` | `apikey` + `Authorization: Bearer` |
 | GoTrue `/auth/v1/*` | `apikey` + `Authorization: Bearer` (Anon Key OR user access token) |
 | Storage `/storage/v1/*` | `apikey` + `Authorization: Bearer` |

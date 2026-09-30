@@ -6,6 +6,10 @@ icon: "database"
 
 Knowledge bases provide semantic search over your document content. They store chunked and embedded text from one or more sources for retrieval-augmented generation (RAG). When you add a source to a knowledge base, the platform chunks the source's page texts, generates vector embeddings, and stores them for similarity search.
 
+<Note>
+Every route on this page requires the project's service role key. A signed-in user's access token gets `403`, so call these routes from your backend. See [Which key for which route](/guides/auth-connection#which-key-for-which-route).
+</Note>
+
 ## Common Patterns
 
 Create a knowledge base, add one or more sources to trigger indexing, then use the search endpoint to query. Check indexing status by fetching the knowledge base details. Reindex when you change chunking parameters or want to re-process sources.

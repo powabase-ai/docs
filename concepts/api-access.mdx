@@ -54,6 +54,8 @@ Content-Type: application/json   (for POST/PUT/PATCH)
 
 The Anon Key is the routing credential at Kong; the `Authorization` header is what the downstream service uses for role assignment. They can hold the same value (server-side calls with Service Role) or different values (browser-side calls with Anon Key plus user token). See [Auth model](/concepts/auth-model).
 
+On the agentic `/api/*` surface, a user access token works only on the conversation routes (the user's own agent and orchestration sessions, runs and approvals). Every other `/api/*` route needs the Service Role key, so a browser app talks to those through your backend. See [Which key for which route](/guides/auth-connection#which-key-for-which-route).
+
 ## Patterns worth standardizing in your own wrapper
 
 If you're writing a project-specific wrapper, a few patterns to bake in:

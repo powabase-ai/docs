@@ -23,7 +23,7 @@ GoTrue returns this shape after every successful sign-in / token refresh:
 }
 ```
 
-**Access token**: a signed JWT. Default lifetime: **1 hour** (`GOTRUE_JWT_EXP=3600`). Send it as the `Authorization` header on every API call, and as the `apikey` header (both must match). When PostgREST gets it, it verifies the signature against the project's JWT Secret, sets the database session role from the `role` claim, and stores the decoded payload as a session-local setting accessible via `auth.uid()`, `auth.jwt()`, `auth.role()`.
+**Access token**: a signed JWT. Default lifetime: **1 hour** (`GOTRUE_JWT_EXP=3600`). Send it as `Authorization: Bearer <access token>` on every API call, with the project's Anon (Publishable) Key as the `apikey` header. The Anon key gets the request through the gateway; the access token is what identifies the user. On the AI surface (`/api/*`), the access token works only on the [end-user conversation routes](/guides/auth-connection#end-user-routes). When PostgREST gets it, it verifies the signature against the project's JWT Secret, sets the database session role from the `role` claim, and stores the decoded payload as a session-local setting accessible via `auth.uid()`, `auth.jwt()`, `auth.role()`.
 
 **Refresh token**: an opaque, single-use string (not a JWT). Default lifetime: **no expiration** as long as it gets used at least every refresh cycle, but each token can only be exchanged once. You call `POST /auth/v1/token?grant_type=refresh_token` with it before the access token expires. GoTrue returns a fresh access token plus a new refresh token, and invalidates the old one.
 

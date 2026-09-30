@@ -6,6 +6,10 @@ icon: "file-lines"
 
 Sources represent uploaded documents in the platform. Each source goes through an asynchronous extraction pipeline that converts files into structured derivatives (page texts, markdown, per-page images). Sources are the raw material for knowledge bases: once extracted, their content can be chunked and indexed for semantic search.
 
+<Note>
+Every route on this page requires the project's service role key. A signed-in user's access token gets `403`, so call these routes from your backend. See [Which key for which route](/guides/auth-connection#which-key-for-which-route).
+</Note>
+
 ## Common Patterns
 
 The typical flow: upload a file (POST /api/sources/upload), poll for completion (GET /api/sources/\{id\} until extraction_status is 'extracted' or 'attention_required'), then retrieve extracted text (GET /api/sources/\{id\}/page-texts). For files already in project storage, use import-from-storage. For web pages, use import-url. To swap extraction backends after the fact, POST /api/sources/\{id\}/reextract with a new extraction_model.

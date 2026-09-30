@@ -10,6 +10,10 @@ Orchestrations coordinate multiple agents across multi-domain tasks. A coordinat
 
 Create an orchestration, add entity agents with clear role descriptions, then use the streaming endpoint. The coordinator handles delegation. Keep entity role descriptions specific and non-overlapping so the coordinator can route cleanly.
 
+<Note>
+**Which key.** CRUD, entity and hook routes require the project's service role key. Four conversation routes also accept a signed-in user's access token, scoped to that user's own sessions and runs: `POST /api/orchestrations/{id}/run/stream`, `GET /api/orchestrations/runs/{run_id}`, `GET /api/orchestrations/{id}/sessions` and `GET /api/orchestrations/{id}/sessions/{session_id}/messages`. See [Which key for which route](/guides/auth-connection#which-key-for-which-route).
+</Note>
+
 ## CRUD
 
 ### POST /api/orchestrations
@@ -302,6 +306,8 @@ Run orchestration with streaming SSE. Includes delegation events.
 
 Accepts `runtime_knowledge_bases` — the same query-scoped KB references as the [agent streaming endpoint](/api-reference/agents#runtime-knowledge-base-references), with the same entry shape, validation, and 10-entry cap. The references flow to **every sub-agent** in the orchestration: each sub-agent's `knowledge_search` tool merges them with its own attached KBs for this request only (a sub-agent with no attached KBs gains the tool for the run). One caveat differs per sub-agent: an entry's `max_context_tokens` is honored only for sub-agents whose search tool resolves to exactly one KB.
 
+With an end user's access token, the same run-body limits apply as for agent runs: `runtime_knowledge_bases`, `knowledge_bases`, `context_handler_id` and by-reference `context_items` answer `403`, and a `session_id` must name an existing orchestration session of that user's (omit it to start a new one). There is no route to create an orchestration session up front; the first run creates it and returns its id. See [Rules for end-user runs](/guides/auth-connection#rules-for-end-user-runs).
+
 <ParamField path="id" type="string" required>
 Orchestration ID
 </ParamField>
@@ -332,7 +338,7 @@ curl -N -X POST '{BASE_URL}/api/orchestrations/{id}/run/stream' -H "apikey: {API
 
 ### GET /api/orchestrations/runs/{run_id}
 
-Get orchestration run result.
+Get orchestration run result. An end user can read only runs in their own orchestration sessions; anything else answers `404`.
 
 <ParamField path="run_id" type="string" required>
 Run ID
@@ -458,7 +464,7 @@ Session-level reads on orchestrations. The streaming `/run/stream` endpoint retu
 
 ### GET /api/orchestrations/{id}/sessions
 
-List the most recent 100 sessions for an orchestration. Each entry includes `session_id`, `run_count`, `first_message`, `last_activity_at`, and `created_at`.
+List the most recent 100 sessions for an orchestration (with an end user's token, only that user's own sessions). Each entry includes `session_id`, `run_count`, `first_message`, `last_activity_at`, and `created_at`.
 
 <ParamField path="id" type="string" required>Orchestration ID</ParamField>
 
@@ -511,4 +517,6 @@ Orchestration routes return `{"error": "<message>"}` (no structured error code f
 | 400 | Hook POST is missing one of `event`, `type`, or `config` |
 | 404 | No orchestration exists with the given ID |
 | 404 | No hook exists with the given ID for this orchestration |
-| 404 | No orchestration session with the given ID |
+| 401 | Missing or invalid bearer token; an end-user token without a UUID `sub` or an `exp` |
+| 403 | An end user's token on a route that requires the service role key, or an end user's run body sets a service-role-only field |
+| 404 | No orchestration session with the given ID, or (with an end user's token) the session isn't that user's |

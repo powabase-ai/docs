@@ -19,7 +19,7 @@ headers = {
 ```
 
 <Note>
-**Call these from a trusted backend.** They touch project-wide data. The `/api/*` endpoints also accept a signed-in user's JWT, but they don't scope agents, knowledge bases, sources or search results per user. If you expose any of this to end users, gate it behind your own API.
+**Call these from a trusted backend with the Service Role key.** They touch project-wide data, and the routes they use (knowledge bases, sources, agents) answer a signed-in user's JWT with `403`. If you expose any of this to end users, put it behind your own API. See [Which key for which route](/guides/auth-connection#which-key-for-which-route).
 </Note>
 
 ## Recipe 1: Search across several knowledge bases
