@@ -133,7 +133,7 @@ Inconsistency worth knowing about. List endpoints across the agentic surface use
 { "agents": [...], "total": N, "limit": L, "offset": O }
 ```
 
-But not always. Some return a bare array. Some return `{ items: [...], total, ... }`. The audit-flagged-and-corrected wrong examples in PR A (#8) were spots where this inconsistency tripped the docs themselves.
+But not always. Some return a bare array. Some return `{ items: [...], total, ... }`. Don't assume one list shape across resources; handle each endpoint's shape explicitly.
 
 When in doubt, log the response and read its shape. The reference pages should show the actual shape; file an issue if you find one that doesn't.
 
