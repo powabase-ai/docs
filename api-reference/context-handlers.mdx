@@ -6,6 +6,10 @@ icon: "layer-group"
 
 Context handlers run standalone RAG retrieval without an agent. Send a query with one or more knowledge base configurations, and the handler retrieves the most relevant chunks from each knowledge base. Use this when you want your own LLM integration but still want the platform's vector search.
 
+<Note>
+Every route on this page requires the project's service role key. A signed-in user's access token gets `403`, so call these routes from your backend. See [Which key for which route](/guides/auth-connection#which-key-for-which-route).
+</Note>
+
 ## Common Patterns
 
 Execute a context handler with POST /api/context-handlers, providing a query and an array of knowledge_bases (each specifying a knowledge_base_id and optional top_k). The response includes the retrieved chunks ranked by relevance, which you can inject into your own LLM prompts.

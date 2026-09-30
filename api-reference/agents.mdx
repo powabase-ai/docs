@@ -10,6 +10,10 @@ Each agent wraps an LLM with a system prompt, tools, knowledge bases, and option
 
 Create an agent, assign tools and knowledge bases, then use the streaming endpoint for conversations. Pass session_id to continue multi-turn conversations. For human-in-the-loop workflows, configure hooks and use the approve endpoint when approval_requested events are received.
 
+<Note>
+**Which key.** Agent CRUD, tool, knowledge-base, MCP-server and hook routes require the project's service role key. The conversation routes under [Execution](#execution) (listing, creating and deleting sessions, `/run`, `/run/stream`, reading a run, and approving a run) also accept a signed-in user's access token, scoped to that user's own sessions and runs, with the run-body limits noted below. See [Which key for which route](/guides/auth-connection#which-key-for-which-route).
+</Note>
+
 ## Agent CRUD
 
 ### GET /api/agents
@@ -218,7 +222,7 @@ The body MUST use the key `config_override`. Passing `config` (or any other top-
 
 **How `config_override` works per tool type:**
 
-- **Database tools (`database_query`, `database_write`)**: `config_override.schemas: { <schema>: [<table>, ...] }` is the table list. `database_write` rejects tables outside it; `database_query` only sets `search_path` from it, so a schema-qualified `SELECT` on other tables isn't blocked (see [Agents & Tools](/concepts/agents-tools#builtin-tools)). Schemas must be a dict, schema names must match `^[a-zA-Z_][a-zA-Z0-9_]{0,63}$`, system schemas (`ai`, `auth`, `storage`, `pg_*`, etc.) are rejected, and each value must be a list of valid table names.
+- **Database tools (`database_query`, `database_write`)**: `config_override.schemas: { <schema>: [<table>, ...] }` is the table list, and it's everything the tools can reach: `database_write` rejects tables outside it, and `database_query` parses each query and rejects any reference to a table outside it. Only plain tables, partitioned tables and views created `WITH (security_invoker = true)` may be listed; a view without `security_invoker`, a materialized view or a foreign table answers `400`. What the tools act as depends on who started the run (see [Data tool access and limits](/api-reference/tools#data-tool-access-and-limits)). Schemas must be a dict, schema names must match `^[a-zA-Z_][a-zA-Z0-9_]{0,63}$`, system schemas (`ai`, `auth`, `storage`, `pg_*`, etc.) are rejected, and each value must be a list of valid table names.
 
 - **All other builtin tools (`web_search`, `web_scrape`, `http_request`, `code_execute`, `storage_read`, `storage_write`)**: any key in `config_override` whose name matches a parameter in the tool's `input_schema` is **force-injected into every call's arguments**. Keys not in the schema are silently dropped (no error, no warning). For example, setting `config_override: { "max_results": 3, "include_domains": ["example.com"] }` on a `web_search` assignment locks every search the agent does to 3 results from `example.com`.
 
@@ -622,7 +626,7 @@ curl -X DELETE '{BASE_URL}/api/agents/{id}/hooks/{hook_id}' -H "apikey: {API_KEY
 
 ### GET /api/agents/{id}/sessions
 
-List chat sessions for the agent.
+List chat sessions for the agent. With the service role key, you get every session of the agent; with an end user's access token, only that user's own sessions.
 
 <ParamField path="id" type="string" required>
 Agent ID
@@ -640,6 +644,78 @@ const res = await fetch(`${BASE_URL}/api/agents/${agentId}/sessions`, { headers 
 
 ```bash cURL
 curl '{BASE_URL}/api/agents/{id}/sessions' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
+```
+
+</CodeGroup>
+
+### POST /api/agents/{id}/sessions
+
+Create a session for the agent and return its generated id. This is how an end user starts a conversation before the first run; they can also omit `session_id` on the first run instead. Accepts the service role key or an end user's access token.
+
+<ParamField path="id" type="string" required>
+Agent ID
+</ParamField>
+
+<ParamField body="user_id" type="string">
+The user who owns the session (a UUID). **Service role key only**; an end user who sends it gets `403`. With an end user's token, the session is always owned by that user. With the service role key and no `user_id`, the session belongs to no end user, so only the service role key can read or continue it.
+</ParamField>
+
+<ParamField body="initial_messages" type="array">
+Optional seed conversation (for imports and handoffs), as `[{ "role": "user", "content": "..." }, { "role": "assistant", "content": "..." }, ...]`: user/assistant pairs, alternating and starting with `user`, at most 200 messages of at most 20,000 characters each. Seeding with the service role key requires `user_id`.
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+# From your backend, owning the session to one of your users
+response = requests.post(
+    f"{BASE_URL}/api/agents/{agent_id}/sessions",
+    headers=headers,
+    json={"user_id": user_id},
+)
+session_id = response.json()["session_id"]
+```
+
+```typescript TypeScript
+// From your backend, owning the session to one of your users
+const res = await fetch(`${BASE_URL}/api/agents/${agentId}/sessions`, {
+  method: "POST", headers, body: JSON.stringify({ user_id: userId }),
+});
+const { session_id } = await res.json();
+```
+
+```bash cURL
+curl -X POST '{BASE_URL}/api/agents/{id}/sessions' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}" -H "Content-Type: application/json" -d '{"user_id": "<user-uuid>"}'
+```
+
+</CodeGroup>
+
+**Response (201):** `{ "session_id": "..." }`
+
+### DELETE /api/agents/{id}/sessions/{session_id}
+
+Delete a session of this agent and its runs. Accepts the service role key or an end user's access token; an end user can delete only their own sessions. A session that doesn't exist, belongs to someone else, or belongs to a different agent answers `404`.
+
+<ParamField path="id" type="string" required>
+Agent ID
+</ParamField>
+
+<ParamField path="session_id" type="string" required>
+Session ID
+</ParamField>
+
+<CodeGroup>
+
+```python Python
+response = requests.delete(f"{BASE_URL}/api/agents/{agent_id}/sessions/{session_id}", headers=headers)
+```
+
+```typescript TypeScript
+await fetch(`${BASE_URL}/api/agents/${agentId}/sessions/${sessionId}`, { method: "DELETE", headers });
+```
+
+```bash cURL
+curl -X DELETE '{BASE_URL}/api/agents/{id}/sessions/{session_id}' -H "apikey: {API_KEY}" -H "Authorization: Bearer {API_KEY}"
 ```
 
 </CodeGroup>
@@ -671,15 +747,19 @@ Agent ID
 | Body field | Type | Notes |
 | --- | --- | --- |
 | `message` | string (required) | User input |
-| `session_id` | string | Reuse a session for multi-turn. Omit to start a fresh session; `session_id` is returned. |
-| `knowledge_bases` | array | Ad-hoc retrieval: `[{ id, top_k?, similarity_threshold?, filter_metadata?, retrieval_method? }]` |
-| `context_handler_id` | string | Use a pre-built context handler (see [Context Handlers](/api-reference/context-handlers)) |
+| `session_id` | string | Reuse a session for multi-turn (at most 255 characters). Omit to start a fresh session; `session_id` is returned. With an end user's token, it must be an existing session of theirs for this agent, or the run answers `404`. |
+| `knowledge_bases` | array | Ad-hoc retrieval: `[{ id, top_k?, similarity_threshold?, filter_metadata?, retrieval_method? }]`. **Service role key only.** |
+| `context_handler_id` | string | Use a pre-built context handler (see [Context Handlers](/api-reference/context-handlers)). **Service role key only.** |
 | `context_override` | string | Raw context string injected verbatim; skips retrieval |
-| `context_items` | array | By-reference items: `[{ id, ... }]` or by-value items with `text` |
+| `context_items` | array | By-reference items `[{ item_id }]` (**service role key only**) or by-value items `[{ text, meta? }]` |
 | `max_context_tokens` | int | Truncate retrieved context to this token budget (default from agent settings or platform default) |
 | `citations_enabled` | bool | Append a citation instruction and parse `[1]`-style refs from the response (default `false`) |
 | `temperature` | float | Per-run override; falls back to agent setting |
 | `response_format` | object | LiteLLM-compatible JSON-schema for structured output |
+
+<Note>
+**Calling with an end user's access token.** This route and `/run/stream` accept a signed-in user's token. Their run uses the knowledge bases configured on the agent: `knowledge_bases`, `runtime_knowledge_bases`, `context_handler_id` and by-reference `context_items` answer `403`. They can continue only an existing session of their own and can't name a new one. The agent's data tools act as that user. See [Rules for end-user runs](/guides/auth-connection#rules-for-end-user-runs).
+</Note>
 
 <CodeGroup>
 
@@ -746,7 +826,7 @@ Behavior to know:
 - **Validated before the stream opens.** Unknown ids, out-of-range knobs, unknown entry keys (typos like `top_K` are rejected, not ignored), more than **10** entries, or duplicate ids all return `400` — no billing, no stream.
 - **Combinable** with the context fields above (it adds a tool, not injected context). Combined with the preload `knowledge_bases` field, the preload retrieval runs up front, plus each `knowledge_search` call the model makes — both billed, no dedup.
 - **Streaming only.** The non-streaming `/run` has no tool loop and rejects the field with `400`.
-- **Authorization note:** any caller authorized to run the agent can reference any KB in the project via this field — this matches the project-wide access posture of the `ai` schema and is not restricted per-agent. Expose the endpoint from trusted backends only.
+- **Service role key only.** The field can name any KB in the project, so an end user's run that sends it answers `403`; their runs use the knowledge bases configured on the agent. See [Rules for end-user runs](/guides/auth-connection#rules-for-end-user-runs).
 
 <ParamField path="id" type="string" required>
 Agent ID
@@ -786,7 +866,7 @@ curl -N -X POST '{BASE_URL}/api/agents/{id}/run/stream' -H "apikey: {API_KEY}" -
 
 Fetch a single agent run by `run_id`, independent of session context. Returns: `id`, `run_id`, `session_id`, `parent_orchestration_run_id`, `parent_workflow_execution_id`, `status`, `input_messages`, `output_messages`, `content`, `usage`, `retrieved_context`, `error`, `started_at`, `completed_at`, `steps`, `events`, `tool_calls`, `reasoning_steps`, and `created_at`. The parent fields are `null` for top-level runs; `session_id` is `null` for delegated or workflow-block runs.
 
-For runs that belong to a session, ownership is enforced: the caller must own the session (or be using a service-role key). To avoid leaking existence, ownership failures are returned as 404, not 403.
+Accepts the service role key or an end user's access token. An end user can read only runs in their own sessions; a run in someone else's session, or in a session your backend created without a `user_id`, answers `404` rather than `403`, to avoid leaking existence.
 
 <ParamField path="run_id" type="string" required>Run ID</ParamField>
 
@@ -809,6 +889,8 @@ curl '{BASE_URL}/api/agents/runs/{run_id}' -H "apikey: {API_KEY}" -H "Authorizat
 ### POST /api/agents/runs/{run_id}/approve
 
 Approve or deny a pending tool call (human-in-the-loop).
+
+Accepts the service role key or an end user's access token. An end user can approve or reject only paused runs they started themselves. A run your backend started with the service role key has no end-user owner, even in a session owned by that user, so only the service role key can approve it: relay the user's decision from your backend.
 
 <ParamField path="run_id" type="string" required>
 Run ID
@@ -845,8 +927,12 @@ Agent routes return `{"error": "<message>"}`.
 | Status | Description |
 | --- | --- |
 | 400 | Missing or invalid required field (e.g. `name`, `tool_type`/`tool_name`, `knowledge_base_id`, MCP server `name`/`url`, hook `event`/`type`/`config`) |
-| 400 | Invalid `config_override.schemas` on tool PATCH (e.g. not a dict, contains a system schema, or has invalid table names) |
+| 400 | Invalid `config_override.schemas` on tool PATCH (e.g. not a dict, contains a system schema, has invalid table names, or names something other than a table or `security_invoker` view) |
+| 400 | `session_id` isn't a string of at most 255 characters |
+| 401 | Missing or invalid bearer token; an end-user token without a UUID `sub` or an `exp` |
+| 403 | An end user's token on a route that requires the service role key (`{"error": "This endpoint requires the project's service role key"}`) |
+| 403 | An end user's run body sets `knowledge_bases`, `runtime_knowledge_bases`, `context_handler_id` or by-reference `context_items`, or an end user sets `user_id` on session create |
 | 404 | No agent, tool/KB/MCP/hook assignment, or run exists with the given ID |
-| 404 | `/run` or `/run/stream`: the supplied `session_id` is not owned by the caller (returned as 404 to avoid leaking existence) |
+| 404 | `/run` or `/run/stream` with an end user's token: the supplied `session_id` doesn't exist or isn't the caller's session of this agent (returned as 404 to avoid leaking existence) |
 | 409 | Knowledge base already assigned to this agent |
 | 409 | An MCP server with this name already exists for this agent |

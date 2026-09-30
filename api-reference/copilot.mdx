@@ -6,6 +6,10 @@ icon: "microchip"
 
 The Copilot API is an AI-assisted workflow builder. Create a copilot session linked to a workflow, describe what you want in natural language, and the copilot generates the workflow graph. Iterate over multiple chat turns to refine it, then save a snapshot to apply the generated graph.
 
+<Note>
+Every route on this page requires the project's service role key. A signed-in user's access token gets `403`, so call these routes from your backend. See [Which key for which route](/guides/auth-connection#which-key-for-which-route).
+</Note>
+
 ## Common Patterns
 
 Create a copilot session with a workflow_id, send messages via the chat endpoint (streaming SSE), and save good suggestions with the snapshot endpoint. Each chat message can produce a new version of the workflow graph. The copilot maintains conversation context within a session.

@@ -1,14 +1,14 @@
 ---
 title: "Database (Authenticated proxy)"
-description: "Auth-required CRUD over your project's public schema, plus a table introspection endpoint."
+description: "Service-role CRUD over your project's public schema, plus a table introspection endpoint."
 icon: "database"
 ---
 
-The `/api/database/*` endpoints are a thin auth-required proxy over PostgREST, scoped to your project's `public` schema. They use the same operators and conventions as PostgREST under the hood, but every call requires a valid Powabase auth token (no anon-key access).
+The `/api/database/*` endpoints are a thin proxy over PostgREST, scoped to your project's `public` schema. They use the same operators and conventions as PostgREST under the hood. Every call requires the project's service role key: a signed-in user's access token gets `403` (see [Which key for which route](/guides/auth-connection#which-key-for-which-route)). The proxy calls PostgREST with the service role key, so RLS doesn't filter what it returns; for per-user reads under RLS, call [PostgREST](/api-reference/postgrest) directly with the user's access token.
 
 System schemas (`ai`, `auth`, `storage`, `pg_catalog`, `information_schema`, etc.) are blocked at this layer — those are managed via dedicated routes (`/api/agents`, `/api/knowledge-bases`, ...).
 
-When you need the full PostgREST query language (filter operators, embedded relations, ordering, RPC calls), use the [PostgREST endpoints](/api-reference/postgrest) instead. Use this proxy when you want one auth model across all platform calls and don't need the full PostgREST surface.
+When you need the full PostgREST query language (filter operators, embedded relations, ordering, RPC calls), use the [PostgREST endpoints](/api-reference/postgrest) instead. Use this proxy from your backend when you want one auth model across all platform calls and don't need the full PostgREST surface.
 
 ## Common Patterns
 

@@ -6,6 +6,10 @@ icon: "share-nodes"
 
 Workflows are DAG-based automation pipelines that execute a fixed sequence of blocks (LLM calls, code execution, conditions, agent runs). Unlike agents that decide what to do dynamically, workflows follow a predetermined graph. They can be executed directly, streamed, or triggered externally via webhooks.
 
+<Note>
+Every route on this page requires the project's service role key. A signed-in user's access token gets `403`, so call these routes from your backend. See [Which key for which route](/guides/auth-connection#which-key-for-which-route).
+</Note>
+
 ## Common Patterns
 
 Create a workflow, define its graph with PUT /api/workflows/\{id\}/graph, then execute. For external triggers, deploy the workflow and arm it to get a webhook URL. Webhooks are single-use, so re-arm after each trigger. Use the streaming endpoint for real-time block execution updates.

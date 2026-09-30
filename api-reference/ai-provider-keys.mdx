@@ -6,6 +6,10 @@ icon: "key"
 
 Each project stores its own set of model-provider API keys (OpenAI, Anthropic, Google, OpenRouter). Keys are encrypted at rest and decrypted only when an agent, workflow, or indexing job needs them. Stored keys are returned masked; the full secret is never echoed back.
 
+<Note>
+Every route on this page requires the project's service role key. A signed-in user's access token gets `403`, so call these routes from your backend. See [Which key for which route](/guides/auth-connection#which-key-for-which-route).
+</Note>
+
 When you set a key, the platform calls the provider to validate it. Soft failures (provider down, transient network issue) still store the key with `is_valid: false`; hard failures (provider rejects the credential) reject the request without storing anything.
 
 ## Model-string format
