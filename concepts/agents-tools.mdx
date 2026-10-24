@@ -6,7 +6,7 @@ icon: "robot"
 
 ## What is an Agent?
 
-An Agent wraps an LLM with a system prompt, temperature, a set of tools, and optional knowledge bases. When you send a message, the agent enters a ReAct (Reason + Act) loop: the LLM decides whether it needs to call a tool, executes the tool if needed, observes the result, and either calls another tool or generates a final response. This loop continues for up to 25 steps (configurable per run). On the final step, tools are withheld so the LLM is forced to produce a text response.
+An Agent wraps an LLM with a system prompt, temperature, a set of tools, and optional knowledge bases. When you send a message, the agent enters a ReAct (Reason + Act) loop: the LLM decides whether it needs to call a tool, executes the tool if needed, observes the result, and either calls another tool or generates a final response. This loop continues for up to 25 steps (configurable per run). On the final step, tools are withheld so the LLM is forced to produce a text response. For why agents live in the same backend as your data, see [Powabase as an AI agent backend](https://powabase.ai/ai-agent-backend/).
 
 ## The ReAct Loop
 

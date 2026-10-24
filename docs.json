@@ -179,7 +179,12 @@
     "dark": "/logo/powabase-compact-white.svg"
   },
   "navbar": {
-    "links": [],
+    "links": [
+      {
+        "label": "powabase.ai",
+        "href": "https://powabase.ai"
+      }
+    ],
     "primary": {
       "type": "button",
       "label": "Start a project",
@@ -189,7 +194,26 @@
   "footer": {
     "socials": {
       "discord": "https://discord.gg/k8W2A9KRtc"
-    }
+    },
+    "links": [
+      {
+        "header": "Powabase",
+        "items": [
+          {
+            "label": "Website",
+            "href": "https://powabase.ai"
+          },
+          {
+            "label": "Compare",
+            "href": "https://powabase.ai/supabase-alternative/"
+          },
+          {
+            "label": "Pricing",
+            "href": "https://powabase.ai/pricing/"
+          }
+        ]
+      }
+    ]
   },
   "redirects": [
     {
