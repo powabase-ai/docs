@@ -1,12 +1,23 @@
 ---
 title: "Self-host (enterprise)"
-description: "Self-hosting Powabase is an enterprise offering: what gets deployed, how it differs from managed cloud, and how to engage. Not a publicly self-serve product."
+description: "Self-hosting Powabase: the license terms (free for noncommercial use, commercial self-hosting under an enterprise agreement), what the enterprise deployment includes, how it differs from managed cloud, and how to engage."
 icon: "server"
 ---
 
-Powabase is available for self-hosting as part of the enterprise offering. The enterprise deployment is not a publicly self-serve product (for a single project, see the [open-source stack](https://github.com/powabase-ai/powabase)). The deployment is Kubernetes-based, the operations posture is "you run it, we support you," and you engage directly with the platform team rather than through docs-driven self-service.
+Powabase is available for self-hosting as part of the enterprise offering. The enterprise deployment is not a publicly self-serve product (for a single project, see the [source-available stack](https://github.com/powabase-ai/powabase) and its [license terms](#license-terms)). The deployment is Kubernetes-based, the operations posture is "you run it, we support you," and you engage directly with the platform team rather than through docs-driven self-service.
 
 This page positions the option and pre-answers common questions; it does not ship the deploy runbook. If you're considering self-host, the next step is a conversation with sales, who will route you to the platform team for the deploy walkthrough.
+
+## License terms
+
+The Powabase self-host code ([`powabase`](https://github.com/powabase-ai/powabase), [`powabase-ai`](https://github.com/powabase-ai/powabase-ai), and [`agentic`](https://github.com/powabase-ai/agentic), published on PyPI as `powabase-agentic`) is source-available under the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/). The code is public, but it isn't open source in the OSI sense.
+
+- **Free for noncommercial use.** Government institutions, public research organizations, universities and other educational institutions, charities, and individuals for personal noncommercial use can self-host Powabase at no cost.
+- **Commercial use needs an enterprise agreement.** Self-hosting Powabase for a business or a commercial product, whether the single-project Docker stack or the Kubernetes deployment on this page, requires a Powabase enterprise agreement. Contact [hello@powabase.ai](mailto:hello@powabase.ai) or see [Enterprise](https://powabase.ai/pricing#enterprise).
+- **Earlier releases stay Apache-2.0.** `powabase` v0.8.0 and earlier, `powabase-ai` v0.15.0 and earlier, and `powabase-agentic` v0.6.2 and earlier were released under Apache-2.0 and remain under it.
+- **The Studio dashboard fork stays Apache-2.0.**
+
+The full terms are in [LICENSING.md](https://github.com/powabase-ai/powabase/blob/main/LICENSING.md).
 
 ## Who self-host is for
 
@@ -17,6 +28,7 @@ A few profiles that map to "self-host is the right answer":
 - **High-volume workloads** where per-project credit-based billing doesn't align with the org's procurement model.
 - **Customers who want longer backup retention windows or point-in-time recovery** beyond managed cloud defaults.
 - **Customers building Powabase-aware tooling** that needs deeper integration than the API surface provides.
+- **Any commercial self-hosting.** Running Powabase on your own infrastructure for commercial use requires an enterprise agreement, even for a single project.
 
 For most teams building applications on Powabase, **managed cloud is the right answer**. The operational overhead of self-hosting Kubernetes infrastructure typically outweighs the control benefits. Self-host is for organizations that have a specific reason and the platform-engineering capacity to operate the cluster.
 
@@ -64,11 +76,11 @@ The platform team provides the Helm charts, the runbook, and ongoing support, bu
 
 The right starting move is a conversation with sales. They'll qualify whether self-host is the right answer for your case, then connect you with the platform team for the deploy walkthrough.
 
-After the initial deploy, ongoing operational support is part of the enterprise contract: software updates, incident response, and platform expertise for non-obvious situations.
+The enterprise agreement includes the commercial license to self-host. After the initial deploy, ongoing operational support is part of the enterprise contract: software updates, incident response, and platform expertise for non-obvious situations.
 
-## Open-source / community edition
+## Community edition (single project)
 
-A single-project stack is open source under Apache 2.0 at [github.com/powabase-ai/powabase](https://github.com/powabase-ai/powabase): one `docker compose up` runs Postgres, Auth, Storage, REST and the Powabase AI service for one project, with no control plane. The enterprise Helm charts and the multi-project platform code (control plane, provisioner, billing) aren't open-sourced. If that's a hard requirement for your use case, raise it during sales; the platform's posture here may evolve.
+A single-project stack is source-available at [github.com/powabase-ai/powabase](https://github.com/powabase-ai/powabase): one `docker compose up` runs Postgres, Auth, Storage, REST and the Powabase AI service for one project, with no control plane. It's free for noncommercial use under the PolyForm Noncommercial License 1.0.0, and commercial use needs an enterprise agreement (see [License terms](#license-terms)). The enterprise Helm charts and the multi-project platform code (control plane, provisioner, billing) aren't publicly available. If that's a hard requirement for your use case, raise it during sales; the platform's posture here may evolve.
 
 ## Next steps
 
